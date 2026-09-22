@@ -1,8 +1,8 @@
 #!/bin/sh
 # Runs on the host: build Gexora and put it in the share of the VM that
-# ../gxwi/dev/boot.sh started, with its icon for the base theme. GXWI's dev
-# service puts it in /bin, where the launcher finds it, and its dev loop
-# restarts on a new one.
+# ../gxwi/dev/boot.sh started, with its icon for the base theme and its
+# declaration for the catalogue. GXWI's dev service puts them where a package
+# would, and its dev loop restarts on a new one.
 #
 # The rename makes the new binary appear whole, never half-written. Gexora
 # links libpeios by way of libgxwi, so it is an ordinary glibc build and uses
@@ -15,5 +15,7 @@ share=../gxwi/target/vmshare
 cargo build --release
 mkdir -p "$share/icons/base"
 cp gexora.svg "$share/icons/base/dev.peios.gexora.svg"
+mkdir -p "$share/apps"
+cp dev.peios.gexora.toml "$share/apps/dev.peios.gexora.toml"
 cp target/release/gexora "$share/gexora.new"
 mv "$share/gexora.new" "$share/gexora"
