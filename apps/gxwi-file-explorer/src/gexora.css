@@ -14,6 +14,7 @@ body {
 #fx-root { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
 #fx-root[data-connected="false"] { opacity: 0.5; }
 
+/* The address bar. */
 .bar {
     display: flex;
     flex: none;
@@ -49,17 +50,126 @@ body {
 }
 .bar input:focus-visible, .bar button:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
 
+/* The listing and, beside it, the details of what is picked. */
+.body { display: flex; flex: 1; min-height: 0; }
+.listing { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+
+/* One grid for the head and every row, so the columns line up. The widths
+   are the page's, from fx-columns on the listing, and change as the head's
+   edges are dragged. */
+.head, .entries button {
+    display: grid;
+    grid-template-columns: var(--fx-columns);
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+}
+
+.head {
+    flex: none;
+    border-bottom: 1px solid var(--border-default);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.head button {
+    padding: var(--space-1) 0;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.head button:hover { color: var(--text-primary); }
+.head button[aria-sort="ascending"]::after { content: " ▲"; }
+.head button[aria-sort="descending"]::after { content: " ▼"; }
+.head .size, .entries .size { text-align: right; }
+
 .entries {
     flex: 1;
     min-height: 0;
     margin: 0;
-    padding: var(--space-1);
+    padding: var(--space-1) 0;
     list-style: none;
     overflow-y: auto;
 }
 
 .entries button {
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--text-secondary);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: default;
+    user-select: none;
+}
+.entries button img { width: 16px; height: 16px; }
+.entries button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.entries button.directory .name { color: var(--text-primary); }
+.entries button:hover { background: var(--surface-2); }
+.entries button[aria-selected="true"] { color: var(--text-primary); background: var(--surface-2); border-color: var(--accent-solid); }
+
+.details {
+    flex: none;
+    width: 220px;
+    padding: var(--space-4) var(--space-3);
+    overflow-y: auto;
+    border-left: 1px solid var(--border-default);
+    text-align: center;
+}
+.details img { width: 48px; height: 48px; margin: var(--space-3) auto; }
+.details h2 { margin: 0 0 var(--space-3); font-size: 14px; overflow-wrap: anywhere; }
+.details dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3); margin: 0; text-align: left; font-size: 12px; }
+.details dt { color: var(--text-muted); }
+.details dd { margin: 0; overflow-wrap: anywhere; }
+
+.status {
     display: flex;
+    flex: none;
+    justify-content: space-between;
+    padding: var(--space-1) var(--space-3);
+    border-top: 1px solid var(--border-default);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.trouble, .more { margin: var(--space-2) var(--space-3); font-size: 12px; color: var(--text-muted); }
+.trouble { color: var(--danger-text); }
+
+/* Narrow: the details pane goes, then the modified and type columns. The
+   sidebar goes first of all, below. */
+@media (max-width: 720px) { .details { display: none; } }
+@media (max-width: 520px) {
+    .head, .entries button { grid-template-columns: 16px minmax(0, 1fr) 80px; }
+    .head span:first-child, .modified, .kind { display: none; }
+}
+
+/* The sidebar: places to go, and volumes. */
+.sidebar {
+    flex: none;
+    width: 180px;
+    padding: var(--space-3) var(--space-2);
+    overflow-y: auto;
+    border-right: 1px solid var(--border-default);
+}
+.sidebar h3 {
+    margin: var(--space-3) var(--space-2) var(--space-1);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.sidebar h3:first-child { margin-top: 0; }
+.sidebar ul { margin: 0; padding: 0; list-style: none; }
+.sidebar button {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
     width: 100%;
@@ -70,14 +180,17 @@ body {
     background: none;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    cursor: default;
-    user-select: none;
+    cursor: pointer;
 }
-.entries button img { flex: none; width: 16px; height: 16px; }
-.entries button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.entries button.directory { color: var(--text-primary); }
-.entries button:hover { background: var(--surface-2); }
-.entries button[aria-selected="true"] { color: var(--text-primary); background: var(--surface-2); border-color: var(--accent-solid); }
+.sidebar button img { width: 16px; height: 16px; }
+.sidebar button:hover { background: var(--surface-2); }
+.sidebar button[aria-current="true"] { color: var(--text-primary); background: var(--surface-2); }
+/* How full a volume is. The page lets no style be written inline, so the
+   value is the element's and the look is here. */
+.volumes progress { display: block; width: 100%; height: 3px; appearance: none; border: 0; background: var(--border-default); border-radius: 2px; overflow: hidden; }
+.volumes progress::-webkit-progress-bar { background: var(--border-default); }
+.volumes progress::-webkit-progress-value { background: var(--accent-solid); }
+.volumes progress::-moz-progress-bar { background: var(--accent-solid); }
+.volumes button small { font-size: 11px; color: var(--text-muted); }
 
-.trouble, .more { margin: var(--space-2) var(--space-3); font-size: 12px; color: var(--text-muted); }
-.trouble { color: var(--danger-text); }
+@media (max-width: 900px) { .sidebar { display: none; } }
