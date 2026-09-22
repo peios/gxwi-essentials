@@ -1,0 +1,12 @@
+[package]
+name = "gexora"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+# What an app is an app by. From the checkout beside this one until GXWI is
+# somewhere a commit of it can be pinned from.
+libgxwi = { path = "../gxwi/libgxwi" }
+libc = "0.2"
