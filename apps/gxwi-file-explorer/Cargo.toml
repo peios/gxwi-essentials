@@ -6,7 +6,5 @@ license = "MIT"
 publish = false
 
 [dependencies]
-# What an app is an app by. From the checkout beside this one until GXWI is
-# somewhere a commit of it can be pinned from.
-libgxwi = { path = "../gxwi/libgxwi" }
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "6a5fa25efea9fd651b7f89669126a3344a8d2106" }
 libc = "0.2"
