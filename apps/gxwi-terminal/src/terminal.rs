@@ -82,13 +82,14 @@ impl Terminal {
     }
 
     /// Reads what is printed until there is no more, which is when nothing
-    /// has the far side any longer.
-    pub fn follow(&self) {
+    /// has the far side any longer. `called` hears what the terminal is
+    /// called, whenever what is printed says.
+    pub fn follow(&self, called: impl Fn(&str)) {
         let Ok(mut from) = self.pty.file() else { return self.ended() };
-        self.follow_from(&mut from);
+        self.follow_from(&mut from, called);
     }
 
-    fn follow_from(&self, from: &mut File) {
+    fn follow_from(&self, from: &mut File, called: impl Fn(&str)) {
         let mut piece = vec![0u8; PIECE];
         loop {
             match from.read(&mut piece) {
@@ -102,6 +103,9 @@ impl Terminal {
                     if whole && !stands.screen.taken_whole() && stands.came_to_the_whole {
                         stands.came_to_the_whole = false;
                         let _ = self.said.send(Said::Afresh);
+                    }
+                    if let Some(title) = stands.screen.called() {
+                        called(&title);
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
@@ -176,7 +180,7 @@ mod tests {
 
         terminal.resize(Size { rows: 12, cols: 50 });
         terminal.type_in(b"stty size; echo done-$((6*7)); exit\n".to_vec());
-        terminal.follow();
+        terminal.follow(|_| {});
         child.wait().unwrap();
 
         let (text, sizes, ended) = printed(&mut said);

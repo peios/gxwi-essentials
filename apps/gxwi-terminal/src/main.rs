@@ -2,7 +2,10 @@
 //!
 //! A window with the person's shell in it, on a pseudoterminal of this
 //! process's. Anything after the program's name is run in place of the
-//! shell, the first of it the program and the rest what it is given.
+//! shell, the first of it the program and the rest what it is given; except
+//! that a directory by itself is where the shell is opened, in place of the
+//! person's home. The window is called what the shell calls the terminal,
+//! if it calls it anything.
 //!
 //! The window is a page of the app's own and not a live surface, which a
 //! terminal cannot be: what is printed is drawn by an emulator in the page,
@@ -38,10 +41,17 @@ const TERM: &str = "xterm-256color";
 
 fn main() {
     let mut run: Vec<String> = std::env::args().skip(1).collect();
+    let home = std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_dir()).unwrap_or_else(|| "/".into());
+    let home = match within(&run) {
+        Some(directory) => {
+            run.clear();
+            directory
+        }
+        None => home,
+    };
     if run.is_empty() {
         run.push(std::env::var("SHELL").ok().filter(|shell| shell.starts_with('/')).unwrap_or_else(|| "/bin/sh".into()));
     }
-    let home = std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_dir()).unwrap_or_else(|| "/".into());
 
     let mut app = App::connect().unwrap_or_else(|e| die(&format!("the display: {e}")));
     let environment = [("TERM", TERM), ("COLORTERM", "truecolor")];
@@ -52,11 +62,40 @@ fn main() {
     app.routes(page::routes(terminal.clone()));
     let window = app.raw_page("Terminal", page::PATH);
     std::thread::spawn(move || {
-        terminal.follow();
+        // Called what the shell calls it, and Terminal when that is nothing.
+        terminal.follow(|title| window.retitle(if title.trim().is_empty() { "Terminal" } else { title }));
         let _ = child.wait();
         window.close();
     });
     app.run().unwrap_or_else(|e| die(&format!("the display: {e}")));
+}
+
+/// The directory to open the shell in, when that is what was asked: one
+/// argument, which is a directory. It is how a directory is opened with
+/// the terminal (PGSS Applications), from a file explorer.
+fn within(arguments: &[String]) -> Option<PathBuf> {
+    match arguments {
+        [only] => Some(PathBuf::from(only)).filter(|path| path.is_absolute() && path.is_dir()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn one_argument_that_is_a_directory_is_where_the_shell_opens() {
+        let said = |arguments: &[&str]| within(&arguments.iter().map(|a| a.to_string()).collect::<Vec<_>>());
+        assert_eq!(said(&["/"]), Some(PathBuf::from("/")));
+        assert_eq!(said(&[]), None);
+        // A program, a directory that is not there, one not said from the
+        // root, and a directory with something after it.
+        assert_eq!(said(&["/bin/sh"]), None);
+        assert_eq!(said(&["/no/such/place"]), None);
+        assert_eq!(said(&["."]), None);
+        assert_eq!(said(&["/", "-l"]), None);
+    }
 }
 
 fn die(message: &str) -> ! {

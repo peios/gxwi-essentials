@@ -16,11 +16,33 @@ use crate::pty::Size;
 /// How many lines that have gone off the top are kept.
 const KEPT: usize = 5000;
 
-pub struct Screen(Parser);
+/// What was said in what was printed that is about the terminal and not on
+/// it.
+#[derive(Default)]
+struct Heard {
+    /// What the terminal was last called, until it is taken.
+    title: Option<String>,
+}
+
+impl vt100::Callbacks for Heard {
+    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
+        let title: String = String::from_utf8_lossy(title).chars().filter(|c| !c.is_control()).collect();
+        self.title = Some(title);
+    }
+}
+
+pub struct Screen(Parser<Heard>);
 
 impl Screen {
     pub fn new(size: Size) -> Screen {
-        Screen(Parser::new(size.rows, size.cols, KEPT))
+        Screen(Parser::new_with_callbacks(size.rows, size.cols, KEPT, Heard::default()))
+    }
+
+    /// What the terminal has been called since this was last asked, if it
+    /// has been called anything: a shell says where it is, and a program
+    /// what it is doing.
+    pub fn called(&mut self) -> Option<String> {
+        self.0.callbacks_mut().title.take()
     }
 
     pub fn size(&self) -> Size {
@@ -204,6 +226,16 @@ mod tests {
         assert!(later.0.screen().hide_cursor());
         assert!(later.0.screen().bracketed_paste());
         assert_eq!(later.0.screen().contents(), "whole");
+    }
+
+    #[test]
+    fn what_the_terminal_is_called_is_heard_once() {
+        let mut screen = Screen::new(Size::USUAL);
+        assert_eq!(screen.called(), None);
+        screen.print(b"\x1b]2;first\x07\x1b]0;alice: ~/work\x1b\\$ ");
+        assert_eq!(screen.called().as_deref(), Some("alice: ~/work"));
+        assert_eq!(screen.called(), None);
+        assert_eq!(screen.0.screen().contents(), "$ ");
     }
 
     #[test]
