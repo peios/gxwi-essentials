@@ -113,8 +113,11 @@ body {
 .entries button.directory .name { color: var(--text-primary); }
 .entries button:hover { background: var(--surface-2); }
 .entries button[aria-selected="true"] { color: var(--text-primary); background: var(--surface-2); border-color: var(--accent-solid); }
+/* Cut, and here until it is pasted somewhere. */
+.entries button.cut { opacity: 0.5; }
 
-/* An entry being renamed: the same row, with a field where its name was. */
+/* An entry being renamed, or made: the same row, with a field where its
+   name is. */
 .entries form { margin: 0; color: var(--text-secondary); border: 1px solid var(--accent-solid); border-radius: var(--radius-sm); background: var(--surface-2); }
 .entries form img { width: 16px; height: 16px; }
 .entries form span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

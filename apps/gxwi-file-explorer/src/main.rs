@@ -18,21 +18,42 @@
 //! application for a type and leaves the rule to whoever opens, and this is
 //! the rule here. An entry's menu offers every candidate by name. Gexora is
 //! no part of the shell, so it starts what it opens itself, as a child of
-//! its own on the desktop it is on.
+//! its own on the desktop it is on. A file whose name says nothing of its
+//! type is opened as text if it reads as text, which is found out when it
+//! is opened and not before: a listing reads no file.
 //!
 //! AN ENTRY'S MENU also renames it, copies its path, and deletes it. There
 //! is nowhere for what is deleted to go, so deleting asks first, and a
 //! directory goes with everything in it. A new name that is already
 //! something's is refused: nothing is ever written over.
+//!
+//! CUTTING, COPYING AND PASTING. An entry is cut or copied from its menu,
+//! and pasted from the menu of the directory, which is the menu of the
+//! listing wherever no entry is. What is held is the session's and not the
+//! window's (`held`), so that it is pasted into another window. A copy
+//! pasted where its name is taken is given a name that says it is a copy;
+//! what was cut is not moved onto a name that is taken, and is held until
+//! it has been pasted. A directory is copied with everything in it, which
+//! may take a while: the window says what it is busy with and carries on
+//! being a window.
+//!
+//! THE DIRECTORY'S MENU also makes a folder or a file, its name typed where
+//! it will be listed, and opens the directory with whatever says it opens
+//! directories. That is how a terminal is opened here.
 
 use std::path::{Path, PathBuf};
+use std::sync::Weak;
 use std::time::SystemTime;
 
 use libgxwi::apps::{Application, Catalogue};
 use libgxwi::icons::{self, Themes};
-use libgxwi::{App, Facts, Fields, Live, Value, escape};
+use libgxwi::{App, Facts, Fields, Live, Surface, Value, escape};
 
+mod held;
 mod show;
+mod work;
+
+use held::{Held, Holding};
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gexora.svg` at the repo root, installed as the base theme's.
@@ -74,6 +95,19 @@ enum Asking {
     Rename(String),
     /// Whether the entry of this name is to be deleted.
     Delete(String),
+    /// A name for a new folder, or a new file, typed where it will be
+    /// listed.
+    New { directory: bool },
+}
+
+impl Asking {
+    /// The entry it is about, if it is about one.
+    fn about(&self) -> Option<&str> {
+        match self {
+            Asking::Rename(name) | Asking::Delete(name) => Some(name),
+            Asking::New { .. } => None,
+        }
+    }
 }
 
 /// Somewhere to go from the sidebar.
@@ -142,19 +176,29 @@ struct Explorer {
     /// them when the directory was last read.
     openers: Vec<Application>,
     asking: Option<Asking>,
+    /// What has been cut or copied.
+    holding: Holding,
+    /// What the window is busy with, while it is copying or moving.
+    working: Option<String>,
+    /// The window, for work done aside to say when it is done. Without one
+    /// the work is done before anything else is.
+    window: Weak<Surface<Explorer>>,
 }
 
 impl Explorer {
     fn new(at: PathBuf) -> Explorer {
-        Explorer::with(at, Catalogue::system())
+        Explorer::with(at, Catalogue::system(), Holding::session())
     }
 
-    fn with(at: PathBuf, catalogue: Catalogue) -> Explorer {
+    fn with(at: PathBuf, catalogue: Catalogue, holding: Holding) -> Explorer {
         let mut explorer = Explorer {
             themes: Themes::active(),
             catalogue,
             openers: Vec::new(),
             asking: None,
+            holding,
+            working: None,
+            window: Weak::new(),
             at,
             entries: Vec::new(),
             unshown: 0,
@@ -225,17 +269,18 @@ impl Explorer {
         self.openers = self.catalogue.read().into_iter().filter(|application| !application.opens.is_empty()).collect();
         self.openers.sort_by_cached_key(|application| (application.title.to_lowercase(), application.id.clone()));
         // What was being asked about may have gone.
-        self.asking = self.asking.take().filter(|asking| {
-            let (Asking::Rename(name) | Asking::Delete(name)) = asking;
-            self.entries.iter().any(|entry| &entry.name == name)
-        });
+        self.asking = self.asking.take().filter(|asking| asking.about().is_none_or(|name| self.entries.iter().any(|entry| entry.name == name)));
         true
     }
 
     /// The applications that are candidates to open `entry`, first the one
     /// that opening it uses.
     fn candidates(&self, entry: &Entry) -> Vec<&Application> {
-        let Some(media) = entry.opened_as() else { return Vec::new() };
+        entry.opened_as().map(|media| self.opening(media)).unwrap_or_default()
+    }
+
+    /// The applications that say they open `media`, by title.
+    fn opening(&self, media: &str) -> Vec<&Application> {
         self.openers.iter().filter(|application| application.opens(media)).collect()
     }
 
@@ -290,11 +335,36 @@ impl Explorer {
             if let Err(e) = start(&path, &[]) {
                 self.trouble = Some(format!("{} could not be started: {e}.", entry.name));
             }
-        } else {
-            match self.candidates(entry).first().map(|application| application.id.clone()) {
+        } else if let Some(media) = entry.opened_as() {
+            match self.opening(media).first().map(|application| application.id.clone()) {
                 Some(id) => self.open_with(index, &id, fields),
-                None => self.trouble = Some(format!("Nothing installed says it opens {}.", entry.opened_as().map_or("files like this".into(), |media| format!("{media} files")))),
+                None => self.trouble = Some(format!("Nothing installed says it opens {media} files.")),
             }
+        } else {
+            // Its name says nothing of what it is. If it reads as text,
+            // what opens text opens it.
+            let text = work::reads_as_text(&path).then(|| self.opening("text/plain").first().map(|application| application.command(Some(&path)))).flatten();
+            match text {
+                Some((program, arguments)) => {
+                    if let Err(e) = start(&program, &arguments) {
+                        self.trouble = Some(format!("{} could not be opened: {e}.", entry.name));
+                    }
+                }
+                None => self.trouble = Some("Nothing installed says it opens files like this.".into()),
+            }
+        }
+    }
+
+    /// Opens the directory being shown with the application `id`, if it
+    /// says it opens directories: a terminal here, or another window.
+    fn open_here(&mut self, id: &str) {
+        let Some(application) = self.catalogue.get(id).filter(|application| application.opens("inode/directory")) else {
+            self.trouble = Some("This directory cannot be opened with that.".into());
+            return;
+        };
+        let (program, arguments) = application.command(Some(&self.at));
+        if let Err(e) = start(&program, &arguments) {
+            self.trouble = Some(format!("{} could not be started: {e}.", application.title));
         }
     }
 
@@ -320,14 +390,14 @@ impl Explorer {
         if to == was {
             return;
         }
-        if to.is_empty() || to == "." || to == ".." || to.contains('/') || to.contains('\0') {
+        if !work::is_name(to) {
             self.trouble = Some("That is not a name a file can have.".into());
             return;
         }
         let target = self.at.join(to);
         // Asked of the thing itself and not what it may link to: a link
         // that goes nowhere still has the name.
-        if std::fs::symlink_metadata(&target).is_ok() {
+        if work::taken(&target) {
             self.trouble = Some(format!("There is already something called {to} here."));
             return;
         }
@@ -343,15 +413,116 @@ impl Explorer {
     /// Deletes the entry called `name`: a directory with everything in it,
     /// and a link as the link it is.
     fn delete(&mut self, name: &str) {
-        let path = self.at.join(name);
-        let removed = match std::fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(&path),
-            Ok(_) => std::fs::remove_file(&path),
-            Err(e) => Err(e),
-        };
+        let removed = work::delete(&self.at.join(name));
         self.reread();
         if let Err(e) = removed {
             self.trouble = Some(format!("{name} could not be deleted: {}.", why(&e)));
+        }
+    }
+
+    /// Makes a folder or a file called what was typed, with nothing in it,
+    /// if that is a name and nothing has it.
+    fn make(&mut self, typed: &str, directory: bool) {
+        let name = typed.trim();
+        if !work::is_name(name) {
+            self.trouble = Some("That is not a name a file can have.".into());
+            return;
+        }
+        let path = self.at.join(name);
+        let made = if directory {
+            std::fs::create_dir(&path)
+        } else {
+            std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map(|_| ())
+        };
+        match made {
+            Ok(()) => {
+                self.reread();
+                self.picked = self.named(name);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => self.trouble = Some(format!("There is already something called {name} here.")),
+            Err(e) => self.trouble = Some(format!("{name} could not be made: {}.", why(&e))),
+        }
+    }
+
+    /// Holds the entry called `name`, to be copied or moved to wherever it
+    /// is pasted.
+    fn hold(&mut self, name: &str, cut: bool) {
+        if let Err(e) = self.holding.set(Some(Held { path: self.at.join(name), cut })) {
+            self.trouble = Some(format!("{name} could not be {}: {e}.", if cut { "cut" } else { "copied" }));
+        }
+    }
+
+    /// Puts what is held in the directory being shown.
+    fn paste(&mut self) {
+        if let Some(working) = &self.working {
+            self.trouble = Some(format!("Still {working}."));
+            return;
+        }
+        let Some(held) = self.holding.get() else {
+            self.trouble = Some("Nothing has been cut or copied.".into());
+            return;
+        };
+        let name = held.path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+        let Ok(metadata) = std::fs::symlink_metadata(&held.path) else {
+            self.trouble = Some(format!("{name} is no longer where it was."));
+            let _ = self.holding.set(None);
+            return;
+        };
+        if metadata.is_dir() && self.at.starts_with(&held.path) {
+            self.trouble = Some(format!("{name} cannot be put inside itself."));
+            return;
+        }
+        let into = self.at.clone();
+        let to = if held.cut {
+            // Cut and pasted where it is, it stays where it is.
+            if held.path.parent() == Some(into.as_path()) {
+                let _ = self.holding.set(None);
+                return;
+            }
+            if work::taken(&into.join(&name)) {
+                self.trouble = Some(format!("There is already something called {name} here."));
+                return;
+            }
+            into.join(&name)
+        } else {
+            work::free(&into, &name)
+        };
+        let doing = format!("{} {name}", if held.cut { "moving" } else { "copying" });
+        let work = move || {
+            let done = if held.cut { work::move_to(&held.path, &to) } else { work::copy(&held.path, &to) };
+            let said = done.map_err(|e| format!("{name} could not be {}: {}.", if held.cut { "moved" } else { "copied" }, why(&e)));
+            (said, to, held.cut)
+        };
+        match self.window.upgrade() {
+            Some(window) => {
+                self.working = Some(doing);
+                std::thread::spawn(move || {
+                    let (said, to, cut) = work();
+                    window.update(|explorer, _| explorer.pasted(said, &to, cut));
+                });
+            }
+            None => {
+                let (said, to, cut) = work();
+                self.pasted(said, &to, cut);
+            }
+        }
+    }
+
+    /// What was pasted is there, or is not and why.
+    fn pasted(&mut self, said: Result<(), String>, to: &Path, cut: bool) {
+        self.working = None;
+        // What was cut is pasted once. What failed part way may be in two
+        // places, and is no longer held either: asking again is not the
+        // way to put that right.
+        if cut {
+            let _ = self.holding.set(None);
+        }
+        self.reread();
+        if to.parent() == Some(self.at.as_path()) {
+            self.picked = to.file_name().and_then(|name| self.named(&name.to_string_lossy())).or(self.picked);
+        }
+        if let Err(why) = said {
+            self.trouble = Some(why);
         }
     }
 
@@ -525,6 +696,8 @@ fn space(path: &Path) -> Option<(u64, u64)> {
 impl Live for Explorer {
     fn render(&self, _: &Facts) -> String {
         let now = SystemTime::now();
+        // What has been cut is shown as on its way out.
+        let cut = self.holding.get().filter(|held| held.cut).map(|held| held.path);
         // One menu serves every entry the same applications open, which is
         // most of a directory: the entry's own values come with the choice.
         let mut menus: Vec<Vec<&Application>> = Vec::new();
@@ -543,7 +716,12 @@ impl Live for Explorer {
                     name = escape(&entry.name),
                     path = escape(&self.at.join(&entry.name).to_string_lossy()),
                 );
-                let class = if entry.directory { "directory" } else { "file" };
+                let class = match (entry.directory, cut.as_deref() == Some(self.at.join(&entry.name).as_path())) {
+                    (true, false) => "directory",
+                    (true, true) => "directory cut",
+                    (false, false) => "file",
+                    (false, true) => "file cut",
+                };
                 let rest = format!(
                     "<span class=\"modified\">{modified}</span><span class=\"kind\">{kind}</span><span class=\"size\">{size}</span>",
                     modified = show::when(entry.modified, now),
@@ -587,6 +765,8 @@ impl Live for Explorer {
                 format!(
                     "<menu id=\"menu-{at}\" hidden>\
                      <li><button type=\"button\" fx-click=\"open\">Open</button></li>{with}<hr>\
+                     <li><button type=\"button\" fx-click=\"cut\">Cut</button></li>\
+                     <li><button type=\"button\" fx-click=\"copy\">Copy</button></li>\
                      <li><button type=\"button\" fx-click=\"rename\">Rename</button></li>\
                      <li><button type=\"button\" fx-copy=\"path\">Copy path</button></li><hr>\
                      <li><button type=\"button\" fx-click=\"delete\">Delete</button></li>\
@@ -594,6 +774,40 @@ impl Live for Explorer {
                 )
             })
             .collect();
+        // The directory's own menu, which is the listing's wherever no
+        // entry is.
+        let here: String = self
+            .opening("inode/directory")
+            .iter()
+            .map(|application| {
+                format!(
+                    "<li><button type=\"button\" fx-click=\"open-here\" fx-value-app=\"{}\">Open with {}</button></li>",
+                    escape(&application.id),
+                    escape(&application.title)
+                )
+            })
+            .collect();
+        let here = format!(
+            "<menu id=\"menu-here\" hidden>\
+             <li><button type=\"button\" fx-click=\"new-folder\">New folder</button></li>\
+             <li><button type=\"button\" fx-click=\"new-file\">New file</button></li>\
+             <li><button type=\"button\" fx-click=\"paste\">Paste</button></li><hr>{here}\
+             </menu>"
+        );
+        // Being made, a folder or a file is a field to type its name in,
+        // ahead of everything that is there.
+        let making = match self.asking {
+            Some(Asking::New { directory }) => format!(
+                "<li><form id=\"making\" class=\"{class} renaming\" fx-submit=\"made\">\
+                 <img src=\"{icon}\" alt=\"\"><input name=\"name\" fx-autofocus autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Name for the new {what}\">\
+                 <span class=\"modified\"></span><span class=\"kind\">{kind}</span><span class=\"size\"></span></form></li>",
+                class = if directory { "directory" } else { "file" },
+                icon = escape(&icons::href(if directory { "inode-directory" } else { icons::GENERIC })),
+                what = if directory { "folder" } else { "file" },
+                kind = if directory { "Folder" } else { "File" },
+            ),
+            _ => String::new(),
+        };
         // What is asked before something is deleted. The keyboard starts on
         // the way out of it.
         let asking = match &self.asking {
@@ -613,14 +827,17 @@ impl Live for Explorer {
         };
         // While something is being asked, the keys are for answering it.
         let keys = match &self.asking {
-            Some(Asking::Rename(_)) => "<button type=\"button\" fx-key=\"Escape\" fx-click=\"keep\"></button>".to_string(),
+            Some(Asking::Rename(_) | Asking::New { .. }) => "<button type=\"button\" fx-key=\"Escape\" fx-click=\"keep\"></button>".to_string(),
             Some(Asking::Delete(_)) => String::new(),
             None => format!(
                 "<button type=\"button\" fx-key=\"Enter\" fx-click=\"open\" fx-value-index=\"{picked}\"></button>\
                  <button type=\"button\" fx-key=\"ArrowDown\" fx-click=\"next\"></button>\
                  <button type=\"button\" fx-key=\"ArrowUp\" fx-click=\"previous\"></button>\
                  <button type=\"button\" fx-key=\"F2\" fx-click=\"rename\" fx-value-index=\"{picked}\"></button>\
-                 <button type=\"button\" fx-key=\"Delete\" fx-click=\"delete\" fx-value-index=\"{picked}\"></button>",
+                 <button type=\"button\" fx-key=\"Delete\" fx-click=\"delete\" fx-value-index=\"{picked}\"></button>\
+                 <button type=\"button\" fx-key=\"Ctrl+X\" fx-click=\"cut\" fx-value-index=\"{picked}\"></button>\
+                 <button type=\"button\" fx-key=\"Ctrl+C\" fx-click=\"copy\" fx-value-index=\"{picked}\"></button>\
+                 <button type=\"button\" fx-key=\"Ctrl+V\" fx-click=\"paste\"></button>",
                 picked = self.picked.map(|picked| picked.to_string()).unwrap_or_default(),
             ),
         };
@@ -634,11 +851,12 @@ impl Live for Explorer {
         };
         let trouble = self.trouble.as_ref().map(|why| format!("<p class=\"trouble\">{}</p>", escape(why))).unwrap_or_default();
         let more = if self.unshown > 0 { format!("<p class=\"more\">and {} more, not shown</p>", self.unshown) } else { String::new() };
-        let empty = if self.entries.is_empty() && self.trouble.is_none() { "<p class=\"more\">Nothing in here.</p>" } else { "" };
-        let counted = match self.picked.and_then(|picked| self.entries.get(picked)) {
-            Some(entry) if !entry.directory => format!("{} items · 1 selected · {}", self.entries.len(), show::size(entry.size)),
-            Some(_) => format!("{} items · 1 selected", self.entries.len()),
-            None => format!("{} items", self.entries.len()),
+        let empty = if self.entries.is_empty() && self.trouble.is_none() && making.is_empty() { "<p class=\"more\">Nothing in here.</p>" } else { "" };
+        let counted = match (&self.working, self.picked.and_then(|picked| self.entries.get(picked))) {
+            (Some(working), _) => format!("<span class=\"working\">Busy {}</span>", escape(working)),
+            (None, Some(entry)) if !entry.directory => format!("{} items · 1 selected · {}", self.entries.len(), show::size(entry.size)),
+            (None, Some(_)) => format!("{} items · 1 selected", self.entries.len()),
+            (None, None) => format!("{} items", self.entries.len()),
         };
         let space = self.space.map(|(free, all)| format!("{} free of {}", show::size(free), show::size(all))).unwrap_or_default();
         // The first element is never seen. It is what the chords are hung on:
@@ -655,13 +873,13 @@ impl Live for Explorer {
              </form>\
              <div class=\"body\">\
              {sidebar}\
-             <div class=\"listing\" id=\"listing\" fx-columns=\"16px minmax(0, 1fr) 140px 130px 80px\">\
+             <div class=\"listing\" id=\"listing\" fx-menu=\"menu-here\" fx-columns=\"16px minmax(0, 1fr) 140px 130px 80px\">\
              <div class=\"head\"><span></span>{name}{modified}{kind}{size}</div>\
-             {trouble}{asking}<ul class=\"entries\">{entries}</ul>{empty}{more}\
+             {trouble}{asking}<ul class=\"entries\">{making}{entries}</ul>{empty}{more}\
              </div>\
              {details}\
              </div>\
-             <footer class=\"status\"><span>{counted}</span><span>{space}</span></footer>{menus}",
+             <footer class=\"status\"><span>{counted}</span><span>{space}</span></footer>{menus}{here}",
             name = heading(By::Name, "Name"),
             modified = heading(By::Modified, "Modified"),
             kind = heading(By::Kind, "Type"),
@@ -727,6 +945,30 @@ impl Live for Explorer {
                 }
             }
             "keep" => self.asking = None,
+            "new-folder" | "new-file" => {
+                let directory = name == "new-folder";
+                fields.set("name", if directory { "New folder" } else { "New file.txt" });
+                self.asking = Some(Asking::New { directory });
+            }
+            "made" => {
+                if let Some(Asking::New { directory }) = self.asking.take() {
+                    let typed = fields.get("name").to_string();
+                    self.make(&typed, directory);
+                }
+            }
+            "cut" | "copy" => {
+                if let Some(index) = index {
+                    self.picked = Some(index);
+                    let held = self.entries[index].name.clone();
+                    self.hold(&held, name == "cut");
+                }
+            }
+            "paste" => self.paste(),
+            "open-here" => {
+                if let Some(id) = value["app"].as_str() {
+                    self.open_here(id);
+                }
+            }
             "next" => self.picked = last.map(|last| self.picked.map_or(0, |picked| (picked + 1).min(last))),
             "previous" => self.picked = last.map(|_| self.picked.map_or(0, |picked| picked.saturating_sub(1))),
             "sort" => {
@@ -785,7 +1027,13 @@ mod tests {
             let opens = if opens.is_empty() { String::new() } else { format!("opens = [\"{opens}\"]\n") };
             std::fs::write(apps.join(format!("{id}.toml")), format!("title = \"{title}\"\nprogram = \"{}\"\n{opens}", program.display())).unwrap();
         }
-        (Explorer::with(files, Catalogue::at(apps)), dir)
+        let held = dir.join("held");
+        (Explorer::with(files, Catalogue::at(apps), Holding::at(Some(&held))), dir)
+    }
+
+    /// Another window of the same session's, at `at`.
+    fn another(dir: &Path, at: &str) -> Explorer {
+        Explorer::with(dir.join("files").join(at), Catalogue::at(dir.join("apps")), Holding::at(Some(&dir.join("held"))))
     }
 
     fn shown(explorer: &Explorer) -> String {
@@ -812,16 +1060,146 @@ mod tests {
         assert_eq!(titles("notes.txt"), ["Alpha", "Beta"]);
         assert_eq!(titles("Music"), ["Gexora"]);
         let html = shown(&explorer);
-        // One menu for the directory and one for the two files.
-        assert_eq!(html.matches("<menu id=").count(), 2);
+        // One menu for the directory, one for the two files, and one for
+        // where they all are.
+        assert_eq!(html.matches("<menu id=").count(), 3);
         assert!(html.contains("fx-menu=\"menu-0\" fx-value-index=\"0\" fx-value-name=\"Music\""));
         assert!(html.contains("fx-menu=\"menu-1\" fx-value-index=\"1\" fx-value-name=\"notes.txt\""));
         assert!(html.contains("fx-menu=\"menu-1\" fx-value-index=\"2\" fx-value-name=\"other.txt\""));
         assert!(html.contains(&format!("fx-value-path=\"{}\"", dir.join("files/notes.txt").display())));
         let menu = html.split("<menu id=\"menu-1\" hidden>").nth(1).unwrap().split("</menu>").next().unwrap();
         let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
-        assert_eq!(labels, ["Open", "Open with Alpha", "Open with Beta", "Rename", "Copy path", "Delete"]);
+        assert_eq!(labels, ["Open", "Open with Alpha", "Open with Beta", "Cut", "Copy", "Rename", "Copy path", "Delete"]);
         assert!(menu.contains("fx-copy=\"path\""));
+        // The directory's own menu is the listing's, and opens it with
+        // what opens directories.
+        assert!(html.contains("<div class=\"listing\" id=\"listing\" fx-menu=\"menu-here\""));
+        let menu = html.split("<menu id=\"menu-here\" hidden>").nth(1).unwrap().split("</menu>").next().unwrap();
+        let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
+        assert_eq!(labels, ["New folder", "New file", "Paste", "Open with Gexora"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_directory_is_opened_only_with_what_opens_directories() {
+        let (mut explorer, dir) = explorer("here");
+        let mut fields = Fields::default();
+        explorer.event("open-here", &said(&[("app", "org.example.a")]), &mut fields);
+        assert_eq!(explorer.trouble.as_deref(), Some("This directory cannot be opened with that."));
+        explorer.event("open-here", &said(&[("app", "org.example.nowhere")]), &mut fields);
+        assert_eq!(explorer.trouble.as_deref(), Some("This directory cannot be opened with that."));
+        // What says nothing of its type and does not read as text is
+        // opened by nothing.
+        std::fs::write(dir.join("files/thing"), b"\x7fELF\0\0").unwrap();
+        explorer.event("reread", &Value::Null, &mut fields);
+        explorer.event("open", &about("thing"), &mut fields);
+        assert_eq!(explorer.trouble.as_deref(), Some("Nothing installed says it opens files like this."));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_folder_or_a_file_is_made_by_the_name_typed_and_over_nothing() {
+        let (mut explorer, dir) = explorer("making");
+        let mut fields = Fields::default();
+        explorer.event("new-folder", &Value::Null, &mut fields);
+        assert_eq!(fields.get("name"), "New folder");
+        let html = shown(&explorer);
+        assert!(html.contains("<ul class=\"entries\"><li><form id=\"making\" class=\"directory renaming\" fx-submit=\"made\">"));
+        assert!(!html.contains("fx-key=\"Enter\""));
+        fields.set("name", "Pictures");
+        explorer.event("made", &Value::Null, &mut fields);
+        assert!(dir.join("files/Pictures").is_dir());
+        assert_eq!(names(&explorer), ["Music", "Pictures", "notes.txt", "other.txt"]);
+        assert_eq!(explorer.picked, explorer.named("Pictures"));
+
+        explorer.event("new-file", &Value::Null, &mut fields);
+        assert_eq!(fields.get("name"), "New file.txt");
+        fields.set("name", "notes.txt");
+        explorer.event("made", &Value::Null, &mut fields);
+        assert_eq!(explorer.trouble.as_deref(), Some("There is already something called notes.txt here."));
+        assert_eq!(std::fs::read_to_string(dir.join("files/notes.txt")).unwrap(), "notes");
+        explorer.event("new-file", &Value::Null, &mut fields);
+        fields.set("name", "a/b");
+        explorer.event("made", &Value::Null, &mut fields);
+        assert_eq!(explorer.trouble.as_deref(), Some("That is not a name a file can have."));
+        explorer.event("new-file", &Value::Null, &mut fields);
+        fields.set("name", "list.txt");
+        explorer.event("made", &Value::Null, &mut fields);
+        assert_eq!(std::fs::read_to_string(dir.join("files/list.txt")).unwrap(), "");
+        // Asked and then not: nothing is made.
+        explorer.event("new-folder", &Value::Null, &mut fields);
+        explorer.event("keep", &Value::Null, &mut fields);
+        fields.set("name", "Never");
+        explorer.event("made", &Value::Null, &mut fields);
+        assert!(!dir.join("files/Never").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn what_is_copied_in_one_window_is_pasted_in_another_and_over_nothing() {
+        let (mut explorer, dir) = explorer("copying");
+        let mut fields = Fields::default();
+        explorer.event("paste", &Value::Null, &mut fields);
+        assert_eq!(explorer.trouble.as_deref(), Some("Nothing has been cut or copied."));
+        explorer.event("copy", &about("notes.txt"), &mut fields);
+        assert!(!shown(&explorer).contains(" cut\""));
+        // Where it came from, it is a copy by name.
+        explorer.event("paste", &Value::Null, &mut fields);
+        assert_eq!(names(&explorer), ["Music", "notes (copy).txt", "notes.txt", "other.txt"]);
+        assert_eq!(explorer.picked, explorer.named("notes (copy).txt"));
+        // Still held, for another window to paste.
+        let mut other = another(&dir, "Music");
+        other.event("paste", &Value::Null, &mut fields);
+        other.event("paste", &Value::Null, &mut fields);
+        assert_eq!(names(&other), ["Albums", "notes (copy).txt", "notes.txt"]);
+        assert_eq!(std::fs::read_to_string(dir.join("files/Music/notes.txt")).unwrap(), "notes");
+
+        // A directory goes with everything in it, and not into itself.
+        explorer.event("copy", &about("Music"), &mut fields);
+        other.event("paste", &Value::Null, &mut fields);
+        assert_eq!(other.trouble.as_deref(), Some("Music cannot be put inside itself."));
+        let mut deeper = another(&dir, "Music/Albums");
+        deeper.event("paste", &Value::Null, &mut fields);
+        assert_eq!(deeper.trouble.as_deref(), Some("Music cannot be put inside itself."));
+        explorer.event("paste", &Value::Null, &mut fields);
+        assert_eq!(explorer.trouble, None);
+        assert!(dir.join("files/Music (copy)/Albums/one.flac").exists());
+
+        // What has gone since it was copied is said to have.
+        explorer.event("copy", &about("other.txt"), &mut fields);
+        std::fs::remove_file(dir.join("files/other.txt")).unwrap();
+        other.event("paste", &Value::Null, &mut fields);
+        assert_eq!(other.trouble.as_deref(), Some("other.txt is no longer where it was."));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn what_is_cut_is_moved_once_and_onto_nothing() {
+        let (mut explorer, dir) = explorer("cutting");
+        let mut fields = Fields::default();
+        std::fs::write(dir.join("files/Music/notes.txt"), "theirs").unwrap();
+        explorer.event("cut", &about("notes.txt"), &mut fields);
+        assert!(shown(&explorer).contains("class=\"file cut\""));
+        // Onto a name that is taken, it stays where it is and stays held.
+        let mut other = another(&dir, "Music");
+        other.event("paste", &Value::Null, &mut fields);
+        assert_eq!(other.trouble.as_deref(), Some("There is already something called notes.txt here."));
+        assert_eq!(std::fs::read_to_string(dir.join("files/Music/notes.txt")).unwrap(), "theirs");
+        assert_eq!(std::fs::read_to_string(dir.join("files/notes.txt")).unwrap(), "notes");
+        let mut deeper = another(&dir, "Music/Albums");
+        deeper.event("paste", &Value::Null, &mut fields);
+        assert_eq!(deeper.trouble, None);
+        assert_eq!(names(&deeper), ["notes.txt", "one.flac"]);
+        assert!(!dir.join("files/notes.txt").exists());
+        // Pasted once: there is nothing held any more.
+        deeper.event("paste", &Value::Null, &mut fields);
+        assert_eq!(deeper.trouble.as_deref(), Some("Nothing has been cut or copied."));
+        // Cut and pasted where it is, it stays, and is let go.
+        explorer.event("reread", &Value::Null, &mut fields);
+        explorer.event("cut", &about("other.txt"), &mut fields);
+        explorer.event("paste", &Value::Null, &mut fields);
+        assert_eq!((explorer.trouble.as_deref(), names(&explorer)), (None, vec!["Music", "other.txt"]));
+        assert!(!shown(&explorer).contains(" cut\""));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -933,7 +1311,11 @@ fn main() {
     let at = std::env::args().nth(1).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(PathBuf::from));
     let at = at.filter(|at| at.is_dir()).unwrap_or_else(|| PathBuf::from("/"));
     let window = app.live("Gexora", Explorer::new(at));
-    window.update(|explorer, fields| fields.set("path", &explorer.at.to_string_lossy()));
+    let aside = std::sync::Arc::downgrade(&window);
+    window.update(|explorer, fields| {
+        fields.set("path", &explorer.at.to_string_lossy());
+        explorer.window = aside;
+    });
     if let Err(e) = app.run() {
         eprintln!("gexora: {e}");
         std::process::exit(1);
