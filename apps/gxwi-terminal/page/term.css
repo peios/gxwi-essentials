@@ -1,0 +1,83 @@
+/* The terminal fills the window it is given, in the desktop's colours. What
+   the emulator draws is its own (vendor/xterm.css); the sixteen colours a
+   program asks for by number are here, for term.js to read, since they
+   differ between a light desktop and a dark one. */
+
+:root {
+    --term-black: #1b222c;
+    --term-red: #b3261e;
+    --term-green: #1a7f37;
+    --term-yellow: #8a6100;
+    --term-blue: #0b5fad;
+    --term-magenta: #8b3fa8;
+    --term-cyan: #0b7285;
+    --term-white: #5a6473;
+    --term-bright-black: #3c4756;
+    --term-bright-red: #d1342b;
+    --term-bright-green: #22963f;
+    --term-bright-yellow: #a87400;
+    --term-bright-blue: #1575d1;
+    --term-bright-magenta: #a54cc7;
+    --term-bright-cyan: #0e8ba1;
+    --term-bright-white: #0d141d;
+    --term-selection: rgb(14 111 166 / 25%);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --term-black: #1b222c;
+        --term-red: #ff7b72;
+        --term-green: #56d364;
+        --term-yellow: #e3b341;
+        --term-blue: #6cb6ff;
+        --term-magenta: #d2a8ff;
+        --term-cyan: #62d2ff;
+        --term-white: #b9c2cf;
+        --term-bright-black: #6b7686;
+        --term-bright-red: #ffa198;
+        --term-bright-green: #7ee787;
+        --term-bright-yellow: #f2cc60;
+        --term-bright-blue: #9ccbff;
+        --term-bright-magenta: #e2c5ff;
+        --term-bright-cyan: #9be4ff;
+        --term-bright-white: #f3f6fb;
+        --term-selection: rgb(98 210 255 / 30%);
+    }
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg-base);
+    color: var(--text-body);
+    font-family: var(--font-text);
+}
+
+#room {
+    position: absolute;
+    inset: 0;
+    padding: var(--space-2);
+    box-sizing: border-box;
+}
+
+#terminal {
+    width: 100%;
+    height: 100%;
+}
+
+/* What is said about the terminal rather than in it: that what was running
+   has ended, or that the page cannot reach the process. */
+#said {
+    position: absolute;
+    right: var(--space-3);
+    bottom: var(--space-3);
+    margin: 0;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    background: var(--bg-sunken);
+    color: var(--text-secondary);
+    font-size: 13px;
+}
