@@ -1,0 +1,118 @@
+/* Made from the theme's tokens, which the desktop's page for a live surface
+   brings with it. */
+html, body { height: 100%; }
+
+body {
+    margin: 0;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: 500 13px/1.4 var(--font-text);
+    color-scheme: light dark;
+    overflow: hidden;
+}
+
+#fx-root { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
+#fx-root[data-connected="false"] { opacity: 0.5; }
+
+/* Saving, where the file is, and how its lines are shown. */
+.bar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-2);
+}
+
+.bar button, .asking button {
+    flex: none;
+    height: var(--control-sm);
+    padding: 0 var(--space-3);
+    font: inherit;
+    color: var(--text-primary);
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.bar button:hover, .asking button:hover { background: var(--surface-2); }
+.bar button:disabled { color: var(--text-muted); cursor: default; opacity: 0.6; }
+
+.path {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font: 500 12px/1 var(--font-mono);
+    color: var(--text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* The end of a path says more than its beginning, so it is the
+       beginning that is cut short. What is in it still reads left to
+       right, which is what the bdi around it is for. */
+    direction: rtl;
+    text-align: left;
+}
+
+.wrap { display: flex; flex: none; align-items: center; gap: var(--space-1); color: var(--text-secondary); }
+
+/* What is asked before anything more is done. */
+.asking {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--accent-solid);
+    border-radius: var(--radius-sm);
+    background: var(--surface-1);
+}
+.asking p { flex: 1; min-width: 12em; margin: 0; overflow-wrap: anywhere; }
+.asking input {
+    flex: 1;
+    min-width: 10em;
+    height: var(--control-sm);
+    padding: 0 var(--space-2);
+    font: 500 13px/1 var(--font-mono);
+    color: inherit;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.asking button.danger { color: var(--danger-text); border-color: currentColor; }
+
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
+
+.trouble { flex: none; margin: var(--space-2) var(--space-3); font-size: 12px; color: var(--danger-text); }
+.refused { flex: 1; margin: var(--space-5) var(--space-4); color: var(--text-secondary); text-align: center; }
+
+/* The text. */
+textarea {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-3);
+    font: 500 13px/1.5 var(--font-mono);
+    color: var(--text-body);
+    background: var(--bg-base);
+    border: 0;
+    outline: 0;
+    resize: none;
+    tab-size: 4;
+}
+textarea.straight { white-space: pre; overflow-wrap: normal; overflow-x: auto; }
+textarea.wrapped { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.status {
+    display: flex;
+    flex: none;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-3);
+    font-size: 12px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-default);
+    background: var(--surface-2);
+}
+.state[data-state="Not saved"] { color: var(--accent-quiet); }
