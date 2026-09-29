@@ -6,5 +6,5 @@ license = "MIT"
 publish = false
 
 [dependencies]
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "02d33c3036327dad6971fa509d1e9492e8258c55" }
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "c6df8a1e3dbdd28a48752f87ba87f6edb8adaf33" }
 libc = "0.2"
