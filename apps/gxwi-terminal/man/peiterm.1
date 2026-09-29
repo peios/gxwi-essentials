@@ -1,0 +1,53 @@
+.TH PEITERM 1 "2026-09-29" "Peios"
+.SH NAME
+peiterm \- GXWI terminal
+.SH SYNOPSIS
+.B peiterm
+.RI [ directory ]
+.br
+.B peiterm
+.I program
+.RI [ argument ...]
+.SH DESCRIPTION
+Opens a window on the GXWI desktop with a shell in it, on a pseudoterminal.
+The shell is the one named by
+.B SHELL
+in the environment, or
+.I /bin/sh
+if none is named, and it is started in the home directory of whoever logged on.
+.PP
+Given one argument that is a directory, the shell is started there instead.
+Given anything else, the first argument is run in place of the shell and the
+rest are passed to it.
+.PP
+The terminal belongs to the program and not to the browser showing it: a page
+that is closed and opened again, or another device looking at the same
+session, is shown the terminal as it stands.
+.PP
+The window closes when the shell ends. Closing the window hangs the terminal
+up on whatever is running in it.
+.SH KEYS
+.TP
+.B Ctrl+Shift+C
+Copy what is selected.
+.TP
+.B Ctrl+Shift+V, Shift+Insert
+Paste.
+.PP
+The desktop's own chords are the desktop's while the keyboard is in the
+terminal.
+.SH ENVIRONMENT
+.TP
+.B TERM
+Set to
+.I xterm-256color
+for what is started.
+.TP
+.B GXWI_DISPLAY
+Names the desktop. It is left in the environment of what is started, so a
+program run from the terminal can open windows of its own.
+.SH NOTES
+Runs within a GXWI session. Its parent supplies the session descriptors and
+identity; launch it through the desktop.
+.SH SEE ALSO
+The Peios learn documentation.
