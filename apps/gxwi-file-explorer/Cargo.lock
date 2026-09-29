@@ -271,7 +271,7 @@ dependencies = [
 
 [[package]]
 name = "gexora"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "libc",
  "libgxwi",
@@ -423,8 +423,8 @@ checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
 name = "libgxwi"
-version = "0.0.1"
-source = "git+https://github.com/peios/gxwi.git?rev=6a5fa25efea9fd651b7f89669126a3344a8d2106#6a5fa25efea9fd651b7f89669126a3344a8d2106"
+version = "0.0.2"
+source = "git+https://github.com/peios/gxwi.git?rev=c6df8a1e3dbdd28a48752f87ba87f6edb8adaf33#c6df8a1e3dbdd28a48752f87ba87f6edb8adaf33"
 dependencies = [
  "axum",
  "hyper",

@@ -1,10 +1,10 @@
 [package]
 name = "gexora"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "MIT"
 publish = false
 
 [dependencies]
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "6a5fa25efea9fd651b7f89669126a3344a8d2106" }
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "c6df8a1e3dbdd28a48752f87ba87f6edb8adaf33" }
 libc = "0.2"
