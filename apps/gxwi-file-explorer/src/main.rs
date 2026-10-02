@@ -40,12 +40,27 @@
 //! THE DIRECTORY'S MENU also makes a folder or a file, its name typed where
 //! it will be listed, and opens the directory with whatever says it opens
 //! directories. That is how a terminal is opened here.
+//!
+//! PERMISSIONS. An entry's menu opens its permissions in gxwi-sd-editor, a
+//! dialog of its own that this starts and speaks for (its library): the
+//! owner, and who may do what with it. Gexora reads the descriptor and
+//! applies what the person applies, through a handle it holds on the entry
+//! while the dialog is open, which can do nothing but that. So what is
+//! applied is applied to the entry it was opened on, wherever it has been
+//! moved since, and never to something that has taken its name. One entry's
+//! permissions are open once at a time.
 
+use std::collections::HashSet;
+use std::os::fd::{AsFd, OwnedFd};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Weak;
 use std::time::SystemTime;
 
+use gxwi_sd_editor::{Can, Generic, Object, Part, Request, Right};
 use libgxwi::apps::{Application, Catalogue};
+use peios::file::{File, SecInfo};
+use peios::security::{AccessMask, SecurityDescriptor};
 use libgxwi::icons::{self, Themes};
 use libgxwi::{App, Facts, Fields, Live, Surface, Value, escape};
 
@@ -180,6 +195,9 @@ struct Explorer {
     holding: Holding,
     /// What the window is busy with, while it is copying or moving.
     working: Option<String>,
+    /// The entries whose permissions are open, by where they were when
+    /// they were opened.
+    editing: HashSet<PathBuf>,
     /// The window, for work done aside to say when it is done. Without one
     /// the work is done before anything else is.
     window: Weak<Surface<Explorer>>,
@@ -198,6 +216,7 @@ impl Explorer {
             asking: None,
             holding,
             working: None,
+            editing: HashSet::new(),
             window: Weak::new(),
             at,
             entries: Vec::new(),
@@ -526,6 +545,55 @@ impl Explorer {
         }
     }
 
+    /// Opens the editor on the permissions of the entry at `index`.
+    fn permissions(&mut self, index: usize) {
+        let Some(entry) = self.entries.get(index) else { return };
+        let path = self.at.join(&entry.name);
+        if self.editing.contains(&path) {
+            self.trouble = Some(format!("The permissions of {} are open already.", entry.name));
+            return;
+        }
+        // A handle for its descriptor and nothing else, through a link as
+        // the thing opened would be.
+        let handle = match std::fs::OpenOptions::new().read(true).custom_flags(libc::O_PATH).open(&path) {
+            Ok(file) => OwnedFd::from(file),
+            Err(e) => {
+                self.trouble = Some(format!("{} could not be opened: {}.", entry.name, why(&e)));
+                return;
+            }
+        };
+        let sd = match peios::file::fd_get_sd(handle.as_fd(), SecInfo::OWNER | SecInfo::GROUP | SecInfo::DACL) {
+            Ok(sd) => sd,
+            Err(e) => {
+                self.trouble = Some(format!("The permissions of {} could not be read: {}.", entry.name, why(&io(e))));
+                return;
+            }
+        };
+        let request = Request {
+            object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory },
+            sd: sd.as_bytes().to_vec(),
+            rights: file_rights(),
+            generic: file_generic(),
+            can: Can { owner: true, audit: false },
+        };
+        let window = self.window.clone();
+        let opened = path.clone();
+        let done = move || {
+            if let Some(window) = window.upgrade() {
+                window.update(|explorer, _| {
+                    explorer.editing.remove(&opened);
+                });
+            }
+        };
+        match gxwi_sd_editor::edit(&request, move |sd, parts| apply(&handle, sd, parts), done) {
+            Ok(()) => {
+                self.editing.insert(path);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.trouble = Some("The permissions editor is not installed.".into()),
+            Err(e) => self.trouble = Some(format!("The permissions editor could not be started: {e}.")),
+        }
+    }
+
     /// The pane of places to go and volumes to look at.
     fn sidebar(&self) -> String {
         let current = |path: &Path| if path == self.at { " aria-current=\"true\"" } else { "" };
@@ -602,6 +670,55 @@ fn start(program: &Path, arguments: &[String]) -> std::io::Result<()> {
         let _ = child.wait();
     });
     Ok(())
+}
+
+/// The rights a file or folder has, by the names the permissions editor shows
+/// them by, from the most to the least.
+fn file_rights() -> Vec<Right> {
+    let generic = file_generic();
+    let right = |name: &str, mask: u32| Right { name: name.into(), mask, general: true };
+    vec![
+        right("Full control", generic.all),
+        right("Modify", generic.read | generic.write | generic.execute | AccessMask::DELETE.bits()),
+        right("Read & execute", generic.read | generic.execute),
+        right("Read", generic.read),
+        right("Write", generic.write),
+    ]
+}
+
+/// What the generic rights stand for on a file, as the kernel has it.
+fn file_generic() -> Generic {
+    let mapping = File::generic_mapping();
+    let means = |generic: AccessMask| generic.resolve_generic(&mapping).bits();
+    Generic {
+        read: means(AccessMask::GENERIC_READ),
+        write: means(AccessMask::GENERIC_WRITE),
+        execute: means(AccessMask::GENERIC_EXECUTE),
+        all: means(AccessMask::GENERIC_ALL),
+    }
+}
+
+/// Applies the parts of `sd` that changed to what `handle` is open on: what
+/// the permissions editor sent. Why not, for the person to read.
+fn apply(handle: &OwnedFd, sd: &[u8], parts: &[Part]) -> Result<(), String> {
+    let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec()).map_err(|e| format!("what came back is not a security descriptor ({e})"))?;
+    let info = parts.iter().fold(SecInfo::empty(), |info, part| {
+        info | match part {
+            Part::Owner => SecInfo::OWNER,
+            Part::Group => SecInfo::GROUP,
+            Part::Dacl => SecInfo::DACL,
+            Part::Sacl => SecInfo::SACL,
+        }
+    });
+    if info.is_empty() {
+        return Ok(());
+    }
+    peios::file::fd_set_sd(handle.as_fd(), info, &sd).map_err(|e| why(&io(e)))
+}
+
+/// A KACS error as the system's own, which is what it carries.
+fn io(error: peios::Error) -> std::io::Error {
+    error.raw_os_error().map_or_else(|| std::io::Error::new(error.kind(), error.to_string()), std::io::Error::from_raw_os_error)
 }
 
 /// Why something could not be done, for the person to read.
@@ -768,7 +885,8 @@ impl Live for Explorer {
                      <li><button type=\"button\" fx-click=\"cut\">Cut</button></li>\
                      <li><button type=\"button\" fx-click=\"copy\">Copy</button></li>\
                      <li><button type=\"button\" fx-click=\"rename\">Rename</button></li>\
-                     <li><button type=\"button\" fx-copy=\"path\">Copy path</button></li><hr>\
+                     <li><button type=\"button\" fx-copy=\"path\">Copy path</button></li>\
+                     <li><button type=\"button\" fx-click=\"permissions\">Permissions…</button></li><hr>\
                      <li><button type=\"button\" fx-click=\"delete\">Delete</button></li>\
                      </menu>"
                 )
@@ -964,6 +1082,12 @@ impl Live for Explorer {
                 }
             }
             "paste" => self.paste(),
+            "permissions" => {
+                if let Some(index) = index {
+                    self.picked = Some(index);
+                    self.permissions(index);
+                }
+            }
             "open-here" => {
                 if let Some(id) = value["app"].as_str() {
                     self.open_here(id);
@@ -1069,7 +1193,7 @@ mod tests {
         assert!(html.contains(&format!("fx-value-path=\"{}\"", dir.join("files/notes.txt").display())));
         let menu = html.split("<menu id=\"menu-1\" hidden>").nth(1).unwrap().split("</menu>").next().unwrap();
         let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
-        assert_eq!(labels, ["Open", "Open with Alpha", "Open with Beta", "Cut", "Copy", "Rename", "Copy path", "Delete"]);
+        assert_eq!(labels, ["Open", "Open with Alpha", "Open with Beta", "Cut", "Copy", "Rename", "Copy path", "Permissions…", "Delete"]);
         assert!(menu.contains("fx-copy=\"path\""));
         // The directory's own menu is the listing's, and opens it with
         // what opens directories.
@@ -1078,6 +1202,18 @@ mod tests {
         let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
         assert_eq!(labels, ["New folder", "New file", "Paste", "Open with Gexora"]);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_files_rights_each_have_all_of_the_ones_after_them_that_they_can() {
+        let rights = file_rights();
+        let mask = |name: &str| rights.iter().find(|right| right.name == name).unwrap().mask;
+        let has = |more: &str, less: &str| mask(more) & mask(less) == mask(less);
+        assert!(rights.iter().all(|right| right.general && right.mask != 0));
+        assert!(has("Full control", "Modify") && has("Modify", "Read & execute") && has("Read & execute", "Read") && has("Modify", "Write"));
+        assert!(!has("Read", "Write") && !has("Modify", "Full control"));
+        // As the kernel maps them, not as this guesses.
+        assert_eq!(mask("Full control"), AccessMask::GENERIC_ALL.resolve_generic(&File::generic_mapping()).bits());
     }
 
     #[test]

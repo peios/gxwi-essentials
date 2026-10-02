@@ -273,8 +273,10 @@ dependencies = [
 name = "gexora"
 version = "0.0.2"
 dependencies = [
+ "gxwi-sd-editor",
  "libc",
  "libgxwi",
+ "peios",
 ]
 
 [[package]]
@@ -282,6 +284,15 @@ name = "glob"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
+
+[[package]]
+name = "gxwi-sd-editor"
+version = "0.0.1"
+dependencies = [
+ "base64",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "h2"

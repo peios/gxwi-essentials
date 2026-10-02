@@ -8,3 +8,8 @@ publish = false
 [dependencies]
 libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "c6df8a1e3dbdd28a48752f87ba87f6edb8adaf33" }
 libc = "0.2"
+# A file's descriptor, read and applied for the permissions editor.
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "3dffee949a457509078ffc2f423613de330b5401", package = "peios" }
+# The permissions editor's protocol, and nothing of the editor's own. Beside
+# this checkout until it is published.
+gxwi-sd-editor = { path = "../gxwi-sd-editor", default-features = false }
