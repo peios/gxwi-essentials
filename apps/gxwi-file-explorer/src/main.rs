@@ -57,8 +57,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Weak;
 use std::time::SystemTime;
 
-use gxwi_sd_editor::{Can, Generic, Object, Part, Request, Right};
+use gxwi_sd_editor::{Can, Children, Generic, Object, Part, Request, Right};
 use libgxwi::apps::{Application, Catalogue};
+use peios::access::AccessCheck;
 use peios::file::{File, SecInfo};
 use peios::security::{AccessMask, SecurityDescriptor};
 use libgxwi::icons::{self, Themes};
@@ -570,11 +571,11 @@ impl Explorer {
             }
         };
         let request = Request {
-            object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory },
+            object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory, children: Children::All },
             sd: sd.as_bytes().to_vec(),
             rights: file_rights(),
             generic: file_generic(),
-            can: Can { owner: true, audit: false },
+            can: can_change(&sd),
         };
         let window = self.window.clone();
         let opened = path.clone();
@@ -696,6 +697,23 @@ fn file_generic() -> Generic {
         execute: means(AccessMask::GENERIC_EXECUTE),
         all: means(AccessMask::GENERIC_ALL),
     }
+}
+
+/// What the person can change of a file's descriptor `sd`, as the kernel's
+/// AccessCheck says for their token: the access list with WRITE_DAC, the
+/// owner with WRITE_OWNER, with what owning it and their privileges give
+/// them. It cannot be found out by opening the file for them, as a native
+/// open must name a data right too (KACS §3.9.2), and the person may have
+/// one without the other. Where the check cannot be made, both are offered,
+/// and the kernel decides on Apply.
+fn can_change(sd: &SecurityDescriptor) -> Can {
+    let granted = match AccessCheck::new(sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check() {
+        Ok(decision) => decision.granted,
+        Err(_) => return Can { dacl: true, owner: true, ..Can::default() },
+    };
+    let dacl = granted.contains(AccessMask::WRITE_DAC);
+    let why = (!dacl).then(|| "You may not change who may use this.".to_string());
+    Can { dacl, owner: granted.contains(AccessMask::WRITE_OWNER), audit: false, why }
 }
 
 /// Applies the parts of `sd` that changed to what `handle` is open on: what
