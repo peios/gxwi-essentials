@@ -13,10 +13,14 @@
 //! OPENING. A directory is gone into and a program is started. Anything
 //! else is opened with an application that says it opens files of its type
 //! (PGSS Applications): the candidates are the applications in the
-//! catalogue whose `opens` the type matches, in the order of their titles,
-//! and opening a file uses the first of them. The standard has no default
-//! application for a type and leaves the rule to whoever opens, and this is
-//! the rule here. An entry's menu offers every candidate by name. Gexora is
+//! catalogue whose `opens` the type matches. Opening a file uses the type's
+//! default, the application the person chose for it, or else the one chosen
+//! for the machine (PGSS Applications §5.7), and the first of the
+//! candidates by title when nobody has chosen one that opens it. An
+//! entry's menu offers every candidate by name, the default first and the
+//! rest by title. The choices are read again whenever a file is opened, so
+//! a change to them is used at once; the menus show them as they were when
+//! the directory was last read, or a file last opened. Gexora is
 //! no part of the shell, so it starts what it opens itself, as a child of
 //! its own on the desktop it is on. A file whose name says nothing of its
 //! type is opened as text if it reads as text, which is found out when it
@@ -58,6 +62,7 @@ use std::sync::Weak;
 use std::time::SystemTime;
 
 use gxwi_sd_editor::{Can, Children, Generic, Object, Part, Request, Right};
+use libgxwi::apps::defaults::Defaults;
 use libgxwi::apps::{Application, Catalogue};
 use peios::access::AccessCheck;
 use peios::file::{File, SecInfo};
@@ -140,6 +145,24 @@ struct Volume {
     space: Option<(u64, u64)>,
 }
 
+/// Where the choices of which application opens a type come from.
+enum Choosing {
+    /// The registry, as whoever this runs as: theirs, and the machine's.
+    Registry,
+    /// These, whatever the registry says.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Fixed(Defaults),
+}
+
+impl Choosing {
+    fn read(&self) -> Defaults {
+        match self {
+            Choosing::Registry => Defaults::read(),
+            Choosing::Fixed(defaults) => defaults.clone(),
+        }
+    }
+}
+
 /// What the listing is sorted by. Directories come first whatever it is.
 #[derive(Clone, Copy, PartialEq)]
 enum By {
@@ -191,6 +214,11 @@ struct Explorer {
     /// The applications that open anything, by title, as the catalogue had
     /// them when the directory was last read.
     openers: Vec<Application>,
+    /// Where the choices of what opens a type are read from.
+    choosing: Choosing,
+    /// The choices, as they were when last read: when the directory was,
+    /// or when a file was last opened.
+    defaults: Defaults,
     asking: Option<Asking>,
     /// What has been cut or copied.
     holding: Holding,
@@ -206,14 +234,16 @@ struct Explorer {
 
 impl Explorer {
     fn new(at: PathBuf) -> Explorer {
-        Explorer::with(at, Catalogue::system(), Holding::session())
+        Explorer::with(at, Catalogue::system(), Choosing::Registry, Holding::session())
     }
 
-    fn with(at: PathBuf, catalogue: Catalogue, holding: Holding) -> Explorer {
+    fn with(at: PathBuf, catalogue: Catalogue, choosing: Choosing, holding: Holding) -> Explorer {
         let mut explorer = Explorer {
             themes: Themes::active(),
             catalogue,
             openers: Vec::new(),
+            defaults: Defaults::default(),
+            choosing,
             asking: None,
             holding,
             working: None,
@@ -288,6 +318,7 @@ impl Explorer {
         self.volumes = volumes();
         self.openers = self.catalogue.read().into_iter().filter(|application| !application.opens.is_empty()).collect();
         self.openers.sort_by_cached_key(|application| (application.title.to_lowercase(), application.id.clone()));
+        self.defaults = self.choosing.read();
         // What was being asked about may have gone.
         self.asking = self.asking.take().filter(|asking| asking.about().is_none_or(|name| self.entries.iter().any(|entry| entry.name == name)));
         true
@@ -299,9 +330,10 @@ impl Explorer {
         entry.opened_as().map(|media| self.opening(media)).unwrap_or_default()
     }
 
-    /// The applications that say they open `media`, by title.
+    /// The applications that say they open `media`: its default first, if
+    /// it has one, and the rest by title.
     fn opening(&self, media: &str) -> Vec<&Application> {
-        self.openers.iter().filter(|application| application.opens(media)).collect()
+        self.defaults.first(media, self.openers.iter().filter(|application| application.opens(media)).collect())
     }
 
     /// Which entry is called `name`.
@@ -347,6 +379,10 @@ impl Explorer {
     }
 
     fn open(&mut self, index: usize, fields: &mut Fields) {
+        // What opens a type is as chosen now, not when the directory was
+        // read: a choice is made somewhere else, and should not wait for a
+        // refresh here to be used.
+        self.defaults = self.choosing.read();
         let Some(entry) = self.entries.get(index) else { return };
         let path = self.at.join(&entry.name);
         if entry.directory {
@@ -1172,12 +1208,24 @@ mod tests {
             std::fs::write(apps.join(format!("{id}.toml")), format!("title = \"{title}\"\nprogram = \"{}\"\n{opens}", program.display())).unwrap();
         }
         let held = dir.join("held");
-        (Explorer::with(files, Catalogue::at(apps), Holding::at(Some(&held))), dir)
+        (Explorer::with(files, Catalogue::at(apps), Choosing::Fixed(Defaults::default()), Holding::at(Some(&held))), dir)
     }
 
     /// Another window of the same session's, at `at`.
     fn another(dir: &Path, at: &str) -> Explorer {
-        Explorer::with(dir.join("files").join(at), Catalogue::at(dir.join("apps")), Holding::at(Some(&dir.join("held"))))
+        Explorer::with(dir.join("files").join(at), Catalogue::at(dir.join("apps")), Choosing::Fixed(Defaults::default()), Holding::at(Some(&dir.join("held"))))
+    }
+
+    /// Choices of what opens a type: the person's, and the machine's.
+    fn chosen(person: &[(&str, &str)], machine: &[(&str, &str)]) -> Choosing {
+        let of = |pairs: &[(&str, &str)]| pairs.iter().map(|(media, id)| (media.to_string(), id.to_string())).collect();
+        Choosing::Fixed(Defaults { person: of(person), machine: of(machine) })
+    }
+
+    /// The labels of the menu `id` in what is shown.
+    fn menu_labels(html: &str, id: &str) -> Vec<String> {
+        let menu = html.split(&format!("<menu id=\"{id}\" hidden>")).nth(1).unwrap().split("</menu>").next().unwrap();
+        menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).map(String::from).collect()
     }
 
     fn shown(explorer: &Explorer) -> String {
@@ -1221,6 +1269,47 @@ mod tests {
         let menu = html.split("<menu id=\"menu-here\" hidden>").nth(1).unwrap().split("</menu>").next().unwrap();
         let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
         assert_eq!(labels, ["New folder", "New file", "Paste", "Open with Gexora"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn what_opens_a_type_by_default_is_the_persons_choice_else_the_machines() {
+        fn titles(explorer: &Explorer, name: &str) -> Vec<String> {
+            explorer.candidates(&explorer.entries[explorer.named(name).unwrap()]).iter().map(|a| a.title.clone()).collect()
+        }
+        let (mut explorer, dir) = explorer("defaults");
+        // The machine's choice goes first, and opening uses it.
+        explorer.choosing = chosen(&[], &[("text/plain", "org.example.a")]);
+        explorer.reread();
+        assert_eq!(titles(&explorer, "notes.txt"), ["Beta", "Alpha"]);
+        assert_eq!(explorer.opening("text/plain").first().map(|a| a.id.as_str()), Some("org.example.a"));
+        assert_eq!(menu_labels(&shown(&explorer), "menu-1"), ["Open", "Open with Beta", "Open with Alpha", "Cut", "Copy", "Rename", "Copy path", "Permissions…", "Delete"]);
+        // The person's goes before it, even for every type of text.
+        explorer.choosing = chosen(&[("text/*", "org.example.b")], &[("text/plain", "org.example.a")]);
+        explorer.reread();
+        assert_eq!(titles(&explorer, "notes.txt"), ["Alpha", "Beta"]);
+        // A choice of something that does not open the type is passed over,
+        // and so is one of something not installed, and the rule is the
+        // titles' again.
+        explorer.choosing = chosen(&[("text/plain", "dev.peios.gexora")], &[("text/*", "org.example.gone")]);
+        explorer.reread();
+        assert_eq!(titles(&explorer, "notes.txt"), ["Alpha", "Beta"]);
+        assert_eq!(titles(&explorer, "Music"), ["Gexora"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn the_choices_are_read_again_when_a_file_is_opened() {
+        let (mut explorer, dir) = explorer("chosen-now");
+        let mut fields = Fields::default();
+        assert!(explorer.defaults.person.is_empty());
+        // Chosen elsewhere since the directory was read. Opening a file of
+        // a type nothing opens starts nothing, and still reads them.
+        explorer.choosing = chosen(&[("text/plain", "org.example.a")], &[]);
+        explorer.event("visit", &said(&[("path", &dir.join("files/Music/Albums").to_string_lossy())]), &mut fields);
+        explorer.choosing = chosen(&[("text/plain", "org.example.b")], &[]);
+        explorer.event("open", &about("one.flac"), &mut fields);
+        assert_eq!(explorer.defaults.person.get("text/plain").map(String::as_str), Some("org.example.b"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 

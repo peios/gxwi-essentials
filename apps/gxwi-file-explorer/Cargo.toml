@@ -6,12 +6,12 @@ license = "MIT"
 publish = false
 
 [dependencies]
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "c6df8a1e3dbdd28a48752f87ba87f6edb8adaf33" }
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "7e5e20deab4c6060ce316042583105f1bfc3d2ae" }
 libc = "0.2"
 # Times, in the machine's time zone.
 jiff = "0.2.29"
 # A file's descriptor, read and applied for the permissions editor.
-peios = { git = "https://github.com/peios/peios-rs.git", rev = "3dffee949a457509078ffc2f423613de330b5401", package = "peios" }
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "2a2a6bb022192f6e98d4e4a6a7efdbdd40d53b35", package = "peios" }
 # The permissions editor's protocol, and nothing of the editor's own. Beside
 # this checkout until it is published.
 gxwi-sd-editor = { path = "../gxwi-sd-editor", default-features = false }
