@@ -16,7 +16,9 @@ cd "$(dirname "$0")/.."
 [ -d ../gxwi/target/vmshare ] || { echo "no ../gxwi/target/vmshare: boot the VM from ../gxwi first" >&2; exit 1; }
 share=$(cd ../gxwi/target/vmshare && pwd)
 cargo build --release
-(cd ../peipkg && CGO_ENABLED=0 go build -o "$share/peipkg.new" ./cmd/peipkg)
+# Stamped with the checkout it came from, which each transaction records.
+(cd ../peipkg && CGO_ENABLED=0 go build -o "$share/peipkg.new" \
+    -ldflags "-X github.com/peios/peipkg/internal/cli.peipkgVersion=$(git describe --always --dirty)-dev" ./cmd/peipkg)
 mv "$share/peipkg.new" "$share/peipkg"
 mkdir -p "$share/icons/base"
 cp gxwi-package-manager.svg "$share/icons/base/dev.peios.gxwi-package-manager.svg"

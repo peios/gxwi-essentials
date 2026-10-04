@@ -482,7 +482,10 @@ impl Live for Manager {
                 self.start(format!("Remove {}", words::short(&n)), "Remove", vec!["uninstall".into(), n], false);
             }
             "undo" => self.start("Undo the Last Change".into(), "Undo", vec!["undo".into()], false),
-            "recover" => self.start("Resolve the Interrupted Change".into(), "Resolve", vec!["recover".into()], true),
+            "recover" => {
+                self.start("Resolve the Interrupted Change".into(), "Resolve", vec!["recover".into()], true);
+                self.saying("The interrupted change is resolved: what it had begun is put back.");
+            }
             "refresh" => {
                 let mut args = vec!["refresh".to_string()];
                 args.extend(self.store.repositories.iter().flatten().filter(|r| r.trusted).map(|r| r.name.clone()));
