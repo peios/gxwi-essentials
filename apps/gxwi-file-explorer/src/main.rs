@@ -643,6 +643,7 @@ impl Explorer {
         };
         let row = |name: &str, value: String| format!("<dt>{name}</dt><dd>{}</dd>", escape(&value));
         let size = if entry.directory { "—".into() } else { format!("{} ({} bytes)", show::size(entry.size), show::grouped(entry.size)) };
+        let zone = show::here();
         format!(
             "<aside class=\"details\" aria-label=\"Details\">\
              <img src=\"{icon}\" alt=\"\"><h2>{name}</h2>\
@@ -652,8 +653,8 @@ impl Explorer {
             name = escape(&entry.name),
             kind = row("Type", entry.kind().into()),
             size = row("Size", size),
-            modified = row("Modified", show::when_long(entry.modified)),
-            created = row("Created", show::when_long(entry.created)),
+            modified = row("Modified", show::when_long(entry.modified, &zone)),
+            created = row("Created", show::when_long(entry.created, &zone)),
         )
     }
 }
@@ -831,6 +832,7 @@ fn space(path: &Path) -> Option<(u64, u64)> {
 impl Live for Explorer {
     fn render(&self, _: &Facts) -> String {
         let now = SystemTime::now();
+        let zone = show::here();
         // What has been cut is shown as on its way out.
         let cut = self.holding.get().filter(|held| held.cut).map(|held| held.path);
         // One menu serves every entry the same applications open, which is
@@ -859,7 +861,7 @@ impl Live for Explorer {
                 };
                 let rest = format!(
                     "<span class=\"modified\">{modified}</span><span class=\"kind\">{kind}</span><span class=\"size\">{size}</span>",
-                    modified = show::when(entry.modified, now),
+                    modified = show::when(entry.modified, now, &zone),
                     kind = entry.kind(),
                     size = if entry.directory { "—".into() } else { show::size(entry.size) },
                 );
