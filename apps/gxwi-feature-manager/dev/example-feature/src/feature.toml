@@ -1,0 +1,8 @@
+title = "Example Feature"
+description = """
+A feature for trying Feature Manager. Installing it makes the registry key
+Machine\\Software\\Feature Example; turning it on and off sets its On value.
+Each step takes a few seconds, so its progress can be seen.
+
+While /tmp/feat-example-fail exists, turning it on fails, leaving it
+interrupted."""

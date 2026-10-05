@@ -1,0 +1,6 @@
+# What Feature Manager is to a desktop (PGSS Applications): installed as
+# /usr/share/apps/dev.peios.gxwi-feature-manager.toml, named for the id, by
+# the package that installs the program. It is a window and nothing else.
+title = "Feature Manager"
+description = "Turn features of this machine on and off: services and settings beyond what packages install"
+program = "/usr/bin/gxwi-feature-manager"
