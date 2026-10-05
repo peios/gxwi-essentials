@@ -328,6 +328,7 @@ name = "gxwi-sd-editor"
 version = "0.0.1"
 dependencies = [
  "base64",
+ "peios",
  "serde",
  "serde_json",
 ]

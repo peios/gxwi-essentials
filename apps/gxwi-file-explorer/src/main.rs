@@ -637,6 +637,8 @@ impl Explorer {
         let mut can = can_change(&sd);
         can.audit &= read.contains(&Part::Sacl);
         can.label &= read.contains(&Part::Label);
+        // A folder's can be pushed into what is inside it.
+        can.propagate = entry.directory;
         let request = Request {
             object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory, children: Children::All, parent, ..Object::default() },
             sd: sd.as_bytes().to_vec(),
@@ -654,7 +656,12 @@ impl Explorer {
                 });
             }
         };
-        match gxwi_sd_editor::edit(&request, move |sd, parts| apply(&handle, sd, parts), done) {
+        let opened = if entry.directory {
+            gxwi_sd_editor::edit_tree(&request, move |sd, parts| apply(&handle, sd, parts), Folders, path.clone(), done)
+        } else {
+            gxwi_sd_editor::edit(&request, move |sd, parts| apply(&handle, sd, parts), done)
+        };
+        match opened {
             Ok(()) => {
                 self.editing.insert(path);
             }
@@ -804,12 +811,12 @@ fn file_generic() -> Generic {
 fn can_change(sd: &SecurityDescriptor) -> Can {
     let granted = match AccessCheck::new(sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check() {
         Ok(decision) => decision.granted,
-        Err(_) => return Can { dacl: true, owner: true, audit: true, label: true, why: None },
+        Err(_) => return Can { dacl: true, owner: true, audit: true, label: true, ..Can::default() },
     };
     let dacl = granted.contains(AccessMask::WRITE_DAC);
     let owner = granted.contains(AccessMask::WRITE_OWNER);
     let why = (!dacl).then(|| "You may not change who may use this.".to_string());
-    Can { dacl, owner, audit: true, label: owner, why }
+    Can { dacl, owner, audit: true, label: owner, why, ..Can::default() }
 }
 
 /// Applies the parts of `sd` that changed to what `handle` is open on: what
@@ -829,6 +836,53 @@ fn apply(handle: &OwnedFd, sd: &[u8], parts: &[Part]) -> Result<(), String> {
         return Ok(());
     }
     peios::file::fd_set_sd(handle.as_fd(), info, &sd).map_err(|e| why(&io(e)))
+}
+
+/// A folder and everything in it, for pushing its permissions into what is
+/// inside. Links are not followed: one is left as it is, and nothing is
+/// done through it.
+struct Folders;
+
+impl Folders {
+    /// A handle on `path` itself for its descriptor, a link not followed.
+    fn open(path: &Path) -> Result<OwnedFd, String> {
+        std::fs::OpenOptions::new().read(true).custom_flags(libc::O_PATH | libc::O_NOFOLLOW).open(path).map(OwnedFd::from).map_err(|e| why(&e))
+    }
+}
+
+impl gxwi_sd_editor::propagate::Tree for Folders {
+    type Node = PathBuf;
+
+    fn children(&mut self, node: &PathBuf) -> Result<Vec<PathBuf>, String> {
+        let mut inside = Vec::new();
+        for entry in std::fs::read_dir(node).map_err(|e| why(&e))? {
+            let entry = entry.map_err(|e| why(&e))?;
+            if entry.file_type().is_ok_and(|t| !t.is_symlink()) {
+                inside.push(entry.path());
+            }
+        }
+        inside.sort();
+        Ok(inside)
+    }
+
+    fn name(&self, node: &PathBuf) -> String {
+        node.display().to_string()
+    }
+
+    fn container(&self, node: &PathBuf) -> bool {
+        std::fs::symlink_metadata(node).is_ok_and(|m| m.is_dir())
+    }
+
+    fn read(&mut self, node: &PathBuf, info: SecInfo) -> Result<Vec<u8>, String> {
+        let handle = Folders::open(node)?;
+        peios::file::fd_get_sd(handle.as_fd(), info).map(|sd| sd.as_bytes().to_vec()).map_err(|e| why(&io(e)))
+    }
+
+    fn write(&mut self, node: &PathBuf, sd: &[u8], info: SecInfo) -> Result<(), String> {
+        let handle = Folders::open(node)?;
+        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec()).map_err(|e| format!("what was worked out is not a security descriptor ({e})"))?;
+        peios::file::fd_set_sd(handle.as_fd(), info, &sd).map_err(|e| why(&io(e)))
+    }
 }
 
 /// A KACS error as the system's own, which is what it carries.
