@@ -528,7 +528,7 @@ checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 [[package]]
 name = "libgxwi"
 version = "0.0.2"
-source = "git+https://github.com/peios/gxwi.git?rev=7e5e20deab4c6060ce316042583105f1bfc3d2ae#7e5e20deab4c6060ce316042583105f1bfc3d2ae"
+source = "git+https://github.com/peios/gxwi.git?rev=25d43045f02fab59e4606eec616cdb1a285ebd91#25d43045f02fab59e4606eec616cdb1a285ebd91"
 dependencies = [
  "axum",
  "hyper",
@@ -611,7 +611,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "peios"
 version = "0.4.0"
-source = "git+https://github.com/peios/peios-rs.git?rev=2a2a6bb022192f6e98d4e4a6a7efdbdd40d53b35#2a2a6bb022192f6e98d4e4a6a7efdbdd40d53b35"
+source = "git+https://github.com/peios/peios-rs.git?rev=02c87cb643c30eef6b74cd1d9d8b0ae067bed69a#02c87cb643c30eef6b74cd1d9d8b0ae067bed69a"
 dependencies = [
  "bitflags 2.13.2",
  "libc",
@@ -621,7 +621,7 @@ dependencies = [
 [[package]]
 name = "peios-sys"
 version = "0.3.0"
-source = "git+https://github.com/peios/peios-rs.git?rev=2a2a6bb022192f6e98d4e4a6a7efdbdd40d53b35#2a2a6bb022192f6e98d4e4a6a7efdbdd40d53b35"
+source = "git+https://github.com/peios/peios-rs.git?rev=02c87cb643c30eef6b74cd1d9d8b0ae067bed69a#02c87cb643c30eef6b74cd1d9d8b0ae067bed69a"
 dependencies = [
  "bindgen",
  "pkg-config",
