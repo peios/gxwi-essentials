@@ -61,7 +61,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Weak;
 use std::time::SystemTime;
 
-use gxwi_sd_editor::{Can, Children, Generic, Object, Part, Request, Right};
+use gxwi_sd_editor::{Can, Children, Generic, Object, Parent, Part, Request, Right};
 use libgxwi::apps::defaults::Defaults;
 use libgxwi::apps::{Application, Catalogue};
 use peios::access::AccessCheck;
@@ -599,19 +599,51 @@ impl Explorer {
                 return;
             }
         };
-        let sd = match peios::file::fd_get_sd(handle.as_fd(), SecInfo::OWNER | SecInfo::GROUP | SecInfo::DACL) {
+        // As much of it as the person may read: the whole SACL takes
+        // SeSecurityPrivilege, the label alone only the right to read it.
+        let basic = SecInfo::OWNER | SecInfo::GROUP | SecInfo::DACL;
+        let mut read = vec![Part::Owner, Part::Group, Part::Dacl];
+        let sd = match peios::file::fd_get_sd(handle.as_fd(), basic | SecInfo::SACL) {
+            Ok(sd) => {
+                read.extend([Part::Sacl, Part::Label]);
+                Ok(sd)
+            }
+            Err(_) => match peios::file::fd_get_sd(handle.as_fd(), basic | SecInfo::LABEL) {
+                Ok(sd) => {
+                    read.push(Part::Label);
+                    Ok(sd)
+                }
+                Err(_) => peios::file::fd_get_sd(handle.as_fd(), basic),
+            },
+        };
+        let sd = match sd {
             Ok(sd) => sd,
             Err(e) => {
                 self.trouble = Some(format!("The permissions of {} could not be read: {}.", entry.name, why(&io(e))));
                 return;
             }
         };
+        // What it is in, and what that passes down, for inheriting again.
+        let parent = path.parent().map(|up| Parent {
+            name: up.display().to_string(),
+            sd: std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_PATH)
+                .open(up)
+                .ok()
+                .and_then(|up| peios::file::fd_get_sd(up.as_fd(), basic | SecInfo::SACL).or_else(|_| peios::file::fd_get_sd(up.as_fd(), basic)).ok())
+                .map(|sd| sd.as_bytes().to_vec()),
+        });
+        let mut can = can_change(&sd);
+        can.audit &= read.contains(&Part::Sacl);
+        can.label &= read.contains(&Part::Label);
         let request = Request {
-            object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory, children: Children::All },
+            object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory, children: Children::All, parent, ..Object::default() },
             sd: sd.as_bytes().to_vec(),
-            rights: file_rights(),
+            read: Some(read),
+            rights: file_rights(entry.directory),
             generic: file_generic(),
-            can: can_change(&sd),
+            can,
         };
         let window = self.window.clone();
         let opened = path.clone();
@@ -712,16 +744,41 @@ fn start(program: &Path, arguments: &[String]) -> std::io::Result<()> {
 
 /// The rights a file or folder has, by the names the permissions editor shows
 /// them by, from the most to the least.
-fn file_rights() -> Vec<Right> {
+fn file_rights(directory: bool) -> Vec<Right> {
     let generic = file_generic();
     let right = |name: &str, mask: u32| Right { name: name.into(), mask, general: true };
-    vec![
+    let special = |name: &str, mask: u32| Right { name: name.into(), mask, general: false };
+    // One right a bit, as a folder's and a file's say them.
+    let (list, add_file, add_folder, run) = if directory {
+        ("List folder", "Create files", "Create folders", "Traverse folder")
+    } else {
+        ("Read data", "Write data", "Append data", "Run")
+    };
+    let mut rights = vec![
         right("Full control", generic.all),
         right("Modify", generic.read | generic.write | generic.execute | AccessMask::DELETE.bits()),
         right("Read & execute", generic.read | generic.execute),
         right("Read", generic.read),
         right("Write", generic.write),
-    ]
+        special(run, 0x20),
+        special(list, 0x1),
+        special("Read attributes", 0x80),
+        special("Read extended attributes", 0x8),
+        special(add_file, 0x2),
+        special(add_folder, 0x4),
+        special("Write attributes", 0x100),
+        special("Write extended attributes", 0x10),
+    ];
+    if directory {
+        rights.push(special("Delete subfolders and files", 0x40));
+    }
+    rights.extend([
+        special("Delete", AccessMask::DELETE.bits()),
+        special("Read permissions", AccessMask::READ_CONTROL.bits()),
+        special("Change permissions", AccessMask::WRITE_DAC.bits()),
+        special("Take ownership", AccessMask::WRITE_OWNER.bits()),
+    ]);
+    rights
 }
 
 /// What the generic rights stand for on a file, as the kernel has it.
@@ -742,15 +799,17 @@ fn file_generic() -> Generic {
 /// them. It cannot be found out by opening the file for them, as a native
 /// open must name a data right too (KACS §3.9.2), and the person may have
 /// one without the other. Where the check cannot be made, both are offered,
-/// and the kernel decides on Apply.
+/// and the kernel decides on Apply. The label goes with the owner, taking
+/// WRITE_OWNER; the SACL with the right to read it, which reading it took.
 fn can_change(sd: &SecurityDescriptor) -> Can {
     let granted = match AccessCheck::new(sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check() {
         Ok(decision) => decision.granted,
-        Err(_) => return Can { dacl: true, owner: true, ..Can::default() },
+        Err(_) => return Can { dacl: true, owner: true, audit: true, label: true, why: None },
     };
     let dacl = granted.contains(AccessMask::WRITE_DAC);
+    let owner = granted.contains(AccessMask::WRITE_OWNER);
     let why = (!dacl).then(|| "You may not change who may use this.".to_string());
-    Can { dacl, owner: granted.contains(AccessMask::WRITE_OWNER), audit: false, why }
+    Can { dacl, owner, audit: true, label: owner, why }
 }
 
 /// Applies the parts of `sd` that changed to what `handle` is open on: what
@@ -763,6 +822,7 @@ fn apply(handle: &OwnedFd, sd: &[u8], parts: &[Part]) -> Result<(), String> {
             Part::Group => SecInfo::GROUP,
             Part::Dacl => SecInfo::DACL,
             Part::Sacl => SecInfo::SACL,
+            Part::Label => SecInfo::LABEL,
         }
     });
     if info.is_empty() {
@@ -1315,10 +1375,15 @@ mod tests {
 
     #[test]
     fn a_files_rights_each_have_all_of_the_ones_after_them_that_they_can() {
-        let rights = file_rights();
+        let rights = file_rights(false);
         let mask = |name: &str| rights.iter().find(|right| right.name == name).unwrap().mask;
         let has = |more: &str, less: &str| mask(more) & mask(less) == mask(less);
-        assert!(rights.iter().all(|right| right.general && right.mask != 0));
+        assert!(rights.iter().all(|right| right.mask != 0));
+        assert_eq!(rights.iter().filter(|right| right.general).count(), 5);
+        // Each right on its own is one bit, and Full control has all of them.
+        let special: Vec<_> = rights.iter().filter(|right| !right.general).collect();
+        assert!(special.iter().all(|right| right.mask.count_ones() == 1 && has("Full control", &right.name)));
+        assert!(file_rights(true).iter().any(|right| right.name == "Delete subfolders and files"));
         assert!(has("Full control", "Modify") && has("Modify", "Read & execute") && has("Read & execute", "Read") && has("Modify", "Write"));
         assert!(!has("Read", "Write") && !has("Modify", "Full control"));
         // As the kernel maps them, not as this guesses.
