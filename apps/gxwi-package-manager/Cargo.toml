@@ -8,9 +8,9 @@ publish = false
 [dependencies]
 # libgxwi as of the gxwi release dev.peios.gxwi-sdk stages, which a package
 # build takes it from (gxwi's dev/pins.toml).
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "5629140add3de075511b3379fd690fdabd06dcaf" }
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76" }
 # Choosing a package file to install.
-gxwi-file-dialog = { git = "https://github.com/peios/gxwi-file-dialog.git", rev = "65b6015e7bc65cdade2e043f31f0b4838106298c", default-features = false }
+gxwi-file-dialog = { git = "https://github.com/peios/gxwi-file-dialog.git", rev = "a130824c76d60c72a801112322c33257858bc1d8", default-features = false }
 # peipkg's answers, which are JSON.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
