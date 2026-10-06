@@ -35,9 +35,19 @@ function theme() {
     return named;
 }
 
+const FONT = colour("--font-mono") || "ui-monospace, monospace";
+const SIZE = 14;
+
+// The emulator measures its cell once, from the font it has when it opens,
+// and each row is that high with what overflows it cut off. So it opens on
+// the font it will draw with, loaded, and measures again if a face arrives
+// later; and a row has room below the baseline, where an underscore sits,
+// which at a line height of 1 some monospace faces draw outside the cell.
+await document.fonts.load(`${SIZE}px ${FONT}`).catch(() => {});
 const term = new Terminal({
-    fontFamily: colour("--font-mono") || "ui-monospace, monospace",
-    fontSize: 14,
+    fontFamily: FONT,
+    fontSize: SIZE,
+    lineHeight: 1.2,
     cursorBlink: true,
     scrollback: 5000,
     theme: theme(),
@@ -45,6 +55,12 @@ const term = new Terminal({
 const fit = new FitAddon();
 term.loadAddon(fit);
 term.open(document.getElementById("terminal"));
+// Setting the family again is what has it measure again; the room that
+// leaves is the process's to size the terminal to, as for any change.
+document.fonts.addEventListener("loadingdone", () => {
+    term.options.fontFamily = FONT;
+    ask();
+});
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => (term.options.theme = theme()));
 
 function say(what) {
