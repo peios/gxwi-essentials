@@ -54,7 +54,7 @@
 //! moved since, and never to something that has taken its name. One entry's
 //! permissions are open once at a time.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
@@ -225,8 +225,9 @@ struct Explorer {
     /// What the window is busy with, while it is copying or moving.
     working: Option<String>,
     /// The entries whose permissions are open, by where they were when
-    /// they were opened.
-    editing: HashSet<PathBuf>,
+    /// they were opened, and their editors, to bring one to the front when
+    /// they are asked for again.
+    editing: HashMap<PathBuf, gxwi_sd_editor::Editor>,
     /// The window, for work done aside to say when it is done. Without one
     /// the work is done before anything else is.
     window: Weak<Surface<Explorer>>,
@@ -247,7 +248,7 @@ impl Explorer {
             asking: None,
             holding,
             working: None,
-            editing: HashSet::new(),
+            editing: HashMap::new(),
             window: Weak::new(),
             at,
             entries: Vec::new(),
@@ -586,9 +587,13 @@ impl Explorer {
     fn permissions(&mut self, index: usize) {
         let Some(entry) = self.entries.get(index) else { return };
         let path = self.at.join(&entry.name);
-        if self.editing.contains(&path) {
-            self.trouble = Some(format!("The permissions of {} are open already.", entry.name));
-            return;
+        // Open already: that dialog comes to the front. One whose editor
+        // has gone without its going being heard yet is opened afresh.
+        if let Some(editor) = self.editing.get(&path) {
+            if editor.raise() {
+                return;
+            }
+            self.editing.remove(&path);
         }
         // A handle for its descriptor and nothing else, through a link as
         // the thing opened would be.
@@ -657,13 +662,13 @@ impl Explorer {
             }
         };
         let opened = if entry.directory {
-            gxwi_sd_editor::edit_tree(&request, move |sd, parts| apply(&handle, sd, parts), Folders, path.clone(), done)
+            gxwi_sd_editor::open_tree(&request, move |sd, parts| apply(&handle, sd, parts), Folders, path.clone(), done)
         } else {
-            gxwi_sd_editor::edit(&request, move |sd, parts| apply(&handle, sd, parts), done)
+            gxwi_sd_editor::open(&request, move |sd, parts| apply(&handle, sd, parts), done)
         };
         match opened {
-            Ok(()) => {
-                self.editing.insert(path);
+            Ok(editor) => {
+                self.editing.insert(path, editor);
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.trouble = Some("The permissions editor is not installed.".into()),
             Err(e) => self.trouble = Some(format!("The permissions editor could not be started: {e}.")),
