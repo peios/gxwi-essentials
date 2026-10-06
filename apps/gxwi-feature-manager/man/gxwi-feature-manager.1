@@ -1,0 +1,44 @@
+.TH GXWI-FEATURE-MANAGER 1 "2026-10-06" "Peios"
+.SH NAME
+gxwi-feature-manager \- turn this machine's features on and off, on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-feature-manager
+.SH DESCRIPTION
+Feature Manager is the desktop's window on features: services and settings
+that set a machine up beyond the files packages install. Each feature comes
+in a package, and one installed is listed here. Each is a card: its title
+and name, what it says it does, and its state, which is Not Installed,
+Installed, Off, On, Interrupted, or Definition Missing when its package was
+removed while it was set up.
+.PP
+Under each card are the changes that apply to it. Turn On installs a
+feature if it is not installed and turns it on; Install Only installs it
+without turning it on; Turn Off turns it off and leaves it installed;
+Remove... asks first, then turns it off if it is on and removes it, leaving
+its package installed. A feature whose script did not finish is
+Interrupted: its card says which script, and Try Again runs it again.
+.PP
+It has no authority of its own. It runs feat as the person, reading its
+list and following each change as feat makes it: while a change is made,
+the card shows which script is running and the last thing it said; if a
+script fails, the card shows everything it said. Closing the window during
+a change does not stop it: the window stays, saying so, until the change is
+finished, and then closes.
+.PP
+Whether the person may change a feature is asked of the system, by feat:
+it needs write access to the feature's state in the registry, which as
+shipped only Administrators have. Anyone else sees every feature and its
+state, with the reason said once at the top, and no buttons. Being allowed
+to change a feature does not make every script able to do its work: a
+script that needs more than the person has fails, and the card says so.
+.PP
+It takes no arguments. Without a desktop to open on, it says so and ends.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-feature-manager.toml
+Its application declaration, listed in a launcher as Feature Manager.
+.TP
+.I /usr/bin/feat
+The program it runs to list features and to change them.
+.SH SEE ALSO
+Feature Manager, Using feat, and Features, at learn.peios.org.
