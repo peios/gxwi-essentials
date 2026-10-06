@@ -326,6 +326,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 [[package]]
 name = "gxwi-sd-editor"
 version = "0.0.1"
+source = "git+https://github.com/peios/gxwi-sd-editor.git?rev=7cec4fcafc82c538f05a71e58f1f75cc94ec778b#7cec4fcafc82c538f05a71e58f1f75cc94ec778b"
 dependencies = [
  "base64",
  "peios",
