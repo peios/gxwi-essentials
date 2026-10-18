@@ -1,0 +1,19 @@
+/* What is Feature Manager's alone; the rest is libgxwi's settings stylesheet. */
+
+/* What a feature says of itself, under its name. */
+.st-row.about { display: block; padding-top: 2px; padding-bottom: 12px; }
+.st-row.about p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.st-row.about p + p { margin-top: 8px; }
+
+/* A word on how it is: interrupted, or its definition gone. */
+.st-row.word { display: block; padding-top: 8px; padding-bottom: 8px; }
+
+/* The card's last row: its buttons, or the change being made. */
+.st-row.bottom { display: block; padding-top: 10px; padding-bottom: 10px; }
+.st-row.going { display: block; padding: 0 0 10px; }
+.st-row.going .said { display: block; padding: 0 16px; color: var(--text-muted); font: 500 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+
+/* What feat and the scripts said, when a change failed. */
+.st-more pre { margin: 0 0 12px; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font: 500 12px/1.5 var(--font-mono); color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
+.st-more p { overflow-wrap: anywhere; }
+.st-more p b { color: var(--text-primary); }

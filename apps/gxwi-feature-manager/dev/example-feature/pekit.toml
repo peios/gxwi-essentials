@@ -1,0 +1,8 @@
+# dev.peios.feat-example — a feature for trying Feature Manager on the dev VM,
+# never published. Its scripts are slow enough to watch, say what they do,
+# and touch only a key of their own. dev/repo.sh packages it into the dev
+# repository.
+#
+# BUILDLESS: the payload is the feature definition in src/, mapped by
+# package.pekit.toml into /usr/libexec/features/example/.
+out_dir = "out"

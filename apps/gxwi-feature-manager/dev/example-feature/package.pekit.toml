@@ -1,0 +1,22 @@
+# dev.peios.feat-example — see pekit.toml.
+format = "peipkg"
+
+[package]
+name          = "dev.peios.feat-example"
+version       = "1.0.0-1"
+architecture  = "noarch"
+description   = "Feature: an example for trying Feature Manager"
+license       = "MIT"
+license_class = "free"
+homepage      = "https://github.com/peios/gxwi-feature-manager"
+
+[dependencies]
+"dev.peios.peiosutils" = ">= 0.8.3"
+sh                     = ">= 1"
+
+[files]
+"src/feature.toml"  = "usr/libexec/features/example/feature.toml"
+"src/install.sh"    = "usr/libexec/features/example/install.sh"
+"src/enable.sh"     = "usr/libexec/features/example/enable.sh"
+"src/disable.sh"    = "usr/libexec/features/example/disable.sh"
+"src/uninstall.sh"  = "usr/libexec/features/example/uninstall.sh"
