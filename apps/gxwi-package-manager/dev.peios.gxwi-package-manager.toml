@@ -1,0 +1,6 @@
+# What Package Manager is to a desktop (PGSS Applications): installed as
+# /usr/share/apps/dev.peios.gxwi-package-manager.toml, named for the id, by
+# the package that installs the program. It is a window and nothing else.
+title = "Package Manager"
+description = "Install, update and remove software, and choose where it comes from"
+program = "/usr/bin/gxwi-package-manager"

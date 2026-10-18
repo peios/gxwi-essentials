@@ -1,0 +1,41 @@
+/* What is Package Manager's alone; the rest is libgxwi's settings stylesheet. */
+
+/* A list of a hundred packages: each one's mark drawn quietly, in its
+   colour on the row rather than on a tile of it. */
+.st-row.link .st-icon, .st-row .st-item > .st-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); }
+.st-row .st-icon.t-blue { color: #2a6fc9; }
+.st-row .st-icon.t-teal { color: #13878a; }
+.st-row .st-icon.t-green { color: #1f8f5c; }
+.st-row .st-icon.t-red { color: #c4352b; }
+.st-row .st-icon.t-orange { color: #c56a12; }
+.st-row .st-icon.t-violet { color: #6a4fc4; }
+.st-row .st-icon.t-pink { color: #b83a7a; }
+.st-row .st-icon.t-slate { color: #59677a; }
+@media (prefers-color-scheme: dark) {
+    .st-row .st-icon.t-blue { color: #5aa7f5; }
+    .st-row .st-icon.t-teal { color: #4fd1cf; }
+    .st-row .st-icon.t-green { color: #46c98b; }
+    .st-row .st-icon.t-red { color: #f07167; }
+    .st-row .st-icon.t-orange { color: #f2a65a; }
+    .st-row .st-icon.t-violet { color: #a48cf2; }
+    .st-row .st-icon.t-pink { color: #ef7fb5; }
+    .st-row .st-icon.t-slate { color: #9aa8bb; }
+}
+.st-row.link .st-icon svg, .st-row .st-item > .st-icon svg { width: 16px; height: 16px; }
+.st-row.link { min-height: 52px; }
+.st-row .version { white-space: nowrap; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.st-row .control .what { white-space: nowrap; color: var(--text-secondary); }
+.st-row .control .size { min-width: 64px; text-align: right; white-space: nowrap; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* A form whose fields are each the width of the form. */
+.st-more .fields.stacked { grid-template-columns: minmax(0, 1fr); }
+.st-input.mono { font: 500 12px/1.4 var(--font-mono); }
+
+/* A package's files, a plain list of paths. */
+.st-row.file { display: block; padding-top: 6px; padding-bottom: 6px; }
+.st-row.file code { font-size: 12px; color: var(--text-secondary); word-break: break-all; }
+
+/* What peipkg warned of. */
+.st-row.note { display: block; padding-top: 8px; padding-bottom: 8px; }
+.st-more p.quiet { color: var(--text-muted); font-size: 12px; }
+.st-hero .big { overflow-wrap: anywhere; }

@@ -1,0 +1,67 @@
+.TH GXWI-PACKAGE-MANAGER 1 "2026-10-06" "Peios"
+.SH NAME
+gxwi-package-manager \- install, update and remove software, and choose where it comes from, on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-package-manager
+.SH DESCRIPTION
+Package Manager is the desktop's window on
+.BR peipkg (1).
+Open it from the launcher (type package). It takes no arguments. It has no
+authority of its own: it runs peipkg as the person, so what they may install
+or remove is exactly what they could with the command, and every change is
+the same transaction, with the same history and audit record.
+.PP
+Installed lists every installed package, with its version and where it came
+from; one opened shows its details, what it needs and provides, and its
+files, with Check Files, Update to and Remove. Available lists what the
+repositories offer that isn't installed, with Install, and Install from
+File for a .peipkg file, which opens the file dialog. Updates shows the newer
+versions waiting, after refreshing the trusted repositories, with Update and
+Update All. History lists every change, newest first, with Undo for the most
+recent and Resolve for one that was interrupted. Repositories lists each
+repository, with Refresh All, Add Repository, Trust and Remove. Roles shows
+each claim and what holds it, and moves it to another package. Installation
+Roots shows the named roots; they are added with peipkg root.
+.PP
+Every change goes the same way. First the plan: what will be installed,
+updated, moved back or removed, before anything happens. Then each elevated
+action on its own, such as a downgrade or a package taking over another's
+files, asked with Allow This; the approval is recorded in the audit stream.
+Then the plan's own question, then progress, then the outcome, with
+anything peipkg warned of. A removal can stop to ask about a configuration
+file changed since it was installed. Once the plan is approved, the change
+finishes even if the window is closed.
+.PP
+Some refusals have a way on, offered once: Continue Anyway when a
+repository's information is out of date, Replace It when a file that
+belongs to no package is in the way, and Update Anyway when the package's
+publisher says it is updated another way. Package Manager never confirms a
+repository's trust for the person: Trust shows the signing key and runs the
+trust ceremony only when they confirm it, and update checks refresh only
+repositories already trusted.
+.PP
+It asks the system what the person may do. If they may not read peipkg's
+records, every section says so once and shows nothing more; as shipped,
+only Administrators may. If they may read them but not change them,
+everything is shown and nothing can be changed, with the reason said once.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-package-manager.toml
+Its application declaration.
+.TP
+.I /usr/bin/peipkg
+What it runs for every query and change.
+.TP
+.I /usr/bin/gxwi-file-dialog
+The file dialog, which Install from File opens.
+.TP
+.I /var/state/peipkg/db.sqlite
+.TQ
+.I /var/state/peipkg/lock
+peipkg's database and lock, which it opens, changing nothing, to learn
+whether the person may read and change what is installed.
+.SH SEE ALSO
+.BR peipkg (1),
+.BR gxwi-file-dialog (1).
+.PP
+Package Manager, at learn.peios.org.
