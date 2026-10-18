@@ -22,8 +22,8 @@ use crate::screen::Screen;
 
 /// How much is read of what is printed at once, and how many such pieces a
 /// page may fall behind by before it is shown the terminal afresh instead.
-const PIECE: usize = 16 * 1024;
-const BEHIND: usize = 256;
+const READ_CHUNK_BYTES: usize = 16 * 1024;
+const PENDING_OUTPUT_CHUNKS: usize = 256;
 
 /// What every page is told, in the order it happened.
 #[derive(Clone)]
@@ -74,8 +74,12 @@ impl Terminal {
             }
         });
         Ok(Arc::new(Terminal {
-            stands: Mutex::new(Stands { screen: Screen::new(size), ended: false, came_to_the_whole: false }),
-            said: broadcast::channel(BEHIND).0,
+            stands: Mutex::new(Stands {
+                screen: Screen::new(size),
+                ended: false,
+                came_to_the_whole: false,
+            }),
+            said: broadcast::channel(PENDING_OUTPUT_CHUNKS).0,
             typed: Mutex::new(typed),
             pty,
         }))
@@ -85,12 +89,14 @@ impl Terminal {
     /// has the far side any longer. `called` hears what the terminal is
     /// called, whenever what is printed says.
     pub fn follow(&self, called: impl Fn(&str)) {
-        let Ok(mut from) = self.pty.file() else { return self.ended() };
+        let Ok(mut from) = self.pty.file() else {
+            return self.ended();
+        };
         self.follow_from(&mut from, called);
     }
 
     fn follow_from(&self, from: &mut File, called: impl Fn(&str)) {
-        let mut piece = vec![0u8; PIECE];
+        let mut piece = vec![0u8; READ_CHUNK_BYTES];
         loop {
             match from.read(&mut piece) {
                 Ok(0) => break,
@@ -99,12 +105,18 @@ impl Terminal {
                     let whole = stands.screen.taken_whole();
                     stands.screen.print(&piece[..n]);
                     // Nobody listening is not a failure.
-                    let _ = self.said.send(Said::Printed(Bytes::copy_from_slice(&piece[..n])));
+                    let _ = self
+                        .said
+                        .send(Said::Printed(Bytes::copy_from_slice(&piece[..n])));
                     if whole && !stands.screen.taken_whole() && stands.came_to_the_whole {
                         stands.came_to_the_whole = false;
                         let _ = self.said.send(Said::Afresh);
                     }
-                    if let Some(title) = stands.screen.called() {
+                    let title = stands.screen.called();
+                    // Window callbacks need no terminal state lock and may block on
+                    // their own synchronization while pages join or resize.
+                    drop(stands);
+                    if let Some(title) = title {
                         called(&title);
                     }
                 }
@@ -127,13 +139,22 @@ impl Terminal {
     pub fn join(&self) -> (Size, Vec<u8>, bool, broadcast::Receiver<Said>) {
         let mut stands = self.stands.lock().unwrap_or_else(|e| e.into_inner());
         stands.came_to_the_whole |= stands.screen.taken_whole();
-        (stands.screen.size(), stands.screen.as_it_stands(), stands.ended, self.said.subscribe())
+        (
+            stands.screen.size(),
+            stands.screen.as_it_stands(),
+            stands.ended,
+            self.said.subscribe(),
+        )
     }
 
     /// What a person typed, or pasted, or what a page's emulator answered
     /// for the terminal.
     pub fn type_in(&self, typed: Vec<u8>) {
-        let _ = self.typed.lock().unwrap_or_else(|e| e.into_inner()).send(typed);
+        let _ = self
+            .typed
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .send(typed);
     }
 
     /// Makes the terminal the size a page has room for.
@@ -143,7 +164,10 @@ impl Terminal {
             return;
         }
         if let Err(e) = self.pty.resize(size) {
-            eprintln!("peiterm: making the terminal {} by {}: {e}", size.cols, size.rows);
+            eprintln!(
+                "gxwi-terminal: making the terminal {} by {}: {e}",
+                size.cols, size.rows
+            );
             return;
         }
         stands.screen.resize(size);
@@ -172,7 +196,14 @@ mod tests {
     #[test]
     fn what_is_typed_is_run_and_a_page_that_comes_after_is_shown_what_came_of_it() {
         let size = Size { rows: 10, cols: 40 };
-        let (pty, mut child) = Pty::start(Path::new("/bin/sh"), &[], Path::new("/"), &[("PS1", "")], size).unwrap();
+        let (pty, mut child) = Pty::start(
+            Path::new("/bin/sh"),
+            &[],
+            Path::new("/"),
+            &[("PS1", "")],
+            size,
+        )
+        .unwrap();
         let terminal = Terminal::new(pty, size).unwrap();
         let (at_first, _, ended, mut said) = terminal.join();
         assert_eq!(at_first, size);

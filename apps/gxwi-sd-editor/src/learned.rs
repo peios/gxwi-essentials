@@ -35,11 +35,24 @@ impl Learned {
     /// What the machine has learnt, or nothing where it cannot be read.
     pub fn read() -> Learned {
         let writable = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty()).is_ok();
-        let Ok(value) = Key::open(None, KEY, KeyAccess::QUERY_VALUE, OpenFlags::empty()).and_then(|key| key.query_value(NAME.as_bytes(), None)) else { return Learned { writable, ..Learned::default() } };
+        let Ok(value) = Key::open(None, KEY, KeyAccess::QUERY_VALUE, OpenFlags::empty())
+            .and_then(|key| key.query_value(NAME.as_bytes(), None))
+        else {
+            return Learned {
+                writable,
+                ..Learned::default()
+            };
+        };
         if value.ty != ValueType::MULTI_SZ {
-            return Learned { writable, ..Learned::default() };
+            return Learned {
+                writable,
+                ..Learned::default()
+            };
         }
-        Learned { writable, ..Learned::parse(&String::from_utf8_lossy(&value.data)) }
+        Learned {
+            writable,
+            ..Learned::parse(&String::from_utf8_lossy(&value.data))
+        }
     }
 
     /// One claim a line: its name, how often, then each value and how
@@ -48,11 +61,21 @@ impl Learned {
         let mut out = BTreeMap::new();
         for line in text.split('\0').filter(|l| !l.is_empty()) {
             let mut fields = line.split('\t');
-            let (Some(name), Some(times)) = (fields.next(), fields.next().and_then(|t| t.parse().ok())) else { continue };
-            let values = fields.filter_map(|f| f.rsplit_once('=')).filter_map(|(v, n)| Some((v.to_string(), n.parse().ok()?))).collect();
+            let (Some(name), Some(times)) =
+                (fields.next(), fields.next().and_then(|t| t.parse().ok()))
+            else {
+                continue;
+            };
+            let values = fields
+                .filter_map(|f| f.rsplit_once('='))
+                .filter_map(|(v, n)| Some((v.to_string(), n.parse().ok()?)))
+                .collect();
             out.insert(name.to_string(), Use { times, values });
         }
-        Learned { used: out, writable: false }
+        Learned {
+            used: out,
+            writable: false,
+        }
     }
 
     fn lines(&self) -> Vec<String> {
@@ -84,14 +107,22 @@ impl Learned {
     /// The claim names used from `source`, most used first.
     pub fn names(&self, source: &str) -> Vec<(String, u32)> {
         let prefix = format!("{source}.");
-        let mut out: Vec<(String, u32)> = self.used.iter().filter_map(|(k, u)| Some((k.strip_prefix(&prefix)?.to_string(), u.times))).collect();
+        let mut out: Vec<(String, u32)> = self
+            .used
+            .iter()
+            .filter_map(|(k, u)| Some((k.strip_prefix(&prefix)?.to_string(), u.times)))
+            .collect();
         out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         out
     }
 
     /// The values a claim was tested for, most used first.
     pub fn values(&self, claim: &str) -> Vec<(String, u32)> {
-        let mut out: Vec<(String, u32)> = self.used.get(claim.trim()).map(|u| u.values.iter().map(|(v, n)| (v.clone(), *n)).collect()).unwrap_or_default();
+        let mut out: Vec<(String, u32)> = self
+            .used
+            .get(claim.trim())
+            .map(|u| u.values.iter().map(|(v, n)| (v.clone(), *n)).collect())
+            .unwrap_or_default();
         out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         out
     }
@@ -99,14 +130,17 @@ impl Learned {
     /// Saves what has been learnt. Why not, which is nothing the person
     /// needs to hear: suggestions are a help.
     pub fn write(&self) -> Result<(), String> {
-        let own = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty()).map_err(|e| e.to_string())?;
+        let own = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty())
+            .map_err(|e| e.to_string())?;
         let mut bytes = Vec::new();
         for line in self.lines() {
             bytes.extend_from_slice(line.as_bytes());
             bytes.push(0);
         }
         bytes.push(0);
-        own.set_value(NAME.as_bytes(), ValueType::MULTI_SZ, &bytes).call().map_err(|e| e.to_string())
+        own.set_value(NAME.as_bytes(), ValueType::MULTI_SZ, &bytes)
+            .call()
+            .map_err(|e| e.to_string())
     }
 
     /// Forgets everything learnt.
@@ -127,8 +161,14 @@ mod tests {
         l.learn("User.Department", &["Finance".into(), "Ops".into()]);
         l.learn("User.Clearance", &["3".into()]);
         l.learn("Resource.Department", &[]);
-        assert_eq!(l.names("User"), [("Department".to_string(), 2), ("Clearance".to_string(), 1)]);
-        assert_eq!(l.values("User.Department"), [("Finance".to_string(), 2), ("Ops".to_string(), 1)]);
+        assert_eq!(
+            l.names("User"),
+            [("Department".to_string(), 2), ("Clearance".to_string(), 1)]
+        );
+        assert_eq!(
+            l.values("User.Department"),
+            [("Finance".to_string(), 2), ("Ops".to_string(), 1)]
+        );
         let text = l.lines().join("\0");
         assert_eq!(Learned::parse(&text), l);
     }

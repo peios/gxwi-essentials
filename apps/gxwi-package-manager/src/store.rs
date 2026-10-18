@@ -9,7 +9,8 @@ use std::io::ErrorKind;
 use crate::peipkg::{self, Offer, Operation, Package, Repository, Role, Root, Transaction};
 
 /// Why nothing can be changed, said once.
-pub const LOOK_ONLY: &str = "You can look, but you can't install or remove software: as shipped, only Administrators can.";
+pub const LOOK_ONLY: &str =
+    "You can look, but you can't install or remove software: as shipped, only Administrators can.";
 
 /// Why nothing can be seen, said once.
 pub const NO_LOOK: &str = "You can't see or change this machine's software: its package records are readable only by Administrators, as shipped.";
@@ -41,7 +42,10 @@ pub enum Updates {
     Checking,
     Found(Vec<Operation>),
     /// The check failed: peipkg's code for why, and its words.
-    Failed { code: String, message: String },
+    Failed {
+        code: String,
+        message: String,
+    },
 }
 
 impl Store {
@@ -73,19 +77,31 @@ impl Store {
     }
 
     pub fn package(&self, name: &str) -> Option<&Package> {
-        self.installed.as_ref().ok()?.iter().find(|p| p.name == name)
+        self.installed
+            .as_ref()
+            .ok()?
+            .iter()
+            .find(|p| p.name == name)
     }
 
     /// What the repositories offer of `name`: the newest, where more than
     /// one offers it.
     pub fn offer(&self, name: &str) -> Option<&Offer> {
         let offers = self.offers.as_ref().ok()?;
-        offers.iter().filter(|o| o.name == name).reduce(|a, b| if crate::words::newer(&b.version, &a.version) { b } else { a })
+        offers.iter().filter(|o| o.name == name).reduce(|a, b| {
+            if crate::words::newer(&b.version, &a.version) {
+                b
+            } else {
+                a
+            }
+        })
     }
 
     /// The offers not installed, one per name.
     pub fn not_installed(&self) -> Vec<&Offer> {
-        let Ok(offers) = &self.offers else { return Vec::new() };
+        let Ok(offers) = &self.offers else {
+            return Vec::new();
+        };
         let mut out: Vec<&Offer> = Vec::new();
         for offer in offers {
             if self.package(&offer.name).is_none() && !out.iter().any(|o| o.name == offer.name) {
@@ -99,12 +115,19 @@ impl Store {
     /// The most recent transaction that changed something and can be
     /// undone, by id.
     pub fn undoable(&self) -> Option<i64> {
-        self.history.as_ref().ok()?.iter().find(|t| t.state == "committed").map(|t| t.id)
+        self.history
+            .as_ref()
+            .ok()?
+            .iter()
+            .find(|t| t.state == "committed")
+            .map(|t| t.id)
     }
 
     /// Whether a transaction was interrupted and waits to be resolved.
     pub fn pending(&self) -> bool {
-        self.history.as_ref().is_ok_and(|h| h.iter().any(|t| t.state == "pending"))
+        self.history
+            .as_ref()
+            .is_ok_and(|h| h.iter().any(|t| t.state == "pending"))
     }
 }
 
@@ -138,7 +161,8 @@ pub fn read() -> Store {
         repositories: peipkg::query(&["repo", "list", "--json"]),
         history: peipkg::query(&["history", "--json", "-n", "50"]),
         roles: peipkg::query(&["claim", "--json"]),
-        roots: peipkg::query(&["root", "list", "--json"]).map(|roots: Option<Vec<Root>>| roots.unwrap_or_default()),
+        roots: peipkg::query(&["root", "list", "--json"])
+            .map(|roots: Option<Vec<Root>>| roots.unwrap_or_default()),
         may: may(),
         look,
     }

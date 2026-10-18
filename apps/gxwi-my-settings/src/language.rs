@@ -4,13 +4,19 @@
 
 use libgxwi::Fields;
 use libgxwi::settings::{self, Glyph, Tile};
-use libsession::locale::{self, Available};
+use session_preferences::locale::{self, Available};
 use peios::registry::Data;
 
 use crate::reg;
 
 pub const OWN: &str = "CurrentUser\\Locale";
-pub const FORMATS: [&str; 5] = ["LC_TIME", "LC_NUMERIC", "LC_MONETARY", "LC_MEASUREMENT", "LC_PAPER"];
+pub const FORMATS: [&str; 5] = [
+    "LC_TIME",
+    "LC_NUMERIC",
+    "LC_MONETARY",
+    "LC_MEASUREMENT",
+    "LC_PAPER",
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Language {
@@ -32,7 +38,8 @@ pub fn read() -> Language {
     Language {
         lang: reg::text(OWN, "LANG"),
         formats,
-        machine_lang: reg::text(locale::MACHINE_KEY, "LANG").unwrap_or_else(|| locale::DEFAULT.into()),
+        machine_lang: reg::text(locale::MACHINE_KEY, "LANG")
+            .unwrap_or_else(|| locale::DEFAULT.into()),
         may: reg::may_change(OWN, "your language"),
     }
 }
@@ -44,9 +51,14 @@ pub fn fill(language: &Language, fields: &mut Fields) {
 
 fn describe(available: &Available) -> String {
     match (&available.language, &available.territory) {
-        (Some(language), Some(territory)) => format!("{language} ({territory}) — {}", available.name),
+        (Some(language), Some(territory)) => {
+            format!("{language} ({territory}) — {}", available.name)
+        }
         (Some(language), None) => format!("{language} — {}", available.name),
-        _ if available.name == locale::DEFAULT => format!("Plain English, international conventions — {}", available.name),
+        _ if available.name == locale::DEFAULT => format!(
+            "Plain English, international conventions — {}",
+            available.name
+        ),
         _ => available.name.clone(),
     }
 }
@@ -56,8 +68,15 @@ pub fn now(language: &Language, installed: &[Available]) -> String {
     match &language.lang {
         None => "System Default".into(),
         Some(lang) => match installed.iter().find(|a| &a.name == lang) {
-            Some(Available { language: Some(name), territory: Some(place), .. }) => format!("{name} ({place})"),
-            Some(Available { language: Some(name), .. }) => name.clone(),
+            Some(Available {
+                language: Some(name),
+                territory: Some(place),
+                ..
+            }) => format!("{name} ({place})"),
+            Some(Available {
+                language: Some(name),
+                ..
+            }) => name.clone(),
             _ => lang.clone(),
         },
     }
@@ -85,11 +104,18 @@ pub fn render(language: &Language, installed: &[Available]) -> String {
     );
     let foot = match &language.may {
         Err(why) => settings::locked(why),
-        Ok(()) => settings::hint("Applies at your next sign-in. An administrator can add languages by installing language packs."),
+        Ok(()) => settings::hint(
+            "Applies at your next sign-in. An administrator can add languages by installing language packs.",
+        ),
     };
     format!(
         "{}{}",
-        settings::head(Glyph::Globe, Tile::Violet, "Language & Formats", "Your language, over the System Default."),
+        settings::head(
+            Glyph::Globe,
+            Tile::Violet,
+            "Language & Formats",
+            "Your language, over the System Default."
+        ),
         settings::group("Language & Formats", &rows, &foot)
     )
 }
@@ -97,15 +123,25 @@ pub fn render(language: &Language, installed: &[Available]) -> String {
 pub fn save(fields: &Fields) -> Result<String, String> {
     let lang = fields.get("lang").trim();
     if !lang.is_empty() && !locale::usable("LANG", lang) {
-        return Err(format!("{lang} isn't installed in full, so your session would ignore it."));
+        return Err(format!(
+            "{lang} isn't installed in full, so your session would ignore it."
+        ));
     }
     let formats = fields.get("formats").trim();
     if !formats.is_empty() && !FORMATS.iter().all(|c| locale::usable(c, formats)) {
-        return Err(format!("{formats} isn't installed, so your session would ignore it."));
+        return Err(format!(
+            "{formats} isn't installed, so your session would ignore it."
+        ));
     }
-    let mut values = vec![("LANG", (!lang.is_empty()).then(|| Data::Sz(lang.to_string())))];
+    let mut values = vec![(
+        "LANG",
+        (!lang.is_empty()).then(|| Data::Sz(lang.to_string())),
+    )];
     for category in FORMATS {
-        values.push((category, (!formats.is_empty()).then(|| Data::Sz(formats.to_string()))));
+        values.push((
+            category,
+            (!formats.is_empty()).then(|| Data::Sz(formats.to_string())),
+        ));
     }
     reg::set(OWN, "your language", &values)?;
     Ok("Saved. Applies at your next sign-in.".into())

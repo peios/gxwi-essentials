@@ -24,12 +24,17 @@ pub fn query<T: DeserializeOwned>(args: &[&str]) -> Result<T, String> {
     if !out.status.success() {
         return Err(said(&String::from_utf8_lossy(&out.stderr)));
     }
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("peipkg's answer couldn't be read: {e}"))
+    serde_json::from_slice(&out.stdout)
+        .map_err(|e| format!("peipkg's answer couldn't be read: {e}"))
 }
 
 /// The last thing peipkg said on failing, without its name in front.
 fn said(stderr: &str) -> String {
-    let line = stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("peipkg failed without saying why");
+    let line = stderr
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("peipkg failed without saying why");
     line.trim().trim_start_matches("peipkg: ").to_string()
 }
 
@@ -191,7 +196,10 @@ pub enum Event {
 impl Event {
     /// Whether this is how the run ended.
     pub fn ends(&self) -> bool {
-        matches!(self, Event::Done { .. } | Event::Cancelled { .. } | Event::Error { .. })
+        matches!(
+            self,
+            Event::Done { .. } | Event::Cancelled { .. } | Event::Error { .. }
+        )
     }
 }
 
@@ -250,7 +258,9 @@ impl Answers {
     pub fn answer(&self, id: u64, answer: &str) {
         let line = serde_json::json!({ "id": id, "answer": answer }).to_string() + "\n";
         if let Some(stdin) = self.0.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            let _ = stdin.write_all(line.as_bytes()).and_then(|()| stdin.flush());
+            let _ = stdin
+                .write_all(line.as_bytes())
+                .and_then(|()| stdin.flush());
         }
     }
 
@@ -262,7 +272,10 @@ impl Answers {
 
 /// Starts `peipkg --driven` with `args`, handing each event to `heard` on
 /// a thread of its own, ending with exactly one that [`Event::ends`] it.
-pub fn drive(args: &[String], mut heard: impl FnMut(Event) + Send + 'static) -> Result<Answers, String> {
+pub fn drive(
+    args: &[String],
+    mut heard: impl FnMut(Event) + Send + 'static,
+) -> Result<Answers, String> {
     let mut child = Command::new(PROGRAM)
         .arg("--driven")
         .args(args)
@@ -279,7 +292,9 @@ pub fn drive(args: &[String], mut heard: impl FnMut(Event) + Send + 'static) -> 
         let mut ended = false;
         for line in BufReader::new(stdout).lines() {
             let Ok(line) = line else { break };
-            let Ok(event) = serde_json::from_str::<Event>(&line) else { continue };
+            let Ok(event) = serde_json::from_str::<Event>(&line) else {
+                continue;
+            };
             ended = event.ends();
             heard(event);
             if ended {
@@ -293,8 +308,15 @@ pub fn drive(args: &[String], mut heard: impl FnMut(Event) + Send + 'static) -> 
         let _ = std::io::Read::read_to_string(&mut BufReader::new(stderr), &mut fault);
         let _ = child.wait();
         if !ended {
-            let message = if fault.trim().is_empty() { "peipkg stopped without saying how it ended".to_string() } else { said(&fault) };
-            heard(Event::Error { code: "failed".into(), message });
+            let message = if fault.trim().is_empty() {
+                "peipkg stopped without saying how it ended".to_string()
+            } else {
+                said(&fault)
+            };
+            heard(Event::Error {
+                code: "failed".into(),
+                message,
+            });
         }
     });
     Ok(answers)
@@ -310,19 +332,41 @@ mod tests {
             r#"{"authorisations":[],"event":"plan","notes":[],"operations":[{"from":"0.1.5-1","kind":"upgrade","local":false,"name":"dev.peios.net","repository":"peios-dev","size_download":212743,"size_installed":655604,"to":"0.1.7-1"}],"other_roots":[]}"#,
         )
         .unwrap();
-        let Event::Plan(plan) = plan else { panic!("not a plan") };
+        let Event::Plan(plan) = plan else {
+            panic!("not a plan")
+        };
         assert_eq!(plan.operations[0].to.as_deref(), Some("0.1.7-1"));
         let asked: Event = serde_json::from_str(r#"{"event":"question","id":2,"kind":"modified","package":"tool","path":"/usr/etc/tool.conf"}"#).unwrap();
-        assert!(matches!(asked, Event::Question(Question { id: 2, ref kind, .. }) if kind == "modified"));
-        let done: Event = serde_json::from_str(r#"{"event":"done","summary":"2 operations applied","transaction":1}"#).unwrap();
+        assert!(
+            matches!(asked, Event::Question(Question { id: 2, ref kind, .. }) if kind == "modified")
+        );
+        let done: Event = serde_json::from_str(
+            r#"{"event":"done","summary":"2 operations applied","transaction":1}"#,
+        )
+        .unwrap();
         assert!(done.ends());
-        let error: Event = serde_json::from_str(r#"{"code":"stale","event":"error","message":"x"}"#).unwrap();
-        assert_eq!(error, Event::Error { code: "stale".into(), message: "x".into() });
-        assert!(!Event::Warning { text: String::new() }.ends());
+        let error: Event =
+            serde_json::from_str(r#"{"code":"stale","event":"error","message":"x"}"#).unwrap();
+        assert_eq!(
+            error,
+            Event::Error {
+                code: "stale".into(),
+                message: "x".into()
+            }
+        );
+        assert!(
+            !Event::Warning {
+                text: String::new()
+            }
+            .ends()
+        );
     }
 
     #[test]
     fn a_failure_is_its_last_line() {
-        assert_eq!(said("peipkg: warning: x\npeipkg: info: \"y\" is not installed\n"), "info: \"y\" is not installed");
+        assert_eq!(
+            said("peipkg: warning: x\npeipkg: info: \"y\" is not installed\n"),
+            "info: \"y\" is not installed"
+        );
     }
 }

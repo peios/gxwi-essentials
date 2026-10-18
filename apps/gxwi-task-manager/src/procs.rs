@@ -116,7 +116,9 @@ pub fn parse_stat(line: &str) -> Option<Stat> {
 
 /// Every process, as this person may see it.
 pub fn read_all() -> Vec<Proc> {
-    let Ok(dir) = fs::read_dir("/proc") else { return Vec::new() };
+    let Ok(dir) = fs::read_dir("/proc") else {
+        return Vec::new();
+    };
     let mut procs: Vec<Proc> = dir
         .flatten()
         .filter_map(|entry| entry.file_name().to_str()?.parse::<u32>().ok())
@@ -148,7 +150,13 @@ pub fn read_one(pid: u32) -> Option<Proc> {
     let member = fs::read_to_string(format!("/proc/{pid}/cgroup"))
         .ok()
         .and_then(|text| cgroup_member(&text));
-    Some(Proc { pid, stat, member, owner: owner(pid, protected), psb })
+    Some(Proc {
+        pid,
+        stat,
+        member,
+        owner: owner(pid, protected),
+        psb,
+    })
 }
 
 /// The program's name from the first word of its command line, where it
@@ -170,7 +178,8 @@ pub fn full_from_argv0(argv0: &str, short: &str) -> Option<String> {
 }
 
 fn owner(pid: u32, protected: bool) -> Result<Owner, Closed> {
-    let file = fs::File::open(format!("/proc/{pid}/token")).map_err(|e| Closed::of(&e, protected))?;
+    let file =
+        fs::File::open(format!("/proc/{pid}/token")).map_err(|e| Closed::of(&e, protected))?;
     let token = Token::from(OwnedFd::from(file));
     Ok(Owner {
         user: token.user().map_err(|_| Closed::Unreadable)?,
@@ -204,7 +213,10 @@ pub fn parse_machine_ticks(line: &str) -> Option<(u64, u64)> {
     (fields.next()? == "cpu").then_some(())?;
     // user nice system idle iowait irq softirq steal; guest time is already
     // counted in user and nice.
-    let ticks: Vec<u64> = fields.take(8).map(|v| v.parse::<u64>().ok()).collect::<Option<_>>()?;
+    let ticks: Vec<u64> = fields
+        .take(8)
+        .map(|v| v.parse::<u64>().ok())
+        .collect::<Option<_>>()?;
     let idle = ticks.get(3)? + ticks.get(4)?;
     Some((ticks.iter().sum(), idle))
 }
@@ -215,7 +227,14 @@ pub fn memory() -> Option<(u64, u64)> {
     let text = fs::read_to_string("/proc/meminfo").ok()?;
     let kib = |key: &str| {
         text.lines()
-            .find_map(|line| line.strip_prefix(key)?.trim().strip_suffix("kB")?.trim().parse::<u64>().ok())
+            .find_map(|line| {
+                line.strip_prefix(key)?
+                    .trim()
+                    .strip_suffix("kB")?
+                    .trim()
+                    .parse::<u64>()
+                    .ok()
+            })
             .map(|n| n * 1024)
     };
     Some((kib("MemTotal:")?, kib("MemAvailable:")?))
@@ -229,7 +248,12 @@ pub fn shares(before: &HashMap<u32, u64>, now: &[Proc], machine: u64) -> HashMap
     }
     now.iter()
         .filter_map(|p| {
-            let used = p.stat.as_ref().ok()?.ticks.checked_sub(*before.get(&p.pid)?)?;
+            let used = p
+                .stat
+                .as_ref()
+                .ok()?
+                .ticks
+                .checked_sub(*before.get(&p.pid)?)?;
             Some((p.pid, used as f64 * 100.0 / machine as f64))
         })
         .collect()
@@ -269,7 +293,10 @@ mod tests {
         );
         // A program that renamed itself, or an argv[0] that says something else.
         assert_eq!(full_from_argv0("sshd: /usr/sbin/sshd -D", "sshd"), None);
-        assert_eq!(full_from_argv0("/usr/bin/other-program-name", "gxwi-task-manag"), None);
+        assert_eq!(
+            full_from_argv0("/usr/bin/other-program-name", "gxwi-task-manag"),
+            None
+        );
     }
 
     #[test]
@@ -280,7 +307,10 @@ mod tests {
 
     #[test]
     fn the_machine_s_ticks_add_its_first_eight_counters() {
-        assert_eq!(parse_machine_ticks("cpu  10 1 5 100 2 0 1 0 7 0"), Some((119, 102)));
+        assert_eq!(
+            parse_machine_ticks("cpu  10 1 5 100 2 0 1 0 7 0"),
+            Some((119, 102))
+        );
         assert_eq!(parse_machine_ticks("cpu0 10 1 5 100 2 0 1 0"), None);
     }
 

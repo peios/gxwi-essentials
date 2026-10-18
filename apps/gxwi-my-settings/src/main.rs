@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
 use libgxwi::{App, Facts, Fields, Live, Surface, Value};
-use libsession::locale::{self, Available};
+use session_preferences::locale::{self, Available};
 
 mod account;
 mod language;
@@ -35,14 +35,26 @@ enum View {
 }
 
 impl View {
-    const ALL: [(View, &'static str); 4] = [(View::Account, "account"), (View::Password, "password"), (View::Keys, "keys"), (View::Language, "language")];
+    const ALL: [(View, &'static str); 4] = [
+        (View::Account, "account"),
+        (View::Password, "password"),
+        (View::Keys, "keys"),
+        (View::Language, "language"),
+    ];
 
     fn by(name: &str) -> Option<View> {
-        View::ALL.iter().find(|(_, by)| *by == name).map(|(view, _)| *view)
+        View::ALL
+            .iter()
+            .find(|(_, by)| *by == name)
+            .map(|(view, _)| *view)
     }
 
     fn id(self) -> &'static str {
-        View::ALL.iter().find(|(view, _)| *view == self).map(|(_, by)| *by).unwrap_or("account")
+        View::ALL
+            .iter()
+            .find(|(view, _)| *view == self)
+            .map(|(_, by)| *by)
+            .unwrap_or("account")
     }
 }
 
@@ -71,12 +83,44 @@ impl Settings {
     }
 
     fn nav(&self) -> Vec<Nav> {
-        let section = |view: View, title, now: String, glyph, tile| Nav::Section(Section { id: view.id(), title, now, glyph, tile });
+        let section = |view: View, title, now: String, glyph, tile| {
+            Nav::Section(Section {
+                id: view.id(),
+                title,
+                now,
+                glyph,
+                tile,
+            })
+        };
         vec![
-            section(View::Account, "Account", account::now_account(&self.account), Glyph::User, Tile::Orange),
-            section(View::Password, "Password", account::now_password(&self.account), Glyph::Lock, Tile::Green),
-            section(View::Keys, "SSH Keys", account::now_keys(&self.account), Glyph::Key, Tile::Teal),
-            section(View::Language, "Language & Formats", language::now(&self.language, &self.installed), Glyph::Globe, Tile::Violet),
+            section(
+                View::Account,
+                "Account",
+                account::now_account(&self.account),
+                Glyph::User,
+                Tile::Orange,
+            ),
+            section(
+                View::Password,
+                "Password",
+                account::now_password(&self.account),
+                Glyph::Lock,
+                Tile::Green,
+            ),
+            section(
+                View::Keys,
+                "SSH Keys",
+                account::now_keys(&self.account),
+                Glyph::Key,
+                Tile::Teal,
+            ),
+            section(
+                View::Language,
+                "Language & Formats",
+                language::now(&self.language, &self.installed),
+                Glyph::Globe,
+                Tile::Violet,
+            ),
         ]
     }
 }
@@ -87,14 +131,21 @@ impl Live for Settings {
         let page = match self.view {
             View::Account => account::render_account(&self.account, fields),
             View::Password => account::render_password(&self.account, fields),
-            View::Keys => account::render_keys(&self.account, fields, self.removing.as_ref(), self.adding),
+            View::Keys => {
+                account::render_keys(&self.account, fields, self.removing.as_ref(), self.adding)
+            }
             View::Language => language::render(&self.language, &self.installed),
         };
         let aside = match self.view {
             View::Language => "Choices apply at once",
             _ => "",
         };
-        settings::window(&self.nav(), self.view.id(), &page, &settings::status(self.said.as_ref(), aside))
+        settings::window(
+            &self.nav(),
+            self.view.id(),
+            &page,
+            &settings::status(self.said.as_ref(), aside),
+        )
     }
 
     fn input(&mut self, name: &str, fields: &mut Fields) {
@@ -114,7 +165,11 @@ impl Live for Settings {
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
         let done = match name {
             "section" => {
-                if let Some(view) = value.get("section").and_then(Value::as_str).and_then(View::by) {
+                if let Some(view) = value
+                    .get("section")
+                    .and_then(Value::as_str)
+                    .and_then(View::by)
+                {
                     self.view = view;
                     self.said = None;
                     self.removing = None;
@@ -136,8 +191,17 @@ impl Live for Settings {
                 return;
             }
             "remove-key" => {
-                let text = |key: &str| value.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-                self.removing = Some(Removing { fingerprint: text("fingerprint"), label: text("label") });
+                let text = |key: &str| {
+                    value
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                self.removing = Some(Removing {
+                    fingerprint: text("fingerprint"),
+                    label: text("label"),
+                });
                 self.adding = false;
                 self.said = None;
                 return;
@@ -182,7 +246,9 @@ fn look_again(window: Weak<Surface<Settings>>) {
     loop {
         std::thread::sleep(LOOK_AGAIN);
         let (account, language) = (account::read(), language::read());
-        let Some(shown) = window.upgrade() else { return };
+        let Some(shown) = window.upgrade() else {
+            return;
+        };
         if shown.look(|s, _, _| s.account != account || s.language != language) {
             shown.update(|s, fields| {
                 // A field still holding what was set follows what is set now.
@@ -211,7 +277,9 @@ fn main() {
         Ok(app) => app,
         Err(e) => {
             eprintln!("gxwi-my-settings: no desktop to open on: {e}");
-            eprintln!("gxwi-my-settings: on a terminal, passwd changes your password and lps key your keys");
+            eprintln!(
+                "gxwi-my-settings: on a terminal, passwd changes your password and lps key your keys"
+            );
             std::process::exit(1);
         }
     };

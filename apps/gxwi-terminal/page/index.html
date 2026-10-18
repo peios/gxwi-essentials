@@ -1,20 +1,20 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Terminal</title>
-<!-- Relative, all of it: where this app's pages are is not for the app to know. -->
-<!-- The desktop's theme, so that the terminal is the colours everything else is. -->
-<link rel="stylesheet" href="../.fx/tokens.css">
-<link rel="stylesheet" href="vendor/xterm.css">
-<link rel="stylesheet" href="term.css">
-<!-- The desktop's, so that its keys still work while the keyboard is in here. -->
-<script type="module" src="../.fx/keys.js"></script>
-<script type="module" src="term.js"></script>
-</head>
-<body>
-<main id="room"><div id="terminal"></div></main>
-<p id="said" role="status" hidden></p>
-</body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Terminal</title>
+        <!-- Relative, all of it: where this app's pages are is not for the app to know. -->
+        <!-- The desktop's theme, so that the terminal is the colours everything else is. -->
+        <link rel="stylesheet" href="../.fx/tokens.css" />
+        <link rel="stylesheet" href="vendor/xterm.css" />
+        <link rel="stylesheet" href="term.css" />
+        <!-- The desktop's, so that its keys still work while the keyboard is in here. -->
+        <script type="module" src="../.fx/keys.js"></script>
+        <script type="module" src="term.js"></script>
+    </head>
+    <body>
+        <main id="room"><div id="terminal"></div></main>
+        <p id="said" role="status" hidden></p>
+    </body>
 </html>

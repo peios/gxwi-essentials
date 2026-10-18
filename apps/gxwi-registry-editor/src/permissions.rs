@@ -24,9 +24,18 @@ pub fn key(path: &str) -> Result<(Request, Apply), String> {
 /// The request for the descriptor the value `name` of the key at `path`
 /// holds, and what writes it back, into `layer`. `may` is whether the
 /// person may change the key's values, which is what changing it takes.
-pub fn value(path: &str, name: &str, may: bool, layer: Option<String>) -> Result<(Request, Apply), String> {
+pub fn value(
+    path: &str,
+    name: &str,
+    may: bool,
+    layer: Option<String>,
+) -> Result<(Request, Apply), String> {
     let sd = keys::bytes(path, name)?;
-    let generic = |name: &str, mask: AccessMask| Right { name: name.into(), mask: mask.bits(), general: true };
+    let generic = |name: &str, mask: AccessMask| Right {
+        name: name.into(),
+        mask: mask.bits(),
+        general: true,
+    };
     let request = Request {
         object: Object {
             name: words::value_name(name).into(),
@@ -52,7 +61,14 @@ pub fn value(path: &str, name: &str, may: bool, layer: Option<String>) -> Result
         },
         // The value holds all of it, so all of it is the person's to change
         // where they may change the value.
-        can: Can { dacl: may, owner: may, audit: may, label: may, why: (!may).then(|| "You may not change this key's values.".to_string()), ..Can::default() },
+        can: Can {
+            dacl: may,
+            owner: may,
+            audit: may,
+            label: may,
+            why: (!may).then(|| "You may not change this key's values.".to_string()),
+            ..Can::default()
+        },
         ..Request::default()
     };
     let (path, name) = (path.to_string(), name.to_string());
@@ -61,9 +77,11 @@ pub fn value(path: &str, name: &str, may: bool, layer: Option<String>) -> Result
         // not the editor's to write back.
         let now = keys::bytes(&path, &name)?;
         let value = splice(&now, sd, parts)?;
-        keys::set(&path, &name, &Data::Binary(value), None, layer.as_deref()).map_err(|unset| match unset {
-            Unset::Changed => "it was changed meanwhile".to_string(),
-            Unset::Refused(why) => why,
+        keys::set(&path, &name, &Data::Binary(value), None, layer.as_deref()).map_err(|unset| {
+            match unset {
+                Unset::Changed => "it was changed meanwhile".to_string(),
+                Unset::Refused(why) => why,
+            }
         })
     };
     Ok((request, Box::new(apply)))

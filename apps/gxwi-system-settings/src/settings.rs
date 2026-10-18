@@ -11,7 +11,7 @@
 
 use std::sync::Weak;
 
-use libauthd_client::ident::Ident;
+use auth_core::client::ident::Ident;
 use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
 use libgxwi::{Facts, Fields, Live, Surface, Value};
 use libtimed::zone::Listed;
@@ -30,14 +30,26 @@ pub enum View {
 }
 
 impl View {
-    const ALL: [(View, &'static str); 4] = [(View::Time, "time"), (View::Language, "language"), (View::Startup, "startup"), (View::About, "about")];
+    const ALL: [(View, &'static str); 4] = [
+        (View::Time, "time"),
+        (View::Language, "language"),
+        (View::Startup, "startup"),
+        (View::About, "about"),
+    ];
 
     fn by(name: &str) -> Option<View> {
-        View::ALL.iter().find(|(_, by)| *by == name).map(|(view, _)| *view)
+        View::ALL
+            .iter()
+            .find(|(_, by)| *by == name)
+            .map(|(view, _)| *view)
     }
 
     fn id(self) -> &'static str {
-        View::ALL.iter().find(|(view, _)| *view == self).map(|(_, by)| *by).unwrap_or("time")
+        View::ALL
+            .iter()
+            .find(|(view, _)| *view == self)
+            .map(|(_, by)| *by)
+            .unwrap_or("time")
     }
 }
 
@@ -107,7 +119,10 @@ impl Settings {
 
     /// Whether what was read differs from what is shown.
     pub fn differs(&self, read: &Read) -> bool {
-        read.time != self.time || read.language != self.language || read.about != self.about || read.startup != self.startup
+        read.time != self.time
+            || read.language != self.language
+            || read.about != self.about
+            || read.startup != self.startup
     }
 
     /// Puts what is set in every field.
@@ -154,12 +169,44 @@ impl Settings {
     }
 
     fn nav(&self) -> Vec<Nav> {
-        let section = |view: View, title, now: String, glyph, tile| Nav::Section(Section { id: view.id(), title, now, glyph, tile });
+        let section = |view: View, title, now: String, glyph, tile| {
+            Nav::Section(Section {
+                id: view.id(),
+                title,
+                now,
+                glyph,
+                tile,
+            })
+        };
         vec![
-            section(View::Time, "Time & Date", time::now(&self.time), Glyph::Clock, Tile::Blue),
-            section(View::Language, "Language & Keyboard", language::now(&self.language, &self.installed), Glyph::Globe, Tile::Violet),
-            section(View::Startup, "Startup & Shutdown", startup::now(&self.startup), Glyph::Power, Tile::Orange),
-            section(View::About, "About", about::now(&self.about), Glyph::Info, Tile::Slate),
+            section(
+                View::Time,
+                "Time & Date",
+                time::now(&self.time),
+                Glyph::Clock,
+                Tile::Blue,
+            ),
+            section(
+                View::Language,
+                "Language & Keyboard",
+                language::now(&self.language, &self.installed),
+                Glyph::Globe,
+                Tile::Violet,
+            ),
+            section(
+                View::Startup,
+                "Startup & Shutdown",
+                startup::now(&self.startup),
+                Glyph::Power,
+                Tile::Orange,
+            ),
+            section(
+                View::About,
+                "About",
+                about::now(&self.about),
+                Glyph::Info,
+                Tile::Slate,
+            ),
         ]
     }
 
@@ -168,7 +215,11 @@ impl Settings {
         match self.view {
             View::Time => self.time.may.is_ok(),
             View::Language => self.language.may_locale.is_ok() || self.language.may_keymap.is_ok(),
-            View::Startup => self.startup.may_boot.is_ok() || self.startup.may_login.is_ok() || self.startup.may_cmdline.is_ok(),
+            View::Startup => {
+                self.startup.may_boot.is_ok()
+                    || self.startup.may_login.is_ok()
+                    || self.startup.may_cmdline.is_ok()
+            }
             View::About => self.about.may_name.is_ok(),
         }
     }
@@ -177,8 +228,21 @@ impl Settings {
 /// Every field the window has.
 fn field_names() -> Vec<&'static str> {
     let mut names = vec![
-        "automatic", "zone", "servers", "unauthenticated", "dhcp", "min-poll", "max-poll", "lang", "formats", "keymap", "hostname",
-        "autologon", "bootattempts", "quiet", "safemode",
+        "automatic",
+        "zone",
+        "servers",
+        "unauthenticated",
+        "dhcp",
+        "min-poll",
+        "max-poll",
+        "lang",
+        "formats",
+        "keymap",
+        "hostname",
+        "autologon",
+        "bootattempts",
+        "quiet",
+        "safemode",
     ];
     names.extend(startup::TIMEOUTS.iter().map(|(name, ..)| *name));
     names
@@ -188,13 +252,28 @@ impl Live for Settings {
     fn render(&self, facts: &Facts) -> String {
         let fields = facts.fields;
         let page = match self.view {
-            View::Time => time::render(&self.time, &self.zones, fields, self.now, self.editing_servers),
+            View::Time => time::render(
+                &self.time,
+                &self.zones,
+                fields,
+                self.now,
+                self.editing_servers,
+            ),
             View::Language => language::render(&self.language, &self.installed, fields),
             View::Startup => startup::render(&self.startup, fields),
             View::About => about::render(&self.about, fields),
         };
-        let aside = if self.may_change_shown() { "Choices apply at once" } else { "" };
-        settings::window(&self.nav(), self.view.id(), &page, &settings::status(self.said.as_ref(), aside))
+        let aside = if self.may_change_shown() {
+            "Choices apply at once"
+        } else {
+            ""
+        };
+        settings::window(
+            &self.nav(),
+            self.view.id(),
+            &page,
+            &settings::status(self.said.as_ref(), aside),
+        )
     }
 
     fn input(&mut self, name: &str, fields: &mut Fields) {
@@ -213,7 +292,11 @@ impl Live for Settings {
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
         let done = match name {
             "section" => {
-                if let Some(view) = value.get("section").and_then(Value::as_str).and_then(View::by) {
+                if let Some(view) = value
+                    .get("section")
+                    .and_then(Value::as_str)
+                    .and_then(View::by)
+                {
                     self.view = view;
                     self.said = None;
                     self.editing_servers = false;

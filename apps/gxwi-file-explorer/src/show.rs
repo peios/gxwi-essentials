@@ -29,7 +29,7 @@ pub fn grouped(number: u64) -> String {
     let digits = number.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -40,7 +40,9 @@ pub fn grouped(number: u64) -> String {
 /// A time as a listing shows it, in `zone`: `Today, 09:14`,
 /// `Yesterday, 16:20`, or `18 Sep 2026`. Today and yesterday are the zone's.
 pub fn when(time: Option<SystemTime>, now: SystemTime, zone: &TimeZone) -> String {
-    let (Some(time), Some(now)) = (time.and_then(|t| zoned(t, zone)), zoned(now, zone)) else { return "—".into() };
+    let (Some(time), Some(now)) = (time.and_then(|t| zoned(t, zone)), zoned(now, zone)) else {
+        return "—".into();
+    };
     let (today, day) = (now.date(), time.date());
     if day == today {
         time.strftime("Today, %H:%M").to_string()
@@ -53,12 +55,16 @@ pub fn when(time: Option<SystemTime>, now: SystemTime, zone: &TimeZone) -> Strin
 
 /// A time as the details show it, in `zone`: `18 Sep 2026 at 09:14`.
 pub fn when_long(time: Option<SystemTime>, zone: &TimeZone) -> String {
-    let Some(time) = time.and_then(|t| zoned(t, zone)) else { return "—".into() };
+    let Some(time) = time.and_then(|t| zoned(t, zone)) else {
+        return "—".into();
+    };
     time.strftime("%-d %b %Y at %H:%M").to_string()
 }
 
 fn zoned(time: SystemTime, zone: &TimeZone) -> Option<Zoned> {
-    Timestamp::try_from(time).ok().map(|t| t.to_zoned(zone.clone()))
+    Timestamp::try_from(time)
+        .ok()
+        .map(|t| t.to_zoned(zone.clone()))
 }
 
 /// The machine's time zone, read from `/etc/localtime` as it is now: timed
@@ -95,12 +101,24 @@ mod tests {
         let at = |s: u64| std::time::UNIX_EPOCH + Duration::from_secs(s);
         let utc = TimeZone::UTC;
         // 2026-09-18 09:14:00 UTC.
-        assert_eq!(when_long(Some(at(1_789_722_840)), &utc), "18 Sep 2026 at 09:14");
-        assert_eq!(when_long(Some(at(951_782_400)), &utc), "29 Feb 2000 at 00:00");
+        assert_eq!(
+            when_long(Some(at(1_789_722_840)), &utc),
+            "18 Sep 2026 at 09:14"
+        );
+        assert_eq!(
+            when_long(Some(at(951_782_400)), &utc),
+            "29 Feb 2000 at 00:00"
+        );
         let now = at(1_789_722_840 + 3 * 3600);
         assert_eq!(when(Some(at(1_789_722_840)), now, &utc), "Today, 09:14");
-        assert_eq!(when(Some(at(1_789_722_840 - 86_400)), now, &utc), "Yesterday, 09:14");
-        assert_eq!(when(Some(at(1_789_722_840 - 5 * 86_400)), now, &utc), "13 Sep 2026");
+        assert_eq!(
+            when(Some(at(1_789_722_840 - 86_400)), now, &utc),
+            "Yesterday, 09:14"
+        );
+        assert_eq!(
+            when(Some(at(1_789_722_840 - 5 * 86_400)), now, &utc),
+            "13 Sep 2026"
+        );
         assert_eq!(when(None, now, &utc), "—");
     }
 

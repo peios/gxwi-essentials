@@ -128,7 +128,12 @@ pub fn mount_kind(kind: &str) -> String {
         "stratafs" => "StrataFS".into(),
         "9p" => "9P (shared folder)".into(),
         "devtmpfs" => "devtmpfs".into(),
-        other => filesystem(&Filesystem { kind: other.into(), version: None, label: None, uuid: None }),
+        other => filesystem(&Filesystem {
+            kind: other.into(),
+            version: None,
+            label: None,
+            uuid: None,
+        }),
     }
 }
 
@@ -206,10 +211,18 @@ pub fn policy(kind: PolicyKind) -> &'static str {
 /// What a policy means, in a sentence.
 pub fn policy_about(kind: PolicyKind) -> &'static str {
     match kind {
-        PolicyKind::Unmanaged => "Permissions aren't checked here: the kernel doesn't manage this filesystem.",
-        PolicyKind::DenyMissing => "A file without permissions of its own can't be opened by anyone until it is given some.",
-        PolicyKind::Ephemeral => "A file without permissions of its own is given its folder's, or the template's, each time it is opened. Nothing is written to the disk.",
-        PolicyKind::Persistent => "A file without permissions of its own is given its folder's, or the template's, and they are saved on it.",
+        PolicyKind::Unmanaged => {
+            "Permissions aren't checked here: the kernel doesn't manage this filesystem."
+        }
+        PolicyKind::DenyMissing => {
+            "A file without permissions of its own can't be opened by anyone until it is given some."
+        }
+        PolicyKind::Ephemeral => {
+            "A file without permissions of its own is given its folder's, or the template's, each time it is opened. Nothing is written to the disk."
+        }
+        PolicyKind::Persistent => {
+            "A file without permissions of its own is given its folder's, or the template's, and they are saved on it."
+        }
     }
 }
 
@@ -222,7 +235,10 @@ pub fn error(e: &std::io::Error) -> String {
             let text = e.to_string();
             let text = text.split(" (os error").next().unwrap_or(&text);
             let mut chars = text.chars();
-            chars.next().map(|c| c.to_lowercase().chain(chars).collect()).unwrap_or_default()
+            chars
+                .next()
+                .map(|c| c.to_lowercase().chain(chars).collect())
+                .unwrap_or_default()
         }
     }
 }
@@ -245,14 +261,22 @@ mod tests {
 
     #[test]
     fn partition_types_are_named_on_either_table() {
-        assert_eq!(partition_type("C12A7328-F81F-11D2-BA4B-00A0C93EC93B"), "EFI System");
+        assert_eq!(
+            partition_type("C12A7328-F81F-11D2-BA4B-00A0C93EC93B"),
+            "EFI System"
+        );
         assert_eq!(partition_type("0x83"), "Linux Filesystem");
         assert_eq!(partition_type("deadbeef"), "deadbeef");
     }
 
     #[test]
     fn fat_says_its_size() {
-        let fs = Filesystem { kind: "vfat".into(), version: Some("FAT32".into()), label: None, uuid: None };
+        let fs = Filesystem {
+            kind: "vfat".into(),
+            version: Some("FAT32".into()),
+            label: None,
+            uuid: None,
+        };
         assert_eq!(filesystem(&fs), "FAT32");
     }
 }

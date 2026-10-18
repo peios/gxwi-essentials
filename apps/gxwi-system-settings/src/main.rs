@@ -10,7 +10,7 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use libauthd_client::ident::Ident;
+use auth_core::client::ident::Ident;
 use libgxwi::{App, Surface};
 
 mod about;
@@ -42,9 +42,11 @@ fn look_again(window: Weak<Surface<Settings>>) {
     loop {
         std::thread::sleep(TICK);
         ticks += 1;
-        let Some(shown) = window.upgrade() else { return };
+        let Some(shown) = window.upgrade() else {
+            return;
+        };
         let now = jiff::Timestamp::now();
-        let read = if ticks % READ_EVERY == 0 {
+        let read = if ticks.is_multiple_of(READ_EVERY) {
             let ident = shown.look(|settings, _, _| settings.ident().clone());
             drop(shown);
             Some(Read::now(&ident))
@@ -52,8 +54,12 @@ fn look_again(window: Weak<Surface<Settings>>) {
             drop(shown);
             None
         };
-        let Some(shown) = window.upgrade() else { return };
-        let differs = shown.look(|settings, _, _| settings.minute_turned(now) || read.as_ref().is_some_and(|read| settings.differs(read)));
+        let Some(shown) = window.upgrade() else {
+            return;
+        };
+        let differs = shown.look(|settings, _, _| {
+            settings.minute_turned(now) || read.as_ref().is_some_and(|read| settings.differs(read))
+        });
         if differs {
             shown.update(|settings, fields| {
                 settings.now = now;
@@ -67,7 +73,10 @@ fn look_again(window: Weak<Surface<Settings>>) {
 
 fn main() {
     if std::env::args().nth(1).is_some() {
-        eprintln!("gxwi-system-settings: usage: gxwi-system-settings (given {:?})", std::env::args().skip(1).collect::<Vec<_>>());
+        eprintln!(
+            "gxwi-system-settings: usage: gxwi-system-settings (given {:?})",
+            std::env::args().skip(1).collect::<Vec<_>>()
+        );
         std::process::exit(64);
     }
     let mut app = match App::connect() {
@@ -78,7 +87,10 @@ fn main() {
         }
     };
     libgxwi::settings::stylesheet(&mut app);
-    app.stylesheet("/gxwi-system-settings.css", include_str!("gxwi-system-settings.css"));
+    app.stylesheet(
+        "/gxwi-system-settings.css",
+        include_str!("gxwi-system-settings.css"),
+    );
     let ident = Ident::new();
     let read = Read::now(&ident);
     let window = app.live("System Settings", Settings::new(ident, read));

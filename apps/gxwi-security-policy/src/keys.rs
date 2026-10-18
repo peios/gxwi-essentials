@@ -33,7 +33,9 @@ pub fn parse(text: &str) -> Vec<SigningKey> {
             let (mut sha256, mut pip_type, mut pip_trust) = (None, None, None);
             for word in line.split_whitespace() {
                 match word.split_once('=')? {
-                    ("key_sha256", hex) if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) => {
+                    ("key_sha256", hex)
+                        if hex.len() == 64 && hex.bytes().all(|b| b.is_ascii_hexdigit()) =>
+                    {
                         sha256 = Some(hex.to_ascii_lowercase())
                     }
                     ("pip_type", n) => pip_type = n.parse().ok(),
@@ -41,7 +43,11 @@ pub fn parse(text: &str) -> Vec<SigningKey> {
                     _ => {}
                 }
             }
-            Some(SigningKey { sha256: sha256?, pip_type: pip_type?, pip_trust: pip_trust? })
+            Some(SigningKey {
+                sha256: sha256?,
+                pip_type: pip_type?,
+                pip_trust: pip_trust?,
+            })
         })
         .collect()
 }
@@ -98,8 +104,14 @@ pub fn render(keys: &Result<Vec<SigningKey>, Unlisted>) -> String {
         Ok(keys) => keys,
         Err(unlisted) => {
             let (what, why) = match unlisted {
-                Unlisted::Absent => ("This kernel doesn't list its keys", "A newer kernel shows them here."),
-                Unlisted::Denied => ("You can't read the kernel's keys", "Reading them needs access to the kernel's security files."),
+                Unlisted::Absent => (
+                    "This kernel doesn't list its keys",
+                    "A newer kernel shows them here.",
+                ),
+                Unlisted::Denied => (
+                    "You can't read the kernel's keys",
+                    "Reading them needs access to the kernel's security files.",
+                ),
                 Unlisted::Other(e) => ("The kernel's keys couldn't be read", e.as_str()),
             };
             page.push_str(&settings::group("", &settings::row(what, why, ""), ""));
@@ -108,8 +120,17 @@ pub fn render(keys: &Result<Vec<SigningKey>, Unlisted>) -> String {
     };
     let mut rows = String::new();
     for key in keys {
-        let level = format!("Programs it signs run {}, {}", kind(key.pip_type), trust(key.pip_trust));
-        rows.push_str(&settings::item(&settings::icon(Glyph::Key, Tile::Violet), &name(key), &[(&level, false)], ""));
+        let level = format!(
+            "Programs it signs run {}, {}",
+            kind(key.pip_type),
+            trust(key.pip_trust)
+        );
+        rows.push_str(&settings::item(
+            &settings::icon(Glyph::Key, Tile::Violet),
+            &name(key),
+            &[(&level, false)],
+            "",
+        ));
         rows.push_str(&format!(
             r#"<div class="st-row fact long"><span class="label"><b>SHA-256 Fingerprint</b><code class="st-mono">{}</code></span><span class="control"><button type="button" class="st-button" fx-copy="text" fx-value-text="{}">Copy</button></span></div>"#,
             escape(&crate::words::colons(&key.sha256)),
@@ -117,7 +138,11 @@ pub fn render(keys: &Result<Vec<SigningKey>, Unlisted>) -> String {
         ));
     }
     if rows.is_empty() {
-        rows = settings::row("No keys", "This kernel trusts no signature, so no program runs protected.", "");
+        rows = settings::row(
+            "No keys",
+            "This kernel trusts no signature, so no program runs protected.",
+            "",
+        );
     }
     page.push_str(&settings::group(
         "",
@@ -136,15 +161,31 @@ mod tests {
     #[test]
     fn a_listing_reads_as_its_keys() {
         let hex = "ab".repeat(32);
-        let listing = format!("key_sha256={hex} pip_type=512 pip_trust=8192\nnonsense\nkey_sha256=zz pip_type=1 pip_trust=2\n");
-        assert_eq!(parse(&listing), vec![SigningKey { sha256: hex, pip_type: 512, pip_trust: 8192 }]);
+        let listing = format!(
+            "key_sha256={hex} pip_type=512 pip_trust=8192\nnonsense\nkey_sha256=zz pip_type=1 pip_trust=2\n"
+        );
+        assert_eq!(
+            parse(&listing),
+            vec![SigningKey {
+                sha256: hex,
+                pip_type: 512,
+                pip_trust: 8192
+            }]
+        );
         assert!(parse("").is_empty());
     }
 
     #[test]
     fn the_system_key_is_named_for_what_it_is() {
-        let key = SigningKey { sha256: String::new(), pip_type: 512, pip_trust: 8192 };
+        let key = SigningKey {
+            sha256: String::new(),
+            pip_type: 512,
+            pip_trust: 8192,
+        };
         assert_eq!(name(&key), "Peios System Key");
-        assert_eq!(format!("{}, {}", kind(512), trust(8192)), "Protected, Peios TCB");
+        assert_eq!(
+            format!("{}, {}", kind(512), trust(8192)),
+            "Protected, Peios TCB"
+        );
     }
 }

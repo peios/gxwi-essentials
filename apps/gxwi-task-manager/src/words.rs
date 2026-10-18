@@ -27,7 +27,11 @@ pub fn bytes(n: u64) -> String {
 
 /// A disk's speed, from bytes a second.
 pub fn bytes_per_second(n: f64) -> String {
-    if n < 1024.0 { format!("{n:.0} B/s") } else { format!("{}/s", bytes(n as u64)) }
+    if n < 1024.0 {
+        format!("{n:.0} B/s")
+    } else {
+        format!("{}/s", bytes(n as u64))
+    }
 }
 
 /// A network's speed, from bytes a second, said in bits as networks are:
@@ -44,7 +48,11 @@ pub fn bits_per_second(bytes: f64) -> String {
         value /= 1000.0;
         unit += 1;
     }
-    if value < 10.0 { format!("{value:.1} {}", UNITS[unit]) } else { format!("{value:.0} {}", UNITS[unit]) }
+    if value < 10.0 {
+        format!("{value:.1} {}", UNITS[unit])
+    } else {
+        format!("{value:.0} {}", UNITS[unit])
+    }
 }
 
 /// A processor's speed, from megahertz.
@@ -75,7 +83,11 @@ pub fn running_for(seconds: u64) -> String {
 }
 
 fn plural(n: u64, what: &str) -> String {
-    if n == 1 { format!("1 {what}") } else { format!("{n} {what}s") }
+    if n == 1 {
+        format!("1 {what}")
+    } else {
+        format!("{n} {what}s")
+    }
 }
 
 /// What kind of sign-in a session is, from its logon type and where its
@@ -102,13 +114,17 @@ pub fn session_kind(logon_type: Option<u32>, desktop: bool, ssh: bool) -> &'stat
 /// When something happened, on this machine's clock: the time alone today,
 /// the day and time before that.
 pub fn when(at: std::time::SystemTime) -> String {
-    let seconds = at.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let seconds = at
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     // The kernel makes SYSTEM's and Anonymous's sessions before the clock
     // is set.
     if seconds == 0 {
         return "When the machine started".into();
     }
-    let Ok(stamp) = jiff::Timestamp::from_second(seconds as i64) else { return String::new() };
+    let Ok(stamp) = jiff::Timestamp::from_second(seconds as i64) else {
+        return String::new();
+    };
     let zone = jiff::tz::TimeZone::system();
     let then = stamp.to_zoned(zone.clone());
     let today = jiff::Timestamp::now().to_zoned(zone).date();
@@ -143,7 +159,11 @@ pub fn job_state(state: &str) -> &'static str {
 
 /// How far a job says it has got.
 pub fn progress(progress: &peinit::client::Progress) -> String {
-    let unit = progress.unit.as_deref().map(|unit| format!(" {unit}")).unwrap_or_default();
+    let unit = progress
+        .unit
+        .as_deref()
+        .map(|unit| format!(" {unit}"))
+        .unwrap_or_default();
     match progress.total {
         Some(total) if progress.bounded && total > 0 => {
             format!("{}%", progress.current.saturating_mul(100) / total)
@@ -180,7 +200,9 @@ pub fn process_state(state: char) -> &'static str {
 pub fn closed(closed: Closed) -> &'static str {
     match closed {
         Closed::Refused => "Its permissions don't let you see this.",
-        Closed::Protected => "It is a protected process, which only processes signed at its level may look into.",
+        Closed::Protected => {
+            "It is a protected process, which only processes signed at its level may look into."
+        }
         Closed::Gone => "It has ended.",
         Closed::Unreadable => "This could not be read.",
     }
@@ -190,7 +212,9 @@ pub fn closed(closed: Closed) -> &'static str {
 pub fn protection(psb: &Psb) -> String {
     match (psb.pip_type, psb.pip_trust) {
         (0, _) => "None".into(),
-        (Psb::PIP_PROTECTED, Psb::PIP_TRUST_PEIOS_TCB) => "Protected: signed as part of Peios".into(),
+        (Psb::PIP_PROTECTED, Psb::PIP_TRUST_PEIOS_TCB) => {
+            "Protected: signed as part of Peios".into()
+        }
         (Psb::PIP_PROTECTED, trust) => format!("Protected, at trust {trust}"),
         (kind, trust) => format!("Type {kind}, at trust {trust}"),
     }
@@ -199,15 +223,51 @@ pub fn protection(psb: &Psb) -> String {
 /// The mitigations a process has on, each with what it does.
 pub fn mitigations(on: Mitigations) -> Vec<(&'static str, &'static str)> {
     [
-        (Mitigations::WXP, "Write-XOR-execute", "no memory is both writable and executable"),
-        (Mitigations::LSV, "Signed libraries only", "only signed libraries load"),
-        (Mitigations::TLP, "Trusted library paths", "libraries load only from approved folders"),
-        (Mitigations::CFIF, "Forward-edge CFI", "indirect jumps land only where they may"),
-        (Mitigations::CFIB, "Shadow stack", "returns go only where they came from"),
-        (Mitigations::PIE, "Position-independent only", "only position-independent programs run"),
-        (Mitigations::SML, "Speculation locked", "speculation mitigations can't be turned off"),
-        (Mitigations::NO_CHILD, "No child processes", "it may start no other process"),
-        (Mitigations::UI_ACCESS, "UI access", "it may reach windows above its integrity"),
+        (
+            Mitigations::WXP,
+            "Write-XOR-execute",
+            "no memory is both writable and executable",
+        ),
+        (
+            Mitigations::LSV,
+            "Signed libraries only",
+            "only signed libraries load",
+        ),
+        (
+            Mitigations::TLP,
+            "Trusted library paths",
+            "libraries load only from approved folders",
+        ),
+        (
+            Mitigations::CFIF,
+            "Forward-edge CFI",
+            "indirect jumps land only where they may",
+        ),
+        (
+            Mitigations::CFIB,
+            "Shadow stack",
+            "returns go only where they came from",
+        ),
+        (
+            Mitigations::PIE,
+            "Position-independent only",
+            "only position-independent programs run",
+        ),
+        (
+            Mitigations::SML,
+            "Speculation locked",
+            "speculation mitigations can't be turned off",
+        ),
+        (
+            Mitigations::NO_CHILD,
+            "No child processes",
+            "it may start no other process",
+        ),
+        (
+            Mitigations::UI_ACCESS,
+            "UI access",
+            "it may reach windows above its integrity",
+        ),
     ]
     .into_iter()
     .filter(|(bit, ..)| on.contains(*bit))

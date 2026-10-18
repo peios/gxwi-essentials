@@ -81,15 +81,25 @@ pub fn cause(cause: &str) -> String {
 /// and what more there is to say (`ProcessCrash: exit code 1`). The cause is
 /// said in words, as a state's is; anything else is left as it is.
 pub fn failure(error: &str) -> String {
-    let (name, more) = error.split_once(": ").map_or((error, None), |(name, more)| (name, Some(more)));
-    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphabetic()) || !name.starts_with(|c: char| c.is_ascii_uppercase()) {
+    let (name, more) = error
+        .split_once(": ")
+        .map_or((error, None), |(name, more)| (name, Some(more)));
+    if name.is_empty()
+        || !name.chars().all(|c| c.is_ascii_alphabetic())
+        || !name.starts_with(|c: char| c.is_ascii_uppercase())
+    {
         return error.to_string();
     }
     // ProcessCrash is process_crash on the wire.
     let wire: String = name
         .chars()
         .enumerate()
-        .flat_map(|(at, c)| (c.is_ascii_uppercase() && at > 0).then_some('_').into_iter().chain(std::iter::once(c.to_ascii_lowercase())))
+        .flat_map(|(at, c)| {
+            (c.is_ascii_uppercase() && at > 0)
+                .then_some('_')
+                .into_iter()
+                .chain(std::iter::once(c.to_ascii_lowercase()))
+        })
         .collect();
     let said = cause(&wire);
     if said == wire.replace('_', " ") {
@@ -179,7 +189,10 @@ pub fn named(name: &str) -> Option<Command> {
 /// not change it."
 pub fn sentence(reason: &str) -> String {
     let mut chars = reason.chars();
-    let first: String = chars.next().map(|first| first.to_uppercase().collect()).unwrap_or_default();
+    let first: String = chars
+        .next()
+        .map(|first| first.to_uppercase().collect())
+        .unwrap_or_default();
     format!("{first}{}.", chars.as_str())
 }
 
@@ -190,7 +203,11 @@ pub fn duration(seconds: u64) -> String {
         _ if seconds < 60 => format!("{seconds} s"),
         _ if minutes < 60 => format!("{minutes} min"),
         _ if hours < 24 => format!("{hours} h {} min", minutes % 60),
-        _ => format!("{days} {} {} h", if days == 1 { "day" } else { "days" }, hours % 24),
+        _ => format!(
+            "{days} {} {} h",
+            if days == 1 { "day" } else { "days" },
+            hours % 24
+        ),
     }
 }
 
@@ -226,7 +243,11 @@ pub fn when(at: &str, now: Timestamp, zone: &TimeZone) -> String {
 /// [`when`], of a time already read.
 pub fn when_at(at: Timestamp, now: Timestamp, zone: &TimeZone) -> String {
     let (at, now) = (at.to_zoned(zone.clone()), now.to_zoned(zone.clone()));
-    let clock = if at.second() == 0 { at.strftime("%H:%M") } else { at.strftime("%H:%M:%S") };
+    let clock = if at.second() == 0 {
+        at.strftime("%H:%M")
+    } else {
+        at.strftime("%H:%M:%S")
+    };
     let days = (at.date() - now.date()).get_days();
     let day = match days {
         0 => "today".to_string(),
@@ -249,7 +270,10 @@ pub fn until(at: &str, now: Timestamp) -> Option<String> {
 /// `said` with its first letter a capital, to start a line with.
 pub fn capital(said: &str) -> String {
     let mut chars = said.chars();
-    chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
 }
 
 /// Who a SID is, where it is one of the principals services run as. Anyone
@@ -285,8 +309,14 @@ mod tests {
 
     #[test]
     fn a_failure_is_said_by_its_cause_with_the_rest_as_peinit_says_it() {
-        assert_eq!(failure("ProcessCrash: exit code 1"), "its process crashed (exit code 1)");
-        assert_eq!(failure("ReadinessTimeout"), "it did not become ready in time");
+        assert_eq!(
+            failure("ProcessCrash: exit code 1"),
+            "its process crashed (exit code 1)"
+        );
+        assert_eq!(
+            failure("ReadinessTimeout"),
+            "it did not become ready in time"
+        );
         assert_eq!(failure("SomethingNew: detail"), "SomethingNew: detail");
         assert_eq!(failure("the socket went away"), "the socket went away");
     }
@@ -297,23 +327,56 @@ mod tests {
         let now: Timestamp = "2026-10-03T13:20:00Z".parse().unwrap();
         let utc = TimeZone::UTC;
         let east = TimeZone::fixed(jiff::tz::offset(1));
-        assert_eq!(when("2026-10-03T14:00:00.000000000Z", now, &utc), "today at 14:00");
-        assert_eq!(when("2026-10-03T14:00:00.000000000Z", now, &east), "today at 15:00");
-        assert_eq!(when("2026-10-03T23:30:00.000000000Z", now, &east), "tomorrow at 00:30");
-        assert_eq!(when("2026-10-04T02:07:12.000000000Z", now, &utc), "tomorrow at 02:07:12");
-        assert_eq!(when("2026-10-02T02:00:00.000000000Z", now, &utc), "yesterday at 02:00");
-        assert_eq!(when("2026-10-05T02:00:00.000000000Z", now, &utc), "Monday at 02:00");
-        assert_eq!(when("2026-09-01T00:00:00.000000000Z", now, &utc), "1 Sep at 00:00");
-        assert_eq!(when("2027-01-01T00:00:00.000000000Z", now, &utc), "1 Jan 2027 at 00:00");
+        assert_eq!(
+            when("2026-10-03T14:00:00.000000000Z", now, &utc),
+            "today at 14:00"
+        );
+        assert_eq!(
+            when("2026-10-03T14:00:00.000000000Z", now, &east),
+            "today at 15:00"
+        );
+        assert_eq!(
+            when("2026-10-03T23:30:00.000000000Z", now, &east),
+            "tomorrow at 00:30"
+        );
+        assert_eq!(
+            when("2026-10-04T02:07:12.000000000Z", now, &utc),
+            "tomorrow at 02:07:12"
+        );
+        assert_eq!(
+            when("2026-10-02T02:00:00.000000000Z", now, &utc),
+            "yesterday at 02:00"
+        );
+        assert_eq!(
+            when("2026-10-05T02:00:00.000000000Z", now, &utc),
+            "Monday at 02:00"
+        );
+        assert_eq!(
+            when("2026-09-01T00:00:00.000000000Z", now, &utc),
+            "1 Sep at 00:00"
+        );
+        assert_eq!(
+            when("2027-01-01T00:00:00.000000000Z", now, &utc),
+            "1 Jan 2027 at 00:00"
+        );
         assert_eq!(when("whenever", now, &utc), "whenever");
-        assert_eq!(until("2026-10-03T14:00:00.000000000Z", now).as_deref(), Some("40 min"));
+        assert_eq!(
+            until("2026-10-03T14:00:00.000000000Z", now).as_deref(),
+            Some("40 min")
+        );
         assert_eq!(until("2026-10-03T13:00:00.000000000Z", now), None);
         assert_eq!(capital("tomorrow at 02:00"), "Tomorrow at 02:00");
     }
 
     #[test]
     fn every_command_is_named_by_what_its_button_sends() {
-        for command in [Command::Start, Command::Stop, Command::Restart, Command::Reload, Command::Reset] {
+        for command in [
+            Command::Start,
+            Command::Stop,
+            Command::Restart,
+            Command::Reload,
+            Command::Reset,
+        ] {
             assert_eq!(named(verb(command)), Some(command));
         }
     }

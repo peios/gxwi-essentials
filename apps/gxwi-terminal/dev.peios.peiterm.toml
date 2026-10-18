@@ -1,8 +1,0 @@
-# What peiterm is to a desktop (PGSS Applications): installed as
-# /usr/share/apps/dev.peios.peiterm.toml, named for the id, by the package
-# that installs the program. A directory is opened with it by the shell
-# being opened there.
-title = "Terminal"
-description = "A shell on this system"
-program = "/usr/bin/peiterm"
-opens = ["inode/directory"]

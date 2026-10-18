@@ -9,11 +9,11 @@
 //! showing the window is sent, so it is cleared as soon as it is used or the
 //! form is left.
 
-use libauthd::claim::Claim;
-use libauthd::credential::Policy;
-use libauthd::ident::{Fields as Asked, Record, Value};
-use libauthd::lps::{self, KeyInfo, LogonTypes};
-use libauthd_client::admin::Admin;
+use auth_core::claim::Claim;
+use auth_core::credential::Policy;
+use auth_core::ident::{Fields as Asked, Record, Value};
+use auth_core::lps::{self, KeyInfo, LogonTypes};
+use auth_core::client::admin::Admin;
 use libgxwi::{Fields, escape};
 
 use crate::{claims, directory, keys, words};
@@ -114,7 +114,11 @@ impl Account {
 
     /// What they are called to a person: their full name, if they have one.
     pub fn called(&self) -> &str {
-        if self.full.is_empty() { &self.name } else { &self.full }
+        if self.full.is_empty() {
+            &self.name
+        } else {
+            &self.full
+        }
     }
 }
 
@@ -127,8 +131,28 @@ pub fn short(qualified: &str) -> &str {
 /// Empties the fields a form fills, so each starts afresh.
 pub fn clear(fields: &mut Fields) {
     for name in [
-        "name", "full", "home", "shell", "no-password", "administrator", "new-name", "which", "credential", "primary", "description", "member", "group", "key",
-        "key-label", "claim-name", "claim-type", "claim-values", "principal", "integrity", "owner", "dacl",
+        "name",
+        "full",
+        "home",
+        "shell",
+        "no-password",
+        "administrator",
+        "new-name",
+        "which",
+        "credential",
+        "primary",
+        "description",
+        "member",
+        "group",
+        "key",
+        "key-label",
+        "claim-name",
+        "claim-type",
+        "claim-values",
+        "principal",
+        "integrity",
+        "owner",
+        "dacl",
     ] {
         fields.set(name, "");
     }
@@ -161,7 +185,14 @@ pub fn fill(doing: &Doing, account: &Account, fields: &mut Fields) {
         Doing::Rename => fields.set("new-name", &account.name),
         Doing::SignIn => {
             fields.set("credential", account.policy.map_or("", words::policy_value));
-            fields.set("which", if account.types.is_unstated() { "default" } else { "chosen" });
+            fields.set(
+                "which",
+                if account.types.is_unstated() {
+                    "default"
+                } else {
+                    "chosen"
+                },
+            );
             for (index, (logon_type, _)) in words::LOGON_TYPES.iter().enumerate() {
                 if account.types.permits(*logon_type) {
                     fields.set(&format!("type-{index}"), "on");
@@ -183,7 +214,11 @@ fn buttons(save: &str) -> String {
 /// one, its fields and its buttons.
 pub fn form(label: &str, title: &str, id: &str, body: &str, save: &str) -> String {
     // The name below the title only where the title is something else.
-    let id = if id.is_empty() || id == title { String::new() } else { format!("<p class=\"id\">{}</p>", escape(id)) };
+    let id = if id.is_empty() || id == title {
+        String::new()
+    } else {
+        format!("<p class=\"id\">{}</p>", escape(id))
+    };
     format!(
         "<aside class=\"details\" aria-label=\"{label}\"><form class=\"edit\" fx-submit=\"save\"><h2>{title}</h2>{id}{body}{}</form></aside>",
         buttons(save),
@@ -193,14 +228,31 @@ pub fn form(label: &str, title: &str, id: &str, body: &str, save: &str) -> Strin
 
 /// A list's options: each group's SID as its value, and its name shown.
 pub fn options(choices: &[(String, String)]) -> String {
-    choices.iter().map(|(sid, name)| format!("<option value=\"{}\">{}</option>", escape(sid), escape(name))).collect()
+    choices
+        .iter()
+        .map(|(sid, name)| {
+            format!(
+                "<option value=\"{}\">{}</option>",
+                escape(sid),
+                escape(name)
+            )
+        })
+        .collect()
 }
 
 /// The form for what is being done, for `account` where there is one, with
 /// what came of saving it just above its buttons, where it was pressed.
 /// `choices` are the groups the form may offer, by SID and name.
-pub fn render(doing: &Doing, account: Option<&Account>, fields: &Fields, said: &str, choices: &[(String, String)]) -> String {
-    let form = |label: &str, title: &str, id: &str, body: &str, save: &str| form(label, title, id, &format!("{body}{said}"), save);
+pub fn render(
+    doing: &Doing,
+    account: Option<&Account>,
+    fields: &Fields,
+    said: &str,
+    choices: &[(String, String)],
+) -> String {
+    let form = |label: &str, title: &str, id: &str, body: &str, save: &str| {
+        form(label, title, id, &format!("{body}{said}"), save)
+    };
     match (doing, account) {
         (Doing::New, _) => form(
             "A new user",
@@ -215,7 +267,11 @@ pub fn render(doing: &Doing, account: Option<&Account>, fields: &Fields, said: &
                  <p class=\"hint\">An administrator may change this machine, and its users and groups.</p>\
                  <label>Home<input name=\"home\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"/home/name\"></label>\
                  <label>Shell<input name=\"shell\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"/bin/sh\"></label>",
-                password = if fields.get("no-password").is_empty() { password_fields(false) } else { String::new() },
+                password = if fields.get("no-password").is_empty() {
+                    password_fields(false)
+                } else {
+                    String::new()
+                },
             ),
             "Create",
         ),
@@ -266,16 +322,25 @@ pub fn render(doing: &Doing, account: Option<&Account>, fields: &Fields, said: &
         ),
         (Doing::Password(policy), Some(account)) => {
             let note = match policy {
-                Some(Policy::NoCredential) => "<p class=\"note\">They sign in without a password now. Once this is set, they will need it.</p>",
-                Some(Policy::SshPublicKey) => "<p class=\"note\">They sign in only with an SSH key, so this password won't be used until passwords are allowed.</p>",
-                Some(Policy::Denied) => "<p class=\"note\">Signing in is denied to them whatever they use, so this password won't be used until that changes.</p>",
+                Some(Policy::NoCredential) => {
+                    "<p class=\"note\">They sign in without a password now. Once this is set, they will need it.</p>"
+                }
+                Some(Policy::SshPublicKey) => {
+                    "<p class=\"note\">They sign in only with an SSH key, so this password won't be used until passwords are allowed.</p>"
+                }
+                Some(Policy::Denied) => {
+                    "<p class=\"note\">Signing in is denied to them whatever they use, so this password won't be used until that changes.</p>"
+                }
                 _ => "",
             };
             form(
                 "Set the password",
                 account.called(),
                 &account.name,
-                &format!("{}{note}<p class=\"hint\">Their sessions already signed in carry on.</p>", password_fields(true)),
+                &format!(
+                    "{}{note}<p class=\"hint\">Their sessions already signed in carry on.</p>",
+                    password_fields(true)
+                ),
                 "Set password",
             )
         }
@@ -287,7 +352,9 @@ pub fn render(doing: &Doing, account: Option<&Account>, fields: &Fields, said: &
                 .enumerate()
                 .map(|(index, (_, said))| format!("<label class=\"check\"><input type=\"checkbox\" name=\"type-{index}\"{off}> {}</label>", escape(said)))
                 .collect();
-            let defaults = words::logon_types(LogonTypes::UNSTATED).join(", ").to_lowercase();
+            let defaults = words::logon_types(LogonTypes::UNSTATED)
+                .join(", ")
+                .to_lowercase();
             // What they sign in with is lpsd's to say; where it hasn't, it
             // isn't offered, rather than guessed at.
             let credential = match account.policy {
@@ -298,15 +365,23 @@ pub fn render(doing: &Doing, account: Option<&Account>, fields: &Fields, said: &
                         .map(|(_, sent, said)| format!("<label class=\"check\"><input type=\"radio\" name=\"credential\" value=\"{sent}\"> {}</label>", escape(said)))
                         .collect();
                     let note = match words::policy_of(fields.get("credential")) {
-                        Some(Policy::Password) => "<p class=\"hint\">If they have no password yet, set one under Set password.</p>",
+                        Some(Policy::Password) => {
+                            "<p class=\"hint\">If they have no password yet, set one under Set password.</p>"
+                        }
                         Some(Policy::SshPublicKey) if account.keys.is_empty() => {
                             "<p class=\"note\">They have no SSH key yet. Add one under SSH keys, or they can't sign in.</p>"
                         }
-                        Some(Policy::NoCredential) => "<p class=\"note\">Anyone at a sign-in prompt on this machine can sign in as them.</p>",
-                        Some(Policy::Denied) => "<p class=\"hint\">They can't sign in however they try. Disable them instead if that is what you mean: it says so.</p>",
+                        Some(Policy::NoCredential) => {
+                            "<p class=\"note\">Anyone at a sign-in prompt on this machine can sign in as them.</p>"
+                        }
+                        Some(Policy::Denied) => {
+                            "<p class=\"hint\">They can't sign in however they try. Disable them instead if that is what you mean: it says so.</p>"
+                        }
                         _ => "",
                     };
-                    format!("<fieldset class=\"choice\"><legend>Signs in with</legend>{policies}</fieldset>{note}")
+                    format!(
+                        "<fieldset class=\"choice\"><legend>Signs in with</legend>{policies}</fieldset>{note}"
+                    )
                 }
             };
             form(
@@ -327,10 +402,12 @@ pub fn render(doing: &Doing, account: Option<&Account>, fields: &Fields, said: &
         }
         (Doing::AddKey, Some(account)) => keys::render(account, said),
         (Doing::NewClaim, Some(account)) => claims::render(account, None, fields, said),
-        (Doing::EditClaim(name), Some(account)) => match account.claims.iter().find(|claim| claim.name == *name) {
-            Some(claim) => claims::render(account, Some(claim), fields, said),
-            None => String::new(),
-        },
+        (Doing::EditClaim(name), Some(account)) => {
+            match account.claims.iter().find(|claim| claim.name == *name) {
+                Some(claim) => claims::render(account, Some(claim), fields, said),
+                None => String::new(),
+            }
+        }
         _ => String::new(),
     }
 }
@@ -346,7 +423,10 @@ fn password_fields(focus: bool) -> String {
 
 fn capital(text: &str) -> String {
     let mut chars = text.chars();
-    chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
 }
 
 /// Asking before a user is deleted, offering to disable them instead.
@@ -367,7 +447,7 @@ pub fn asking_delete(account: &Account) -> String {
 }
 
 /// The password typed, if it was typed the same twice.
-fn password(fields: &Fields) -> Result<String, String> {
+fn password(fields: &Fields) -> Result<&str, String> {
     let password = fields.get("password");
     if password.is_empty() {
         return Err("Type a password.".into());
@@ -375,7 +455,7 @@ fn password(fields: &Fields) -> Result<String, String> {
     if password != fields.get("again") {
         return Err("The two passwords differ.".into());
     }
-    Ok(password.to_string())
+    Ok(password)
 }
 
 /// `None` for an empty field: lpsd's default.
@@ -390,7 +470,11 @@ pub fn create(admin: &Admin, fields: &Fields) -> Result<(String, u32), String> {
     if name.is_empty() {
         return Err("Give them a name.".into());
     }
-    let secret = if fields.get("no-password").is_empty() { Some(password(fields)?) } else { None };
+    let secret = if fields.get("no-password").is_empty() {
+        Some(password(fields)?)
+    } else {
+        None
+    };
     let rid = admin
         .add(&lps::Add {
             name: name.clone(),
@@ -399,7 +483,11 @@ pub fn create(admin: &Admin, fields: &Fields) -> Result<(String, u32), String> {
                 None => lps::Credential::None,
             },
             enabled: true,
-            groups: if fields.get("administrator").is_empty() { Vec::new() } else { vec!["Administrators".into()] },
+            groups: if fields.get("administrator").is_empty() {
+                Vec::new()
+            } else {
+                vec!["Administrators".into()]
+            },
             permitted_logon_types: LogonTypes::UNSTATED,
             primary_group: None,
             home: given(fields, "home"),
@@ -419,15 +507,24 @@ pub fn save_profile(admin: &Admin, account: &Account, fields: &Fields) -> Result
         home: changed(fields.get("home"), &account.home),
         shell: changed(fields.get("shell"), &account.shell),
     };
-    let primary = changed(fields.get("primary"), &account.primary).filter(|primary| !primary.is_empty());
-    if profile.display_name.is_none() && profile.home.is_none() && profile.shell.is_none() && primary.is_none() {
+    let primary =
+        changed(fields.get("primary"), &account.primary).filter(|primary| !primary.is_empty());
+    if profile.display_name.is_none()
+        && profile.home.is_none()
+        && profile.shell.is_none()
+        && primary.is_none()
+    {
         return Ok("Nothing was changed.".into());
     }
     if profile.display_name.is_some() || profile.home.is_some() || profile.shell.is_some() {
-        admin.set_profile(&profile).map_err(|refusal| refusal.reason)?;
+        admin
+            .set_profile(&profile)
+            .map_err(|refusal| refusal.reason)?;
     }
     if let Some(primary) = primary {
-        admin.set_primary_group(&account.name, &primary).map_err(|refusal| refusal.reason)?;
+        admin
+            .set_primary_group(&account.name, &primary)
+            .map_err(|refusal| refusal.reason)?;
     }
     Ok(format!("{} is changed.", account.name))
 }
@@ -438,8 +535,13 @@ pub fn save_join(admin: &Admin, account: &Account, fields: &Fields) -> Result<St
     if group.is_empty() {
         return Err("Choose a group.".into());
     }
-    admin.group_add(&account.name, group).map_err(|refusal| refusal.reason)?;
-    Ok(format!("{} is added. It applies from their next sign-in.", account.name))
+    admin
+        .group_add(&account.name, group)
+        .map_err(|refusal| refusal.reason)?;
+    Ok(format!(
+        "{} is added. It applies from their next sign-in.",
+        account.name
+    ))
 }
 
 /// Saves the rename form. Answers the new name.
@@ -448,20 +550,37 @@ pub fn save_rename(admin: &Admin, account: &Account, fields: &Fields) -> Result<
     if new_name.is_empty() {
         return Err("Give them a name.".into());
     }
-    admin.rename(&account.name, &new_name).map_err(|refusal| refusal.reason)?;
+    admin
+        .rename(&account.name, &new_name)
+        .map_err(|refusal| refusal.reason)?;
     Ok(new_name)
 }
 
 /// Saves the password form, letting a user who needed no password sign in
 /// with the one set: what giving them one means (PSPU §10.5).
-pub fn save_password(admin: &Admin, account: &Account, policy: Option<Policy>, fields: &Fields) -> Result<String, String> {
+pub fn save_password(
+    admin: &Admin,
+    account: &Account,
+    policy: Option<Policy>,
+    fields: &Fields,
+) -> Result<String, String> {
     let secret = password(fields)?;
-    admin.set_password(&account.name, secret.as_bytes()).map_err(|refusal| refusal.reason)?;
+    admin
+        .set_password(&account.name, secret.as_bytes())
+        .map_err(|refusal| refusal.reason)?;
     if policy == Some(Policy::NoCredential) {
         admin
             .set_credential_policy(&account.name, Policy::Password)
-            .map_err(|refusal| format!("The password is set, but they still sign in without it: {}", refusal.reason))?;
-        return Ok(format!("{}'s password is set, and they now sign in with it.", account.name));
+            .map_err(|refusal| {
+                format!(
+                    "The password is set, but they still sign in without it: {}",
+                    refusal.reason
+                )
+            })?;
+        return Ok(format!(
+            "{}'s password is set, and they now sign in with it.",
+            account.name
+        ));
     }
     Ok(format!("{}'s password is set.", account.name))
 }
@@ -475,7 +594,9 @@ pub fn chosen_types(fields: &Fields) -> Result<LogonTypes, String> {
         .iter()
         .enumerate()
         .filter(|(index, _)| !fields.get(&format!("type-{index}")).is_empty())
-        .fold(LogonTypes::UNSTATED, |types, (_, (logon_type, _))| types.with(*logon_type));
+        .fold(LogonTypes::UNSTATED, |types, (_, (logon_type, _))| {
+            types.with(*logon_type)
+        });
     if types.is_unstated() {
         return Err("Choose at least one way, or disable them to stop them signing in.".into());
     }
@@ -487,27 +608,38 @@ pub fn chosen_types(fields: &Fields) -> Result<LogonTypes, String> {
 /// the second says the first was made.
 pub fn save_sign_in(admin: &Admin, account: &Account, fields: &Fields) -> Result<String, String> {
     let types = chosen_types(fields)?;
-    let policy = words::policy_of(fields.get("credential")).filter(|policy| Some(*policy) != account.policy);
+    let policy =
+        words::policy_of(fields.get("credential")).filter(|policy| Some(*policy) != account.policy);
     if policy.is_none() && types == account.types {
         return Ok("Nothing was changed.".into());
     }
     if let Some(policy) = policy {
-        admin.set_credential_policy(&account.name, policy).map_err(|refusal| refusal.reason)?;
+        admin
+            .set_credential_policy(&account.name, policy)
+            .map_err(|refusal| refusal.reason)?;
     }
     if types != account.types {
-        admin.set_logon_types(&account.name, types).map_err(|refusal| match policy {
-            Some(_) => format!("What they sign in with is changed, but not the ways they may: {}", refusal.reason),
-            None => refusal.reason,
-        })?;
+        admin
+            .set_logon_types(&account.name, types)
+            .map_err(|refusal| match policy {
+                Some(_) => format!(
+                    "What they sign in with is changed, but not the ways they may: {}",
+                    refusal.reason
+                ),
+                None => refusal.reason,
+            })?;
     }
-    Ok(format!("How {} may sign in is changed. It applies from their next sign-in.", account.name))
+    Ok(format!(
+        "How {} may sign in is changed. It applies from their next sign-in.",
+        account.name
+    ))
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use libauthd::ident::Kind;
-    use libauthd::wire::LogonType;
+    use auth_core::ident::Kind;
+    use auth_core::wire::LogonType;
 
     pub fn dana() -> Account {
         Account {
@@ -530,12 +662,21 @@ pub(crate) mod tests {
         fill(&Doing::SignIn, &dana(), &mut fields);
         assert_eq!(fields.get("credential"), "password");
         let form = render(&Doing::SignIn, Some(&dana()), &fields, "", &[]);
-        assert!(form.contains("<legend>Signs in with</legend>") && form.contains("value=\"either\""), "{form}");
+        assert!(
+            form.contains("<legend>Signs in with</legend>") && form.contains("value=\"either\""),
+            "{form}"
+        );
 
         fields.set("credential", "key");
-        assert!(render(&Doing::SignIn, Some(&dana()), &fields, "", &[]).contains("They have no SSH key yet."));
+        assert!(
+            render(&Doing::SignIn, Some(&dana()), &fields, "", &[])
+                .contains("They have no SSH key yet.")
+        );
 
-        let unsaid = Account { policy: None, ..dana() };
+        let unsaid = Account {
+            policy: None,
+            ..dana()
+        };
         fill(&Doing::SignIn, &unsaid, &mut fields);
         assert!(!render(&Doing::SignIn, Some(&unsaid), &fields, "", &[]).contains("Signs in with"));
     }
@@ -585,22 +726,37 @@ pub(crate) mod tests {
         assert_eq!(chosen_types(&fields).unwrap(), LogonTypes::UNSTATED);
         // The default's ways are ticked, ready to narrow.
         assert_eq!(fields.get("type-0"), "on");
-        assert!(render(&Doing::SignIn, Some(&dana()), &fields, "", &[]).contains("name=\"type-0\" disabled"));
+        assert!(
+            render(&Doing::SignIn, Some(&dana()), &fields, "", &[])
+                .contains("name=\"type-0\" disabled")
+        );
 
         fields.set("which", "chosen");
         for index in 0..words::LOGON_TYPES.len() {
             fields.set(&format!("type-{index}"), "");
         }
-        assert!(chosen_types(&fields).is_err(), "nothing chosen is not a way to stop them signing in");
-        let network = words::LOGON_TYPES.iter().position(|(logon_type, _)| *logon_type == LogonType::Network).unwrap();
+        assert!(
+            chosen_types(&fields).is_err(),
+            "nothing chosen is not a way to stop them signing in"
+        );
+        let network = words::LOGON_TYPES
+            .iter()
+            .position(|(logon_type, _)| *logon_type == LogonType::Network)
+            .unwrap();
         fields.set(&format!("type-{network}"), "on");
-        assert_eq!(chosen_types(&fields).unwrap(), LogonTypes::UNSTATED.with(LogonType::Network));
+        assert_eq!(
+            chosen_types(&fields).unwrap(),
+            LogonTypes::UNSTATED.with(LogonType::Network)
+        );
     }
 
     #[test]
     fn the_new_user_form_asks_for_a_password_unless_none_is_needed() {
         let mut fields = Fields::default();
-        assert!(render(&Doing::New, None, &fields, "", &[]).contains("type=\"password\" name=\"password\""));
+        assert!(
+            render(&Doing::New, None, &fields, "", &[])
+                .contains("type=\"password\" name=\"password\"")
+        );
         fields.set("no-password", "on");
         assert!(!render(&Doing::New, None, &fields, "", &[]).contains("type=\"password\""));
     }
@@ -610,7 +766,10 @@ pub(crate) mod tests {
         let asked = asking_delete(&dana());
         assert!(asked.contains("Their SID is never given to anyone again"));
         assert!(asked.contains("fx-click=\"disable-instead\""));
-        let off = Account { enabled: false, ..dana() };
+        let off = Account {
+            enabled: false,
+            ..dana()
+        };
         assert!(!asking_delete(&off).contains("disable-instead"));
     }
 }

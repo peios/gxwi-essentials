@@ -32,7 +32,12 @@ pub fn page(m: &Manager) -> String {
         n => format!("Audit actions at level {n} or higher are recorded."),
     };
     let mut auditing = Vec::new();
-    for layer in [Layer::Flow, Layer::Packet, Layer::RawPacket, Layer::Interface] {
+    for layer in [
+        Layer::Flow,
+        Layer::Packet,
+        Layer::RawPacket,
+        Layer::Interface,
+    ] {
         for (path, _, rule) in rules::walk(m.config.policy.forest(layer)) {
             if let Some(n) = rule.report() {
                 auditing.push((layer, path, n));
@@ -78,7 +83,17 @@ pub fn page(m: &Manager) -> String {
                 Some(ntfe::Verdict::Reject(_)) => "Rejected",
                 _ => "Blocked",
             };
-            Some((format!("{:02}:{:02}:{:02}", civil.hour, civil.minute, civil.second), e.attributed.clone(), n, format!("{verdict} {}/{} from {}", crate::live::protocol_name(e.protocol), e.dst_port, e.src.map(|a| a.to_string()).unwrap_or_default())))
+            Some((
+                format!("{:02}:{:02}:{:02}", civil.hour, civil.minute, civil.second),
+                e.attributed.clone(),
+                n,
+                format!(
+                    "{verdict} {}/{} from {}",
+                    crate::live::protocol_name(e.protocol),
+                    e.dst_port,
+                    e.src.map(|a| a.to_string()).unwrap_or_default()
+                ),
+            ))
         })
         .take(12)
         .collect();
@@ -89,8 +104,14 @@ pub fn page(m: &Manager) -> String {
     };
     format!(
         r#"{}{}<div class="sect"><h2>Record events from level</h2><div class="panel pad"><div class="levels" role="group" aria-label="Lowest level recorded">{levels}</div><div class="acthelp">{help}</div></div></div><div class="sect"><h2>Rules that audit</h2><div class="panel scroll"><table class="tbl"><thead><tr><th>Rule</th><th>Layer</th><th class="r">Level</th><th>Recorded</th></tr></thead><tbody>{rows}</tbody></table></div></div><div class="sect"><h2>Recent events</h2>{}<div class="panel scroll"><table class="tbl"><thead><tr><th>Time</th><th>Rule</th><th class="r">Level</th><th>Event</th></tr></thead><tbody>{events}</tbody></table></div><div class="footnote">Recorded events are in Event Viewer, as ntfe.verdict.reported events.</div></div>"#,
-        phead("Auditing", "A rule with an Audit action writes an event to the event log each time it decides. Choose the lowest level recorded.", ""),
+        phead(
+            "Auditing",
+            "A rule with an Audit action writes an event to the event log each time it decides. Choose the lowest level recorded.",
+            ""
+        ),
         locked(m.config.may.rules, LOCKED),
-        example("These events are your real rules judging example traffic: the event stream can't be read by programs yet.")
+        example(
+            "These events are your real rules judging example traffic: the event stream can't be read by programs yet."
+        )
     )
 }

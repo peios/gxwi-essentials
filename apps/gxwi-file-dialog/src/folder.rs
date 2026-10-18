@@ -49,7 +49,9 @@ pub fn list(path: &Path, hidden: bool) -> Result<Vec<Entry>, String> {
                 return None;
             }
             // A link is shown as what it leads to, where that can be seen.
-            let metadata = std::fs::metadata(entry.path()).or_else(|_| entry.metadata()).ok();
+            let metadata = std::fs::metadata(entry.path())
+                .or_else(|_| entry.metadata())
+                .ok();
             Some(Entry {
                 name,
                 folder: metadata.as_ref().is_some_and(std::fs::Metadata::is_dir),
@@ -73,7 +75,11 @@ pub struct May {
 impl May {
     /// Everything, for a folder whose descriptor can't be read: the system
     /// decides when it is asked.
-    pub const UNTOLD: May = May { add_file: true, add_folder: true, delete_child: true };
+    pub const UNTOLD: May = May {
+        add_file: true,
+        add_folder: true,
+        delete_child: true,
+    };
 }
 
 /// What the person may do in the folder at `path`.
@@ -98,8 +104,16 @@ pub fn may_delete(path: &Path, folder: May) -> bool {
 /// What the person's token is granted on what is at `path`, as KACS says,
 /// or `None` where its descriptor can't be read.
 fn granted(path: &Path) -> Option<FileAccess> {
-    let sd = peios::file::get_sd(None, path, SecInfo::OWNER | SecInfo::GROUP | SecInfo::DACL, 0).ok()?;
-    let decision = AccessCheck::new(&sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check().ok()?;
+    let sd = peios::file::get_sd(
+        None,
+        path,
+        SecInfo::OWNER | SecInfo::GROUP | SecInfo::DACL,
+        0,
+    )
+    .ok()?;
+    let decision = AccessCheck::new(&sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping())
+        .check()
+        .ok()?;
     Some(FileAccess::from_bits_truncate(decision.granted.bits()))
 }
 
@@ -152,7 +166,11 @@ fn refused(e: &std::io::Error, what: &str) -> String {
 pub fn size(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1000 {
-        return if bytes == 1 { "1 byte".into() } else { format!("{bytes} bytes") };
+        return if bytes == 1 {
+            "1 byte".into()
+        } else {
+            format!("{bytes} bytes")
+        };
     }
     let mut amount = bytes as f64 / 1000.0;
     let mut unit = 0;
@@ -160,7 +178,11 @@ pub fn size(bytes: u64) -> String {
         amount /= 1000.0;
         unit += 1;
     }
-    if amount < 10.0 { format!("{amount:.1} {}", UNITS[unit]) } else { format!("{amount:.0} {}", UNITS[unit]) }
+    if amount < 10.0 {
+        format!("{amount:.1} {}", UNITS[unit])
+    } else {
+        format!("{amount:.0} {}", UNITS[unit])
+    }
 }
 
 #[cfg(test)]
@@ -168,7 +190,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("gxwi-file-dialog-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("gxwi-file-dialog-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -181,11 +204,23 @@ mod tests {
         std::fs::write(dir.join("A.json"), "").unwrap();
         std::fs::write(dir.join(".profile"), "").unwrap();
         std::fs::create_dir(dir.join("zeta")).unwrap();
-        let names = |hidden| list(&dir, hidden).unwrap().into_iter().map(|e| e.name).collect::<Vec<_>>();
+        let names = |hidden| {
+            list(&dir, hidden)
+                .unwrap()
+                .into_iter()
+                .map(|e| e.name)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(false), ["zeta", "A.json", "b.txt"]);
         assert_eq!(names(true), ["zeta", ".profile", "A.json", "b.txt"]);
-        assert_eq!(list(&dir.join("b.txt"), false).unwrap_err(), "This is not a folder.");
-        assert_eq!(list(&dir.join("nowhere"), false).unwrap_err(), "There is no folder here.");
+        assert_eq!(
+            list(&dir.join("b.txt"), false).unwrap_err(),
+            "This is not a folder."
+        );
+        assert_eq!(
+            list(&dir.join("nowhere"), false).unwrap_err(),
+            "There is no folder here."
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -196,7 +231,11 @@ mod tests {
         std::fs::write(made.join("inside"), "x").unwrap();
         assert!(make_folder(&dir, "New").unwrap_err().contains("already"));
         std::fs::write(dir.join("taken"), "").unwrap();
-        assert!(rename(&dir, "New", "taken").unwrap_err().contains("already"));
+        assert!(
+            rename(&dir, "New", "taken")
+                .unwrap_err()
+                .contains("already")
+        );
         rename(&dir, "New", "Old").unwrap();
         delete(&dir.join("Old")).unwrap();
         assert!(!dir.join("Old").exists());

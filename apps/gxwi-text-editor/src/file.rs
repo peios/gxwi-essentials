@@ -80,8 +80,14 @@ pub enum Refused {
 impl fmt::Display for Refused {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Refused::TooLarge(len) => write!(f, "This file is too large to edit here: it is {len} bytes, and the most is {MOST}."),
-            Refused::NotText => write!(f, "This file is not text, so it is not shown: saving it from here would damage it."),
+            Refused::TooLarge(len) => write!(
+                f,
+                "This file is too large to edit here: it is {len} bytes, and the most is {MOST}."
+            ),
+            Refused::NotText => write!(
+                f,
+                "This file is not text, so it is not shown: saving it from here would damage it."
+            ),
             Refused::NotAFile => write!(f, "This is not a file."),
             Refused::Denied => write!(f, "You are not allowed to read this file."),
             Refused::Other(why) => write!(f, "This file could not be read: {why}."),
@@ -92,7 +98,10 @@ impl fmt::Display for Refused {
 /// The file at `path` as it is now, or `None` if there is nothing there.
 pub fn seen(path: &Path) -> io::Result<Option<Seen>> {
     match std::fs::metadata(path) {
-        Ok(metadata) => Ok(Some(Seen { modified: metadata.modified().ok(), len: metadata.len() })),
+        Ok(metadata) => Ok(Some(Seen {
+            modified: metadata.modified().ok(),
+            len: metadata.len(),
+        })),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
@@ -121,8 +130,15 @@ pub fn read(path: &Path) -> Result<Read, Refused> {
     }
     let text = String::from_utf8(bytes).map_err(|_| Refused::NotText)?;
     let endings = Endings::of(&text);
-    let seen = Seen { modified: metadata.modified().ok(), len: metadata.len() };
-    Ok(Read { text: text.replace("\r\n", "\n"), endings, seen })
+    let seen = Seen {
+        modified: metadata.modified().ok(),
+        len: metadata.len(),
+    };
+    Ok(Read {
+        text: text.replace("\r\n", "\n"),
+        endings,
+        seen,
+    })
 }
 
 /// Writes `text` to the file at `path`, its lines ending as `endings` says.
@@ -135,19 +151,28 @@ pub fn write(path: &Path, text: &str, endings: Endings, new: bool) -> io::Result
     };
     let mut options = std::fs::OpenOptions::new();
     options.write(true);
-    if new { options.create_new(true) } else { options.create(true).truncate(true) };
+    if new {
+        options.create_new(true)
+    } else {
+        options.create(true).truncate(true)
+    };
     let mut file = options.open(path)?;
     file.write_all(text.as_bytes())?;
     file.sync_all()?;
     let metadata = file.metadata()?;
-    Ok(Seen { modified: metadata.modified().ok(), len: metadata.len() })
+    Ok(Seen {
+        modified: metadata.modified().ok(),
+        len: metadata.len(),
+    })
 }
 
 /// Whether this process may write the file at `path`, or make it if it is
 /// not there: the system's word, asked the way a write would ask it.
 pub fn may_write(path: &Path) -> bool {
     let allowed = |path: &Path| {
-        let Ok(cpath) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else { return false };
+        let Ok(cpath) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else {
+            return false;
+        };
         // SAFETY: a NUL-terminated string, live for the call.
         unsafe { libc::access(cpath.as_ptr(), libc::W_OK) == 0 }
     };
@@ -162,7 +187,10 @@ mod tests {
     use super::*;
 
     fn dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("peitor-file-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "gxwi-text-editor-file-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -174,7 +202,10 @@ mod tests {
         let path = dir.join("dos.txt");
         std::fs::write(&path, "one\r\ntwo\r\n").unwrap();
         let read = read(&path).unwrap();
-        assert_eq!((read.text.as_str(), read.endings), ("one\ntwo\n", Endings::ReturnFeed));
+        assert_eq!(
+            (read.text.as_str(), read.endings),
+            ("one\ntwo\n", Endings::ReturnFeed)
+        );
         write(&path, "one\ntwo\nthree\n", read.endings, false).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"one\r\ntwo\r\nthree\r\n");
 
@@ -182,7 +213,10 @@ mod tests {
         assert_eq!(super::read(&path).unwrap().endings, Endings::Feed);
         std::fs::write(&path, "one\r\ntwo\nthree").unwrap();
         let mixed = super::read(&path).unwrap();
-        assert_eq!((mixed.text.as_str(), mixed.endings), ("one\ntwo\nthree", Endings::Mixed));
+        assert_eq!(
+            (mixed.text.as_str(), mixed.endings),
+            ("one\ntwo\nthree", Endings::Mixed)
+        );
         write(&path, &mixed.text, mixed.endings, false).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"one\ntwo\nthree");
         std::fs::remove_dir_all(dir).unwrap();
@@ -201,7 +235,10 @@ mod tests {
         std::fs::write(&path, vec![b'a'; MOST]).unwrap();
         assert_eq!(read(&path).unwrap().text.len(), MOST);
         assert_eq!(read(&dir).unwrap_err(), Refused::NotAFile);
-        assert!(matches!(read(&dir.join("nothing")).unwrap_err(), Refused::Other(_)));
+        assert!(matches!(
+            read(&dir.join("nothing")).unwrap_err(),
+            Refused::Other(_)
+        ));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -210,7 +247,12 @@ mod tests {
         let dir = dir("new");
         let path = dir.join("kept.txt");
         std::fs::write(&path, "kept").unwrap();
-        assert_eq!(write(&path, "lost", Endings::Feed, true).unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            write(&path, "lost", Endings::Feed, true)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::AlreadyExists
+        );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "kept");
         let made = write(&dir.join("made.txt"), "made", Endings::Feed, true).unwrap();
         assert_eq!(seen(&dir.join("made.txt")).unwrap(), Some(made));

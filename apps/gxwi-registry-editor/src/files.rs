@@ -30,9 +30,14 @@ pub struct Held {
 
 /// Which of the backup privileges the person's token holds.
 pub fn held() -> Held {
-    let present = Token::open_self(false, TokenAccess::QUERY).and_then(|token| token.privileges()).map(|privileges| privileges.present);
+    let present = Token::open_self(false, TokenAccess::QUERY)
+        .and_then(|token| token.privileges())
+        .map(|privileges| privileges.present);
     match present {
-        Ok(present) => Held { backup: present.contains(Privileges::BACKUP), restore: present.contains(Privileges::RESTORE) },
+        Ok(present) => Held {
+            backup: present.contains(Privileges::BACKUP),
+            restore: present.contains(Privileges::RESTORE),
+        },
         Err(_) => Held::default(),
     }
 }
@@ -49,8 +54,18 @@ pub enum Purpose {
 /// What to ask the file dialog, for the key at `path`.
 pub fn request(purpose: Purpose, path: &str) -> Request {
     let leaf = path.rsplit('\\').next().unwrap_or(path);
-    let documents = || vec![Filter { name: "Registry documents".into(), extensions: vec!["json".into()] }];
-    let backups = || vec![Filter { name: "Registry backups".into(), extensions: vec!["regbackup".into()] }];
+    let documents = || {
+        vec![Filter {
+            name: "Registry documents".into(),
+            extensions: vec!["json".into()],
+        }]
+    };
+    let backups = || {
+        vec![Filter {
+            name: "Registry backups".into(),
+            extensions: vec!["regbackup".into()],
+        }]
+    };
     let folder = std::env::var_os("HOME").map(PathBuf::from);
     let (mode, title, purpose_said, name, filters) = match purpose {
         Purpose::Export => (
@@ -60,7 +75,13 @@ pub fn request(purpose: Purpose, path: &str) -> Request {
             Some(format!("{leaf}.json")),
             documents(),
         ),
-        Purpose::Import => (Mode::Open, "Import a registry document".to_string(), "Its keys and values are written into the registry.".to_string(), None, documents()),
+        Purpose::Import => (
+            Mode::Open,
+            "Import a registry document".to_string(),
+            "Its keys and values are written into the registry.".to_string(),
+            None,
+            documents(),
+        ),
         Purpose::Backup => (
             Mode::Save,
             format!("Back up {leaf}"),
@@ -76,7 +97,14 @@ pub fn request(purpose: Purpose, path: &str) -> Request {
             backups(),
         ),
     };
-    Request { mode, title, purpose: Some(purpose_said), folder, name, filters }
+    Request {
+        mode,
+        title,
+        purpose: Some(purpose_said),
+        folder,
+        name,
+        filters,
+    }
 }
 
 /// Writes the key at `path`, and everything under it, to `file` as a
@@ -91,7 +119,8 @@ pub fn export(path: &str, file: &Path) -> Result<usize, String> {
 /// Reads the registry document in `file`.
 pub fn read(file: &Path) -> Result<Document, String> {
     let text = std::fs::read_to_string(file).map_err(|e| unread(&e, file))?;
-    serde_json::from_str(&text).map_err(|e| format!("{} is not a registry document: {e}.", file.display()))
+    serde_json::from_str(&text)
+        .map_err(|e| format!("{} is not a registry document: {e}.", file.display()))
 }
 
 /// Writes `doc` into the registry, into `layer`, all or nothing.
@@ -106,17 +135,26 @@ pub fn import(doc: &Document, layer: Option<&str>) -> Result<usize, String> {
 
 /// Copies the key at `path`, and everything under it, to `file`.
 pub fn backup(path: &str, file: &Path) -> Result<(), String> {
-    let key = Key::open(None, path, KeyAccess::READ, OpenFlags::empty()).map_err(|e| refused(&e, "back it up"))?;
+    let key = Key::open(None, path, KeyAccess::READ, OpenFlags::empty())
+        .map_err(|e| refused(&e, "back it up"))?;
     let out = std::fs::File::create(file).map_err(|e| unwritten(&e, file))?;
-    key.backup(out.as_fd()).map_err(|e| refused(&e, "back it up"))
+    key.backup(out.as_fd())
+        .map_err(|e| refused(&e, "back it up"))
 }
 
 /// Replaces the key at `path`, and everything under it, with the backup in
 /// `file`.
 pub fn restore(path: &str, file: &Path) -> Result<(), String> {
-    let key = Key::open(None, path, KeyAccess::WRITE | KeyAccess::CREATE_SUB_KEY, OpenFlags::empty()).map_err(|e| refused(&e, "restore it"))?;
+    let key = Key::open(
+        None,
+        path,
+        KeyAccess::WRITE | KeyAccess::CREATE_SUB_KEY,
+        OpenFlags::empty(),
+    )
+    .map_err(|e| refused(&e, "restore it"))?;
     let input = std::fs::File::open(file).map_err(|e| unread(&e, file))?;
-    key.restore(input.as_fd()).map_err(|e| refused(&e, "restore it"))
+    key.restore(input.as_fd())
+        .map_err(|e| refused(&e, "restore it"))
 }
 
 /// Where `doc` writes, in words: its first key, and how many in all.
@@ -124,7 +162,12 @@ pub fn reach(doc: &Document) -> String {
     match doc.keys.as_slice() {
         [] => "nothing".into(),
         [only] => only.path.clone(),
-        [first, rest @ ..] => format!("{} and {} more {}", first.path, rest.len(), if rest.len() == 1 { "key" } else { "keys" }),
+        [first, rest @ ..] => format!(
+            "{} and {} more {}",
+            first.path,
+            rest.len(),
+            if rest.len() == 1 { "key" } else { "keys" }
+        ),
     }
 }
 
@@ -137,11 +180,19 @@ fn refused(e: &peios::Error, what: &str) -> String {
 }
 
 fn unwritten(e: &std::io::Error, file: &Path) -> String {
-    if e.raw_os_error() == Some(EACCES) { format!("You may not write {}.", file.display()) } else { format!("{} could not be written: {e}.", file.display()) }
+    if e.raw_os_error() == Some(EACCES) {
+        format!("You may not write {}.", file.display())
+    } else {
+        format!("{} could not be written: {e}.", file.display())
+    }
 }
 
 fn unread(e: &std::io::Error, file: &Path) -> String {
-    if e.raw_os_error() == Some(EACCES) { format!("You may not read {}.", file.display()) } else { format!("{} could not be read: {e}.", file.display()) }
+    if e.raw_os_error() == Some(EACCES) {
+        format!("You may not read {}.", file.display())
+    } else {
+        format!("{} could not be read: {e}.", file.display())
+    }
 }
 
 #[cfg(test)]
@@ -151,24 +202,40 @@ mod tests {
     #[test]
     fn the_dialog_is_asked_for_a_file_of_the_right_kind() {
         let export = request(Purpose::Export, r"Machine\System\Services");
-        assert_eq!((export.mode, export.title.as_str(), export.name.as_deref()), (Mode::Save, "Export Services", Some("Services.json")));
+        assert_eq!(
+            (export.mode, export.title.as_str(), export.name.as_deref()),
+            (Mode::Save, "Export Services", Some("Services.json"))
+        );
         assert_eq!(export.filters[0].extensions, ["json"]);
         let restore = request(Purpose::Restore, r"Machine\App");
-        assert_eq!((restore.mode, restore.filters[0].extensions[0].as_str()), (Mode::Open, "regbackup"));
+        assert_eq!(
+            (restore.mode, restore.filters[0].extensions[0].as_str()),
+            (Mode::Open, "regbackup")
+        );
     }
 
     #[test]
     fn a_document_says_where_it_writes() {
-        let doc: Document = serde_json::from_str(r#"{"keys":[{"path":"Machine\\A"},{"path":"Machine\\A\\B"},{"path":"Machine\\A\\C"}]}"#).unwrap();
+        let doc: Document = serde_json::from_str(
+            r#"{"keys":[{"path":"Machine\\A"},{"path":"Machine\\A\\B"},{"path":"Machine\\A\\C"}]}"#,
+        )
+        .unwrap();
         assert_eq!(reach(&doc), r"Machine\A and 2 more keys");
         assert_eq!(reach(&Document::default()), "nothing");
     }
 
     #[test]
     fn a_file_that_is_not_a_document_says_so() {
-        let file = std::env::temp_dir().join(format!("gxwi-registry-editor-not-a-document-{}", std::process::id()));
+        let file = std::env::temp_dir().join(format!(
+            "gxwi-registry-editor-not-a-document-{}",
+            std::process::id()
+        ));
         std::fs::write(&file, "hello").unwrap();
-        assert!(read(&file).unwrap_err().contains("is not a registry document"));
+        assert!(
+            read(&file)
+                .unwrap_err()
+                .contains("is not a registry document")
+        );
         std::fs::remove_file(file).unwrap();
     }
 }

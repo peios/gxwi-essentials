@@ -31,7 +31,9 @@ pub fn may_change(path: &str, what: &str) -> Result<(), String> {
     match Key::open(None, path, KeyAccess::SET_VALUE, OpenFlags::empty()) {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == ErrorKind::NotFound => {
-            let parent = path.rsplit_once('\\').map_or("Machine", |(parent, _)| parent);
+            let parent = path
+                .rsplit_once('\\')
+                .map_or("Machine", |(parent, _)| parent);
             Key::open(None, parent, KeyAccess::CREATE_SUB_KEY, OpenFlags::empty())
                 .map(|_| ())
                 .map_err(|error| refused(&error, what, path))
@@ -45,7 +47,9 @@ pub fn refused(error: &peios::Error, what: &str, _path: &str) -> String {
     match error.kind() {
         // Every key these settings write is the person's own, so a refusal
         // means someone has narrowed it on purpose.
-        ErrorKind::PermissionDenied => format!("You can look, but you can't change {what}: someone has narrowed who may."),
+        ErrorKind::PermissionDenied => {
+            format!("You can look, but you can't change {what}: someone has narrowed who may.")
+        }
         _ => format!("{what} can't be changed: {error}."),
     }
 }
@@ -53,8 +57,15 @@ pub fn refused(error: &peios::Error, what: &str, _path: &str) -> String {
 /// Values to set, `None` to remove one, all made at once or not at all.
 pub fn set(path: &str, what: &str, values: &[(&str, Option<Data>)]) -> Result<(), String> {
     let txn = Transaction::begin().map_err(|e| format!("Couldn't change {what}: {e}."))?;
-    let (key, _) = Key::create(None, path, KeyAccess::SET_VALUE, CreateFlags::empty(), None, Some(&txn))
-        .map_err(|e| refused(&e, what, path))?;
+    let (key, _) = Key::create(
+        None,
+        path,
+        KeyAccess::SET_VALUE,
+        CreateFlags::empty(),
+        None,
+        Some(&txn),
+    )
+    .map_err(|e| refused(&e, what, path))?;
     for (name, value) in values {
         match value {
             Some(data) => key
@@ -69,5 +80,6 @@ pub fn set(path: &str, what: &str, values: &[(&str, Option<Data>)]) -> Result<()
             },
         }
     }
-    txn.commit().map_err(|e| format!("Couldn't change {what}: {e}."))
+    txn.commit()
+        .map_err(|e| format!("Couldn't change {what}: {e}."))
 }

@@ -1,0 +1,8 @@
+/target/
+/bazel-*
+/.ci-sdk/
+/.ci-tools/
+**/__pycache__/
+*.pyc
+**/node_modules/
+/docs/learn/dist/

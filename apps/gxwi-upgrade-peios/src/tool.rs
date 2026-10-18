@@ -46,13 +46,20 @@ pub fn status() -> Result<Status, String> {
     if !out.status.success() {
         return Err(said(&String::from_utf8_lossy(&out.stderr), "upgrade-peios"));
     }
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("upgrade-peios's answer couldn't be read: {e}"))
+    serde_json::from_slice(&out.stdout)
+        .map_err(|e| format!("upgrade-peios's answer couldn't be read: {e}"))
 }
 
 /// The last thing a tool said on failing, without its name in front.
 fn said(stderr: &str, tool: &str) -> String {
-    let line = stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("it failed without saying why");
-    line.trim().trim_start_matches(&format!("{tool}: ")).to_string()
+    let line = stderr
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("it failed without saying why");
+    line.trim()
+        .trim_start_matches(&format!("{tool}: "))
+        .to_string()
 }
 
 /// One event of a driven run: peipkg's, passed on, and upgrade-peios's own.
@@ -88,7 +95,10 @@ pub enum Event {
 impl Event {
     /// Whether this is how the run ended.
     pub fn ends(&self) -> bool {
-        matches!(self, Event::Done { .. } | Event::Cancelled { .. } | Event::Error { .. })
+        matches!(
+            self,
+            Event::Done { .. } | Event::Cancelled { .. } | Event::Error { .. }
+        )
     }
 }
 
@@ -149,7 +159,9 @@ impl Answers {
     pub fn answer(&self, id: u64, answer: &str) {
         let line = serde_json::json!({ "id": id, "answer": answer }).to_string() + "\n";
         if let Some(stdin) = self.0.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            let _ = stdin.write_all(line.as_bytes()).and_then(|()| stdin.flush());
+            let _ = stdin
+                .write_all(line.as_bytes())
+                .and_then(|()| stdin.flush());
         }
     }
 
@@ -161,7 +173,11 @@ impl Answers {
 
 /// Starts `program --driven` with `args`, handing each event to `heard` on
 /// a thread of its own, ending with exactly one that [`Event::ends`] it.
-fn drive_program(program: &'static str, args: &[String], mut heard: impl FnMut(Event) + Send + 'static) -> Result<Answers, String> {
+fn drive_program(
+    program: &'static str,
+    args: &[String],
+    mut heard: impl FnMut(Event) + Send + 'static,
+) -> Result<Answers, String> {
     let name = program.rsplit('/').next().unwrap_or(program);
     let mut child = Command::new(program)
         .arg("--driven")
@@ -179,7 +195,9 @@ fn drive_program(program: &'static str, args: &[String], mut heard: impl FnMut(E
         let mut ended = false;
         for line in BufReader::new(stdout).lines() {
             let Ok(line) = line else { break };
-            let Ok(event) = serde_json::from_str::<Event>(&line) else { continue };
+            let Ok(event) = serde_json::from_str::<Event>(&line) else {
+                continue;
+            };
             ended = event.ends();
             heard(event);
             if ended {
@@ -193,15 +211,25 @@ fn drive_program(program: &'static str, args: &[String], mut heard: impl FnMut(E
         let _ = std::io::Read::read_to_string(&mut BufReader::new(stderr), &mut fault);
         let _ = child.wait();
         if !ended {
-            let message = if fault.trim().is_empty() { format!("{name} stopped without saying how it ended") } else { said(&fault, name) };
-            heard(Event::Error { code: "failed".into(), message });
+            let message = if fault.trim().is_empty() {
+                format!("{name} stopped without saying how it ended")
+            } else {
+                said(&fault, name)
+            };
+            heard(Event::Error {
+                code: "failed".into(),
+                message,
+            });
         }
     });
     Ok(answers)
 }
 
 /// Starts `upgrade-peios --driven` with `args`.
-pub fn drive(args: &[String], heard: impl FnMut(Event) + Send + 'static) -> Result<Answers, String> {
+pub fn drive(
+    args: &[String],
+    heard: impl FnMut(Event) + Send + 'static,
+) -> Result<Answers, String> {
     drive_program(PROGRAM, args, heard)
 }
 
@@ -220,10 +248,21 @@ struct Repository {
 /// choice, in Package Manager, never a side effect of looking for a
 /// release. Whatever goes wrong is left for the check after it to say.
 pub fn refresh_trusted() {
-    let Ok(out) = Command::new(PEIPKG).args(["repo", "list", "--json"]).stdin(Stdio::null()).output() else { return };
+    let Ok(out) = Command::new(PEIPKG)
+        .args(["repo", "list", "--json"])
+        .stdin(Stdio::null())
+        .output()
+    else {
+        return;
+    };
     let repositories: Vec<Repository> = serde_json::from_slice(&out.stdout).unwrap_or_default();
     let mut args = vec!["refresh".to_string()];
-    args.extend(repositories.into_iter().filter(|r| r.trusted).map(|r| r.name));
+    args.extend(
+        repositories
+            .into_iter()
+            .filter(|r| r.trusted)
+            .map(|r| r.name),
+    );
     if args.len() == 1 {
         return;
     }
@@ -253,22 +292,49 @@ mod tests {
         .unwrap();
         assert_eq!(status.version.as_deref(), Some("2026.8-1"));
         assert_eq!(status.queued_seeds, Some(vec![]));
-        let unread: Status = serde_json::from_str(r#"{"edition":"e","may_upgrade":false,"queued_seeds":null,"version":null}"#).unwrap();
+        let unread: Status = serde_json::from_str(
+            r#"{"edition":"e","may_upgrade":false,"queued_seeds":null,"version":null}"#,
+        )
+        .unwrap();
         assert_eq!((unread.queued_seeds, unread.may_upgrade), (None, false));
     }
 
     #[test]
     fn its_own_events_read_beside_peipkgs() {
-        let done: Event = serde_json::from_str(r#"{"edition":"e","event":"done","seeds_queued":true,"summary":"1 seed(s) queued"}"#).unwrap();
-        assert_eq!(done, Event::Done { summary: Some("1 seed(s) queued".into()), seeds_queued: true });
-        let checked: Event = serde_json::from_str(r#"{"edition":"e","event":"done","summary":"dry run"}"#).unwrap();
-        assert!(matches!(checked, Event::Done { seeds_queued: false, .. }));
-        let staging: Event = serde_json::from_str(r#"{"event":"progress","phase":"release-stage","step":1,"steps":2}"#).unwrap();
-        assert!(matches!(staging, Event::Progress(Progress { ref phase, .. }) if phase == "release-stage"));
+        let done: Event = serde_json::from_str(
+            r#"{"edition":"e","event":"done","seeds_queued":true,"summary":"1 seed(s) queued"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            done,
+            Event::Done {
+                summary: Some("1 seed(s) queued".into()),
+                seeds_queued: true
+            }
+        );
+        let checked: Event =
+            serde_json::from_str(r#"{"edition":"e","event":"done","summary":"dry run"}"#).unwrap();
+        assert!(matches!(
+            checked,
+            Event::Done {
+                seeds_queued: false,
+                ..
+            }
+        ));
+        let staging: Event = serde_json::from_str(
+            r#"{"event":"progress","phase":"release-stage","step":1,"steps":2}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(staging, Event::Progress(Progress { ref phase, .. }) if phase == "release-stage")
+        );
     }
 
     #[test]
     fn a_failure_is_its_last_line() {
-        assert_eq!(said("upgrade-peios: no VARIANT_ID\n", "upgrade-peios"), "no VARIANT_ID");
+        assert_eq!(
+            said("upgrade-peios: no VARIANT_ID\n", "upgrade-peios"),
+            "no VARIANT_ID"
+        );
     }
 }

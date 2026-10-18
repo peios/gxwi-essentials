@@ -1,0 +1,7 @@
+# What File Explorer is to a desktop (PGSS Applications): installed as
+# /usr/share/apps/dev.peios.gxwi-file-explorer.toml, named for the id, by the package
+# that installs the program.
+title = "File Explorer"
+description = "Browse the files on this system"
+program = "/usr/bin/gxwi-file-explorer"
+opens = ["inode/directory"]

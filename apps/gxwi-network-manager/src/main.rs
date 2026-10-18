@@ -30,7 +30,10 @@ libgxwi::icon!(b"dev.peios.gxwi-network-manager");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
-        eprintln!("gxwi-network-manager: usage: gxwi-network-manager (given {:?})", std::env::args().skip(1).collect::<Vec<_>>());
+        eprintln!(
+            "gxwi-network-manager: usage: gxwi-network-manager (given {:?})",
+            std::env::args().skip(1).collect::<Vec<_>>()
+        );
         std::process::exit(64);
     }
     let mut app = match App::connect() {
@@ -41,7 +44,10 @@ fn main() {
         }
     };
     libgxwi::settings::stylesheet(&mut app);
-    app.stylesheet("/gxwi-network-manager.css", include_str!("gxwi-network-manager.css"));
+    app.stylesheet(
+        "/gxwi-network-manager.css",
+        include_str!("gxwi-network-manager.css"),
+    );
     let window = app.live("Network Manager", Manager::new());
     let aside = std::sync::Arc::downgrade(&window);
     window.update(|manager, fields| {

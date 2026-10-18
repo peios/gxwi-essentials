@@ -5,7 +5,7 @@
 //! a key: lpsd keeps adding a key and allowing one apart (PSPU §10.8), and
 //! so does this, saying so where it matters.
 
-use libauthd_client::admin::Admin;
+use auth_core::client::admin::Admin;
 
 use crate::accounts::{Account, form};
 
@@ -37,9 +37,14 @@ pub fn save(admin: &Admin, account: &Account, fields: &libgxwi::Fields) -> Resul
     if key.is_empty() {
         return Err("Paste their public key.".into());
     }
-    admin.key_add(&account.name, key, fields.get("key-label").trim()).map_err(|refusal| refusal.reason)?;
+    admin
+        .key_add(&account.name, key, fields.get("key-label").trim())
+        .map_err(|refusal| refusal.reason)?;
     Ok(match account.policy {
-        Some(policy) if !policy.ssh() => format!("The key is added. {} can't sign in with it until Sign-in allows a key.", account.name),
+        Some(policy) if !policy.ssh() => format!(
+            "The key is added. {} can't sign in with it until Sign-in allows a key.",
+            account.name
+        ),
         _ => "The key is added.".into(),
     })
 }
@@ -64,7 +69,7 @@ pub fn id_of(text: &str) -> Option<[u8; 16]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libauthd::credential::Policy;
+    use auth_core::credential::Policy;
 
     #[test]
     fn a_key_s_id_goes_and_comes_back() {
@@ -75,9 +80,15 @@ mod tests {
 
     #[test]
     fn a_key_not_yet_allowed_is_said_to_be() {
-        let account = Account { policy: Some(Policy::Password), ..crate::accounts::tests::dana() };
+        let account = Account {
+            policy: Some(Policy::Password),
+            ..crate::accounts::tests::dana()
+        };
         assert!(render(&account, "").contains("won't be used until it does"));
-        let account = Account { policy: Some(Policy::PasswordOrKey), ..account };
+        let account = Account {
+            policy: Some(Policy::PasswordOrKey),
+            ..account
+        };
         assert!(!render(&account, "").contains("won't be used"));
     }
 }

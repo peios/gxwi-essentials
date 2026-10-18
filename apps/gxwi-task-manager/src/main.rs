@@ -7,7 +7,7 @@
 //! is, with no more authority than they have. What is defined, rather than
 //! what is running, is Services Manager's.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
@@ -46,11 +46,15 @@ struct Looker {
     perf: perf::Reader,
 }
 
+// Polling and explicit refresh share these counters and caches for this process.
+// The mutex serializes complete snapshots so deltas always compare consecutive reads.
 static LOOKER: Mutex<Option<Looker>> = Mutex::new(None);
 
 /// One look at the machine.
 fn look() -> Seen {
-    let mut guard = LOOKER.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut guard = LOOKER
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let looker = guard.get_or_insert_with(|| Looker {
         ticks: HashMap::new(),
         machine: None,
@@ -64,7 +68,10 @@ fn look() -> Seen {
         (Some((was_total, was_idle)), Some((total, idle))) if total > was_total => {
             let spent = total - was_total;
             let busy = spent.saturating_sub(idle.saturating_sub(was_idle));
-            (procs::shares(&looker.ticks, &procs, spent), Some(busy as f64 * 100.0 / spent as f64))
+            (
+                procs::shares(&looker.ticks, &procs, spent),
+                Some(busy as f64 * 100.0 / spent as f64),
+            )
         }
         _ => (HashMap::new(), None),
     };
@@ -87,8 +94,9 @@ fn look() -> Seen {
 
     // A process whose cgroup the person can't read, such as a protected
     // one, may still be a service's main process, which peinit will say.
-    looker.mains.retain(|pid, _| procs.iter().any(|p| p.pid == *pid));
-    let unknown: Vec<u32> = procs
+    let running_pids: HashSet<u32> = procs.iter().map(|process| process.pid).collect();
+    looker.mains.retain(|pid, _| running_pids.contains(pid));
+    let unknown: HashSet<u32> = procs
         .iter()
         .filter(|p| p.member.is_none() && p.stat.is_err() && !looker.mains.contains_key(&p.pid))
         .map(|p| p.pid)
@@ -96,7 +104,10 @@ fn look() -> Seen {
     if !unknown.is_empty()
         && let (Ok(client), Ok(services)) = (control.as_mut(), &services)
     {
-        for summary in services.iter().filter(|s| s.state == State::Active || s.state == State::Reloading) {
+        for summary in services
+            .iter()
+            .filter(|s| s.state == State::Active || s.state == State::Reloading)
+        {
             if let Ok(status) = client.status_of(&summary.service)
                 && let Some(pid) = status.job.and_then(|job| job.pid)
                 && unknown.contains(&pid)
@@ -111,7 +122,10 @@ fn look() -> Seen {
 
     let sessions = Session::list().map_err(|e| match e.raw_os_error() {
         Some(libc::EACCES) => "Only Administrators may see everyone who is signed in.".to_string(),
-        Some(libc::ENOENT) => "The kernel's list of who is signed in isn't there: securityfs isn't mounted.".to_string(),
+        Some(libc::ENOENT) => {
+            "The kernel's list of who is signed in isn't there: securityfs isn't mounted."
+                .to_string()
+        }
         _ => format!("Who is signed in couldn't be read: {e}"),
     });
 
@@ -130,7 +144,7 @@ fn look() -> Seen {
     // name for: it is called by the service.
     if let Ok(services) = &services {
         for summary in services {
-            if let Some(sid) = libauthd_policy::service_sid::of(&summary.service)
+            if let Some(sid) = auth_policy::service_sid::of(&summary.service)
                 && names.get(&sid).is_some_and(|name| *name == sid.to_string())
             {
                 names.insert(sid, format!("{} service", summary.service));
@@ -146,7 +160,11 @@ fn look() -> Seen {
         machine: looker.perf.look(),
         services,
         jobs,
-        mains: looker.mains.iter().filter_map(|(pid, s)| Some((*pid, s.clone()?))).collect(),
+        mains: looker
+            .mains
+            .iter()
+            .filter_map(|(pid, s)| Some((*pid, s.clone()?)))
+            .collect(),
         names,
         sessions,
         uptime: std::fs::read_to_string("/proc/uptime")
@@ -154,6 +172,7 @@ fn look() -> Seen {
             .and_then(|text| text.split_whitespace().next()?.parse().ok()),
         // SAFETY: sysconf reads a constant.
         ticks_per_second: u64::try_from(unsafe { libc::sysconf(libc::_SC_CLK_TCK) }).unwrap_or(100),
+        // SAFETY: sysconf reads a constant and takes no pointers.
         page_size: u64::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).unwrap_or(4096),
     }
 }
@@ -168,7 +187,9 @@ pub fn look_now(window: &Arc<Surface<Manager>>) {
 fn look_again(window: Weak<Surface<Manager>>) {
     loop {
         std::thread::sleep(LOOK_AGAIN);
-        let Some(shown) = window.upgrade() else { return };
+        let Some(shown) = window.upgrade() else {
+            return;
+        };
         look_now(&shown);
     }
 }
@@ -185,7 +206,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gxwi-task-manager.css", include_str!("gxwi-task-manager.css"));
+    app.stylesheet(
+        "/gxwi-task-manager.css",
+        include_str!("gxwi-task-manager.css"),
+    );
     let window = app.live("Task Manager", Manager::new(look()));
     let aside = Arc::downgrade(&window);
     window.update(|manager, _| manager.window = aside.clone());

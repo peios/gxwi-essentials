@@ -20,6 +20,15 @@ pub enum Tick {
     Inherited,
 }
 
+/// One explicit rights-checkbox change, including the identity and scope it targets.
+pub struct RightsChange {
+    pub sid: Sid,
+    pub scope: u8,
+    pub mask: u32,
+    pub way: Way,
+    pub on: bool,
+}
+
 /// A rule that depends on a condition: up to two entries, an allow and a
 /// refusal, for one person and one scope, sharing one condition.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,7 +80,10 @@ impl CondOf {
 
 /// Whether an entry is one the boxes of Access stand for.
 pub fn plain(e: &Entry) -> bool {
-    e.kept.is_none() && e.ace.cond.is_none() && e.ace.object.is_none() && matches!(e.ace.way, Way::Allow | Way::Deny)
+    e.kept.is_none()
+        && e.ace.cond.is_none()
+        && e.ace.object.is_none()
+        && matches!(e.ace.way, Way::Allow | Way::Deny)
 }
 
 /// Its rank in the standard order: what is made here before what is
@@ -101,7 +113,10 @@ pub fn in_order(aces: Vec<Ace>) -> Vec<Ace> {
 /// The first two entries out of the standard order, if there are any.
 /// Entries KACS does not act on do not count: it skips them.
 pub fn disorder(aces: &[Ace]) -> Option<(Ace, Ace)> {
-    let known: Vec<&Ace> = aces.iter().filter(|a| matches!(a.way, Way::Allow | Way::Deny)).collect();
+    let known: Vec<&Ace> = aces
+        .iter()
+        .filter(|a| matches!(a.way, Way::Allow | Way::Deny))
+        .collect();
     for j in 1..known.len() {
         for i in 0..j {
             if rank(known[j]) < rank(known[i]) {
@@ -121,8 +136,16 @@ impl Simple {
     /// and inherited, by the masks they make between them, mapped.
     pub fn masks(&self, obj: &Obj, sid: &Sid, scope: u8) -> ((u32, u32), (u32, u32)) {
         let (mut made, mut inh) = ((0, 0), (0, 0));
-        for e in self.entries().iter().filter(|e| plain(e) && e.ace.sid.as_ref() == Some(sid) && (!obj.container || e.ace.flags & SHAPE == scope)) {
-            let pair = if e.ace.inherited() { &mut inh } else { &mut made };
+        for e in self.entries().iter().filter(|e| {
+            plain(e)
+                && e.ace.sid.as_ref() == Some(sid)
+                && (!obj.container || e.ace.flags & SHAPE == scope)
+        }) {
+            let pair = if e.ace.inherited() {
+                &mut inh
+            } else {
+                &mut made
+            };
             if e.ace.way == Way::Allow {
                 pair.0 |= obj.mapped(e.ace.mask);
             } else {
@@ -144,21 +167,36 @@ impl Simple {
                 Tick::No
             }
         };
-        rights.iter().map(|&r| (tick(made.0, inh.0, r), tick(made.1, inh.1, r))).collect()
+        rights
+            .iter()
+            .map(|&r| (tick(made.0, inh.0, r), tick(made.1, inh.1, r)))
+            .collect()
     }
 
     /// Whether the general rights can say everything `sid` has in `scope`.
     pub fn simple_for(&self, obj: &Obj, sid: &Sid, scope: u8) -> bool {
         let (made, inh) = self.masks(obj, sid, scope);
-        [made.0, made.1, inh.0, inh.1].into_iter().all(|m| obj.fits_general(m))
+        [made.0, made.1, inh.0, inh.1]
+            .into_iter()
+            .all(|m| obj.fits_general(m))
     }
 
     /// Puts a new entry where the standard order puts it: refusals before
     /// allows, what is made here before what is inherited.
     pub fn place(&mut self, ace: Ace) {
         let list = self.dacl_mut();
-        let first_inherited = list.iter().position(|e| e.ace.inherited()).unwrap_or(list.len());
-        let at = if ace.way == Way::Deny { list[..first_inherited].iter().position(|e| e.ace.way == Way::Allow).unwrap_or(first_inherited) } else { first_inherited };
+        let first_inherited = list
+            .iter()
+            .position(|e| e.ace.inherited())
+            .unwrap_or(list.len());
+        let at = if ace.way == Way::Deny {
+            list[..first_inherited]
+                .iter()
+                .position(|e| e.ace.way == Way::Allow)
+                .unwrap_or(first_inherited)
+        } else {
+            first_inherited
+        };
         list.insert(at, Entry { ace, kept: None });
     }
 
@@ -166,9 +204,28 @@ impl Simple {
     /// Ticking one way unticks the other. An entry whose rights come back to
     /// what it was read as takes back the mask it was read with, generic
     /// rights and all (`was`). Whether anything changed.
-    pub fn tick(&mut self, obj: &Obj, ids: &mut Ids, was: &dyn Fn(u32) -> Option<u32>, sid: Sid, scope: u8, mask: u32, way: Way, on: bool) -> bool {
+    pub fn tick(
+        &mut self,
+        obj: &Obj,
+        ids: &mut Ids,
+        was: &dyn Fn(u32) -> Option<u32>,
+        change: RightsChange,
+    ) -> bool {
+        let RightsChange {
+            sid,
+            scope,
+            mask,
+            way,
+            on,
+        } = change;
         let before = self.dacl.clone();
-        let ours = |e: &Entry, w: Way| plain(e) && !e.ace.inherited() && e.ace.way == w && e.ace.sid == Some(sid) && (!obj.container || e.ace.flags & SHAPE == scope);
+        let ours = |e: &Entry, w: Way| {
+            plain(e)
+                && !e.ace.inherited()
+                && e.ace.way == w
+                && e.ace.sid == Some(sid)
+                && (!obj.container || e.ace.flags & SHAPE == scope)
+        };
         let settle = |e: &mut Entry, m: u32| {
             e.ace.mask = match was(e.ace.id) {
                 Some(orig) if obj.mapped(orig) == m && orig != m => orig,
@@ -183,9 +240,17 @@ impl Simple {
             list.retain(|e| !(ours(e, w) && core(obj.mapped(e.ace.mask)) == 0));
         };
         if on {
-            let other = if way == Way::Allow { Way::Deny } else { Way::Allow };
+            let other = if way == Way::Allow {
+                Way::Deny
+            } else {
+                Way::Allow
+            };
             take(self.dacl_mut(), other);
-            let add = if way == Way::Allow && obj.synced() { mask | SYNCHRONIZE } else { core(mask) };
+            let add = if way == Way::Allow && obj.synced() {
+                mask | SYNCHRONIZE
+            } else {
+                core(mask)
+            };
             match self.dacl_mut().iter_mut().find(|e| ours(e, way)) {
                 Some(e) => {
                     let m = obj.mapped(e.ace.mask) | add;
@@ -221,16 +286,41 @@ impl Simple {
     pub fn cards(&self, sid: &Sid) -> Vec<Card> {
         let mut cards: Vec<Card> = Vec::new();
         for e in self.entries() {
-            let (Some(Cond::Tree(node)), true, Some(s)) = (&e.ace.cond, e.kept.is_none() && e.ace.object.is_none(), e.ace.sid) else { continue };
+            let (Some(Cond::Tree(node)), true, Some(s)) = (
+                &e.ace.cond,
+                e.kept.is_none() && e.ace.object.is_none(),
+                e.ace.sid,
+            ) else {
+                continue;
+            };
             if s != *sid {
                 continue;
             }
             let shape = e.ace.flags & SHAPE;
-            let card = cards.iter_mut().find(|c| c.flags == shape && c.inherited == e.ace.inherited() && c.node == *node && (if e.ace.way == Way::Allow { c.allow.is_none() } else { c.deny.is_none() }));
+            let card = cards.iter_mut().find(|c| {
+                c.flags == shape
+                    && c.inherited == e.ace.inherited()
+                    && c.node == *node
+                    && (if e.ace.way == Way::Allow {
+                        c.allow.is_none()
+                    } else {
+                        c.deny.is_none()
+                    })
+            });
             let card = match card {
                 Some(c) => c,
                 None => {
-                    cards.push(Card { key: e.ace.id, sid: s, flags: shape, allow: None, deny: None, allow_mask: 0, deny_mask: 0, node: node.clone(), inherited: e.ace.inherited() });
+                    cards.push(Card {
+                        key: e.ace.id,
+                        sid: s,
+                        flags: shape,
+                        allow: None,
+                        deny: None,
+                        allow_mask: 0,
+                        deny_mask: 0,
+                        node: node.clone(),
+                        inherited: e.ace.inherited(),
+                    });
                     cards.last_mut().expect("a card")
                 }
             };
@@ -247,7 +337,9 @@ impl Simple {
 
     pub fn card(&self, key: u32) -> Option<Card> {
         let sid = self.entries().iter().find(|e| e.ace.id == key)?.ace.sid?;
-        self.cards(&sid).into_iter().find(|c| c.key == key || c.allow == Some(key) || c.deny == Some(key))
+        self.cards(&sid)
+            .into_iter()
+            .find(|c| c.key == key || c.allow == Some(key) || c.deny == Some(key))
     }
 
     fn entry_mut(&mut self, id: u32) -> Option<&mut Entry> {
@@ -257,9 +349,18 @@ impl Simple {
     /// A new rule depending on a condition for `sid`, allowing the
     /// second-least general right. Its key.
     pub fn new_card(&mut self, obj: &Obj, ids: &mut Ids, sid: Sid) -> u32 {
-        let mask = obj.general.iter().rev().nth(1).or(obj.general.last()).map_or(0, |r| r.mask);
+        let mask = obj
+            .general
+            .iter()
+            .rev()
+            .nth(1)
+            .or(obj.general.last())
+            .map_or(0, |r| r.mask);
         let id = ids.next();
-        self.place(Ace { cond: Some(Cond::Tree(Node::fresh())), ..Ace::new(id, Way::Allow, obj.home(), mask, sid) });
+        self.place(Ace {
+            cond: Some(Cond::Tree(Node::fresh())),
+            ..Ace::new(id, Way::Allow, obj.home(), mask, sid)
+        });
         id
     }
 
@@ -275,16 +376,27 @@ impl Simple {
     /// refuses: it is not taken away under the person.
     pub fn card_tick(&mut self, obj: &Obj, ids: &mut Ids, key: u32, mask: u32, way: Way, on: bool) {
         let Some(card) = self.card(key) else { return };
-        let (mine, other) = if way == Way::Allow { (card.allow, card.deny) } else { (card.deny, card.allow) };
+        let (mine, other) = if way == Way::Allow {
+            (card.allow, card.deny)
+        } else {
+            (card.deny, card.allow)
+        };
         if on {
             if let Some(e) = other.and_then(|id| self.entry_mut(id)) {
                 e.ace.mask &= !core(mask);
             }
-            let add = if way == Way::Allow && obj.synced() { mask | SYNCHRONIZE } else { core(mask) };
+            let add = if way == Way::Allow && obj.synced() {
+                mask | SYNCHRONIZE
+            } else {
+                core(mask)
+            };
             match mine.and_then(|id| self.entry_mut(id)) {
                 Some(e) => e.ace.mask |= add,
                 None => {
-                    let ace = Ace { cond: Some(Cond::Tree(card.node.clone())), ..Ace::new(ids.next(), way, card.flags, add, card.sid) };
+                    let ace = Ace {
+                        cond: Some(Cond::Tree(card.node.clone())),
+                        ..Ace::new(ids.next(), way, card.flags, add, card.sid)
+                    };
                     self.place(ace);
                 }
             }
@@ -293,8 +405,20 @@ impl Simple {
         }
         let Some(now) = self.card(key) else { return };
         let ids_now: Vec<u32> = [now.allow, now.deny].into_iter().flatten().collect();
-        let empty: Vec<u32> = ids_now.iter().copied().filter(|id| self.entries().iter().any(|e| e.ace.id == *id && core(e.ace.mask) == 0)).collect();
-        let drop: Vec<u32> = if empty.len() < ids_now.len() { empty } else { empty.into_iter().skip(1).collect() };
+        let empty: Vec<u32> = ids_now
+            .iter()
+            .copied()
+            .filter(|id| {
+                self.entries()
+                    .iter()
+                    .any(|e| e.ace.id == *id && core(e.ace.mask) == 0)
+            })
+            .collect();
+        let drop: Vec<u32> = if empty.len() < ids_now.len() {
+            empty
+        } else {
+            empty.into_iter().skip(1).collect()
+        };
         self.dacl_mut().retain(|e| !drop.contains(&e.ace.id));
     }
 
@@ -314,10 +438,28 @@ impl Simple {
             CondOf::Card(key) => {
                 let card = self.card(key)?;
                 let id = card.allow.or(card.deny)?;
-                self.entries().iter().find(|e| e.ace.id == id)?.ace.cond.as_ref()?.tree()
+                self.entries()
+                    .iter()
+                    .find(|e| e.ace.id == id)?
+                    .ace
+                    .cond
+                    .as_ref()?
+                    .tree()
             }
-            CondOf::Rule(key) => self.parts.iter().find(|r| r.ids.first() == Some(&key))?.cond.as_ref()?.tree(),
-            CondOf::Audit(key) => self.audits.iter().find(|a| a.ids.first() == Some(&key))?.cond.as_ref()?.tree(),
+            CondOf::Rule(key) => self
+                .parts
+                .iter()
+                .find(|r| r.ids.first() == Some(&key))?
+                .cond
+                .as_ref()?
+                .tree(),
+            CondOf::Audit(key) => self
+                .audits
+                .iter()
+                .find(|a| a.ids.first() == Some(&key))?
+                .cond
+                .as_ref()?
+                .tree(),
             CondOf::Entry(_) => None,
         }
     }
@@ -359,7 +501,18 @@ impl Simple {
         let id = ids.next();
         let flags = if obj.container { obj.home() } else { 0 };
         let read = obj.part_rights().first().map_or(0x10, |(_, m)| *m);
-        self.parts.push(PartRule { ids: vec![id], sid, parts: vec![part], allow: read, deny: 0, cond: None, flags, kind: None, deny_at: usize::MAX, allow_at: usize::MAX });
+        self.parts.push(PartRule {
+            ids: vec![id],
+            sid,
+            parts: vec![part],
+            allow: read,
+            deny: 0,
+            cond: None,
+            flags,
+            kind: None,
+            deny_at: usize::MAX,
+            allow_at: usize::MAX,
+        });
         Some(id)
     }
 
@@ -369,17 +522,42 @@ impl Simple {
 
     /// A new auditing rule for `sid`, recording failures to write. Its key.
     pub fn new_audit(&mut self, obj: &Obj, ids: &mut Ids, sid: Sid) -> u32 {
-        let write = obj.general.iter().find(|r| r.name.eq_ignore_ascii_case("Write")).map_or(obj.generic.write, |r| r.mask);
+        let write = obj
+            .general
+            .iter()
+            .find(|r| r.name.eq_ignore_ascii_case("Write"))
+            .map_or(obj.generic.write, |r| r.mask);
         let id = ids.next();
         self.sacl = true;
-        self.audits.push(Audit { ids: vec![id], sid, flags: obj.home(), ok: 0, fail: write, cond: None, parts: None, kind: None, every: false, inherited: false });
+        self.audits.push(Audit {
+            ids: vec![id],
+            sid,
+            flags: obj.home(),
+            ok: 0,
+            fail: write,
+            cond: None,
+            parts: None,
+            kind: None,
+            every: false,
+            inherited: false,
+        });
         id
     }
 
     pub fn new_claim(&mut self, obj: &Obj, ids: &mut Ids) -> u32 {
         let id = ids.next();
         self.sacl = true;
-        self.claims.push(ClaimItem { id, claim: Claim { name: String::new(), kind: ClaimType::Text, flags: 0, values: vec![] }, inherit: obj.container, inherited: false });
+        self.claims.push(ClaimItem {
+            id,
+            claim: Claim {
+                name: String::new(),
+                kind: ClaimType::Text,
+                flags: 0,
+                values: vec![],
+            },
+            inherit: obj.container,
+            inherited: false,
+        });
         id
     }
 
@@ -388,7 +566,17 @@ impl Simple {
         if let Some(list) = self.dacl.take() {
             let aces: Vec<Ace> = list.iter().map(|e| e.ace.clone()).collect();
             let ordered = in_order(aces);
-            self.dacl = Some(ordered.into_iter().map(|a| list.iter().find(|e| e.ace.id == a.id).expect("the same entries").clone()).collect());
+            self.dacl = Some(
+                ordered
+                    .into_iter()
+                    .map(|a| {
+                        list.iter()
+                            .find(|e| e.ace.id == a.id)
+                            .expect("the same entries")
+                            .clone()
+                    })
+                    .collect(),
+            );
         }
     }
 
@@ -450,15 +638,30 @@ impl Simple {
             1 => bits.push(one.into()),
             n => bits.push(format!("{n} {many}")),
         };
-        count(self.audits.iter().filter(|a| a.inherited).count(), "1 auditing rule", "auditing rules", &mut bits);
+        count(
+            self.audits.iter().filter(|a| a.inherited).count(),
+            "1 auditing rule",
+            "auditing rules",
+            &mut bits,
+        );
         if self.label.as_ref().is_some_and(|l| l.inherited) {
             bits.push("the integrity label".into());
         }
         if self.trust.as_ref().is_some_and(|t| t.inherited) {
             bits.push("the process trust label".into());
         }
-        count(self.claims.iter().filter(|c| c.inherited).count(), "1 claim", "claims", &mut bits);
-        count(self.policies.iter().filter(|p| p.inherited).count(), "1 central access policy", "central access policies", &mut bits);
+        count(
+            self.claims.iter().filter(|c| c.inherited).count(),
+            "1 claim",
+            "claims",
+            &mut bits,
+        );
+        count(
+            self.policies.iter().filter(|p| p.inherited).count(),
+            "1 central access policy",
+            "central access policies",
+            &mut bits,
+        );
         bits
     }
 }
@@ -470,7 +673,14 @@ mod tests {
 
     fn simple(text: &str) -> (Simple, Ids) {
         let (sd, _, ids) = read(text);
-        (Simple::read(&folder(), sd.dacl.as_ref().map(|a| a.aces.as_slice()), sd.sacl.as_ref().map(|a| a.aces.as_slice())), ids)
+        (
+            Simple::read(
+                &folder(),
+                sd.dacl.as_ref().map(|a| a.aces.as_slice()),
+                sd.sacl.as_ref().map(|a| a.aces.as_slice()),
+            ),
+            ids,
+        )
     }
 
     fn sid(text: &str) -> Sid {
@@ -486,15 +696,58 @@ mod tests {
         let everyone = sid("S-1-1-0");
         let none = |_: u32| None;
         let write = 0x100116;
-        assert!(s.tick(&f, &mut ids, &none, everyone, OICI, write, Way::Allow, true));
+        assert!(s.tick(
+            &f,
+            &mut ids,
+            &none,
+            RightsChange {
+                sid: everyone,
+                scope: OICI,
+                mask: write,
+                way: Way::Allow,
+                on: true
+            }
+        ));
         assert_eq!(s.entries()[0].ace.mask, 0x1200a9 | write);
-        assert!(s.tick(&f, &mut ids, &none, everyone, OICI, write, Way::Deny, true));
-        let ways: Vec<_> = s.entries().iter().map(|e| (e.ace.way, e.ace.mask)).collect();
+        assert!(s.tick(
+            &f,
+            &mut ids,
+            &none,
+            RightsChange {
+                sid: everyone,
+                scope: OICI,
+                mask: write,
+                way: Way::Deny,
+                on: true
+            }
+        ));
+        let ways: Vec<_> = s
+            .entries()
+            .iter()
+            .map(|e| (e.ace.way, e.ace.mask))
+            .collect();
         assert_eq!(ways[0], (Way::Deny, core(write)));
-        assert_eq!(s.shown(&f, &everyone, OICI, &[write])[0], (Tick::No, Tick::Yes));
+        assert_eq!(
+            s.shown(&f, &everyone, OICI, &[write])[0],
+            (Tick::No, Tick::Yes)
+        );
         // Inherited ticks show, and are not the box's to untick.
-        assert_eq!(s.shown(&f, &sid("S-1-5-18"), OICI, &[0x120089])[0], (Tick::Inherited, Tick::No));
-        assert!(!s.tick(&f, &mut ids, &none, sid("S-1-5-18"), OICI, 0x120089, Way::Allow, false));
+        assert_eq!(
+            s.shown(&f, &sid("S-1-5-18"), OICI, &[0x120089])[0],
+            (Tick::Inherited, Tick::No)
+        );
+        assert!(!s.tick(
+            &f,
+            &mut ids,
+            &none,
+            RightsChange {
+                sid: sid("S-1-5-18"),
+                scope: OICI,
+                mask: 0x120089,
+                way: Way::Allow,
+                on: false
+            }
+        ));
     }
 
     #[test]
@@ -503,9 +756,31 @@ mod tests {
         let (mut s, mut ids) = simple("O:SYG:SYD:(A;OICI;GA;;;WD)");
         let was = |_: u32| Some(GENERIC_ALL);
         let everyone = sid("S-1-1-0");
-        assert!(s.tick(&f, &mut ids, &was, everyone, OICI, 0x100116, Way::Allow, false));
+        assert!(s.tick(
+            &f,
+            &mut ids,
+            &was,
+            RightsChange {
+                sid: everyone,
+                scope: OICI,
+                mask: 0x100116,
+                way: Way::Allow,
+                on: false
+            }
+        ));
         assert_ne!(s.entries()[0].ace.mask, GENERIC_ALL);
-        s.tick(&f, &mut ids, &was, everyone, OICI, 0x1f01ff, Way::Allow, true);
+        s.tick(
+            &f,
+            &mut ids,
+            &was,
+            RightsChange {
+                sid: everyone,
+                scope: OICI,
+                mask: 0x1f01ff,
+                way: Way::Allow,
+                on: true,
+            },
+        );
         assert_eq!(s.entries()[0].ace.mask, GENERIC_ALL);
     }
 
@@ -519,7 +794,11 @@ mod tests {
         assert!(card.allow.is_some() && card.deny.is_some());
         assert_eq!(s.entries()[0].ace.way, Way::Deny, "the refusal goes first");
         s.with_cond(CondOf::Card(key), |c| *c = Some(Cond::Tree(Node::fresh())));
-        assert!(s.entries().iter().all(|e| e.ace.cond == Some(Cond::Tree(Node::fresh()))));
+        assert!(
+            s.entries()
+                .iter()
+                .all(|e| e.ace.cond == Some(Cond::Tree(Node::fresh())))
+        );
         s.card_tick(&f, &mut ids, key, 0x100116, Way::Deny, false);
         s.card_tick(&f, &mut ids, key, 0x1200a9, Way::Allow, false);
         assert_eq!(s.entries().len(), 1, "one entry stays, with nothing in it");
@@ -538,12 +817,19 @@ mod tests {
 
     #[test]
     fn stopping_inheritance_keeps_or_removes_what_came_down() {
-        let (mut s, _) = simple("O:SYG:SYD:(A;;0x1;;;WD)(A;OICIID;FA;;;SY)S:(ML;OICIID;NW;;;ME)(AU;OICIIDFA;0x1;;;WD)");
-        assert_eq!(s.sacl_inherited(), ["1 auditing rule", "the integrity label"]);
+        let (mut s, _) = simple(
+            "O:SYG:SYD:(A;;0x1;;;WD)(A;OICIID;FA;;;SY)S:(ML;OICIID;NW;;;ME)(AU;OICIIDFA;0x1;;;WD)",
+        );
+        assert_eq!(
+            s.sacl_inherited(),
+            ["1 auditing rule", "the integrity label"]
+        );
         let mut kept = s.clone();
         kept.stop_access(true);
         kept.stop_sacl(true);
-        assert!(kept.entries().iter().all(|e| !e.ace.inherited()) && kept.sacl_inherited().is_empty());
+        assert!(
+            kept.entries().iter().all(|e| !e.ace.inherited()) && kept.sacl_inherited().is_empty()
+        );
         s.stop_access(false);
         s.stop_sacl(false);
         assert_eq!(s.entries().len(), 1);

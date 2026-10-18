@@ -30,7 +30,13 @@ pub fn free(into: &Path, name: &str) -> PathBuf {
         _ => (name, ""),
     };
     (1u32..)
-        .map(|n| if n == 1 { format!("{stem} (copy){kind}") } else { format!("{stem} (copy {n}){kind}") })
+        .map(|n| {
+            if n == 1 {
+                format!("{stem} (copy){kind}")
+            } else {
+                format!("{stem} (copy {n}){kind}")
+            }
+        })
         .map(|name| into.join(name))
         .find(|path| !taken(path))
         .unwrap_or_else(|| into.join(name))
@@ -52,11 +58,17 @@ pub fn copy(from: &Path, to: &Path) -> io::Result<()> {
         std::fs::set_permissions(to, metadata.permissions())
     } else if metadata.is_file() {
         if taken(to) {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "there is already something there"));
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "there is already something there",
+            ));
         }
         std::fs::copy(from, to).map(|_| ())
     } else {
-        Err(io::Error::other(format!("{} is not a file, a directory or a link", from.display())))
+        Err(io::Error::other(format!(
+            "{} is not a file, a directory or a link",
+            from.display()
+        )))
     }
 }
 
@@ -64,7 +76,10 @@ pub fn copy(from: &Path, to: &Path) -> io::Result<()> {
 /// volumes that is a copy, and then what was copied deleted.
 pub fn move_to(from: &Path, to: &Path) -> io::Result<()> {
     if taken(to) {
-        return Err(io::Error::new(io::ErrorKind::AlreadyExists, "there is already something there"));
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "there is already something there",
+        ));
     }
     match std::fs::rename(from, to) {
         Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {
@@ -89,7 +104,9 @@ pub fn delete(path: &Path) -> io::Result<()> {
 pub fn reads_as_text(path: &Path) -> bool {
     use std::io::Read;
     let mut beginning = vec![0u8; 4096];
-    let Ok(read) = std::fs::File::open(path).and_then(|mut file| file.read(&mut beginning)) else { return false };
+    let Ok(read) = std::fs::File::open(path).and_then(|mut file| file.read(&mut beginning)) else {
+        return false;
+    };
     let beginning = &beginning[..read];
     if beginning.contains(&0) {
         return false;
@@ -106,7 +123,10 @@ mod tests {
     use super::*;
 
     fn dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("gexora-work-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "gxwi-file-explorer-work-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -115,7 +135,13 @@ mod tests {
     #[test]
     fn a_copy_is_given_a_name_nothing_has() {
         let dir = dir("free");
-        let name = |name: &str| free(&dir, name).file_name().unwrap().to_string_lossy().into_owned();
+        let name = |name: &str| {
+            free(&dir, name)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        };
         assert_eq!(name("notes.txt"), "notes.txt");
         std::fs::write(dir.join("notes.txt"), "").unwrap();
         assert_eq!(name("notes.txt"), "notes (copy).txt");
@@ -140,14 +166,34 @@ mod tests {
         std::os::unix::fs::symlink("one.txt", dir.join("from/link")).unwrap();
         std::os::unix::fs::symlink("/nowhere/at/all", dir.join("from/broken")).unwrap();
         copy(&dir.join("from"), &dir.join("to")).unwrap();
-        assert_eq!(std::fs::read_to_string(dir.join("to/one.txt")).unwrap(), "one");
-        assert_eq!(std::fs::read_to_string(dir.join("to/inner/deeper/two.txt")).unwrap(), "two");
-        assert_eq!(std::fs::read_link(dir.join("to/link")).unwrap(), Path::new("one.txt"));
-        assert_eq!(std::fs::read_link(dir.join("to/broken")).unwrap(), Path::new("/nowhere/at/all"));
-        assert_eq!(std::fs::read_to_string(dir.join("from/one.txt")).unwrap(), "one");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("to/one.txt")).unwrap(),
+            "one"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("to/inner/deeper/two.txt")).unwrap(),
+            "two"
+        );
+        assert_eq!(
+            std::fs::read_link(dir.join("to/link")).unwrap(),
+            Path::new("one.txt")
+        );
+        assert_eq!(
+            std::fs::read_link(dir.join("to/broken")).unwrap(),
+            Path::new("/nowhere/at/all")
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("from/one.txt")).unwrap(),
+            "one"
+        );
         // Nothing is copied onto what is there.
         assert!(copy(&dir.join("from"), &dir.join("to")).is_err());
-        assert_eq!(copy(&dir.join("from/one.txt"), &dir.join("to/one.txt")).unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            copy(&dir.join("from/one.txt"), &dir.join("to/one.txt"))
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::AlreadyExists
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -157,11 +203,19 @@ mod tests {
         std::fs::create_dir_all(dir.join("from/inner")).unwrap();
         std::fs::write(dir.join("from/inner/one.txt"), "one").unwrap();
         std::fs::write(dir.join("taken"), "kept").unwrap();
-        assert_eq!(move_to(&dir.join("from"), &dir.join("taken")).unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            move_to(&dir.join("from"), &dir.join("taken"))
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::AlreadyExists
+        );
         assert_eq!(std::fs::read_to_string(dir.join("taken")).unwrap(), "kept");
         move_to(&dir.join("from"), &dir.join("to")).unwrap();
         assert!(!dir.join("from").exists());
-        assert_eq!(std::fs::read_to_string(dir.join("to/inner/one.txt")).unwrap(), "one");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("to/inner/one.txt")).unwrap(),
+            "one"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -36,7 +36,14 @@ impl Layer {
     }
 
     pub fn by(key: &str) -> Option<Layer> {
-        [Layer::Flow, Layer::Packet, Layer::RawPacket, Layer::Interface].into_iter().find(|l| l.key().eq_ignore_ascii_case(key))
+        [
+            Layer::Flow,
+            Layer::Packet,
+            Layer::RawPacket,
+            Layer::Interface,
+        ]
+        .into_iter()
+        .find(|l| l.key().eq_ignore_ascii_case(key))
     }
 
     /// What the person calls it.
@@ -111,7 +118,12 @@ impl Eq for Cond {}
 
 impl Cond {
     pub fn new(fact: &str, op: &str, items: &[&str]) -> Cond {
-        Cond { fact: fact.into(), op: op.into(), items: items.iter().map(|s| s.to_string()).collect(), was: None }
+        Cond {
+            fact: fact.into(),
+            op: op.into(),
+            items: items.iter().map(|s| s.to_string()).collect(),
+            was: None,
+        }
     }
 
     /// The value name it is written as.
@@ -137,7 +149,8 @@ impl Cond {
             return Value::List(self.items.clone());
         }
         let one = self.items.first().cloned().unwrap_or_default();
-        let numeric = self.op == "Present" || vocab::lookup(&self.fact).is_some_and(|f| f.family == vocab::Family::Int);
+        let numeric = self.op == "Present"
+            || vocab::lookup(&self.fact).is_some_and(|f| f.family == vocab::Family::Int);
         match one.trim().parse::<i64>() {
             Ok(n) if numeric => Value::Int(n),
             _ => Value::Str(one),
@@ -162,7 +175,15 @@ pub struct Rule {
 
 impl Rule {
     pub fn new(name: &str) -> Rule {
-        Rule { name: name.into(), conds: Vec::new(), actions: Vec::new(), priority: None, enabled: true, other: Vec::new(), children: Vec::new() }
+        Rule {
+            name: name.into(),
+            conds: Vec::new(),
+            actions: Vec::new(),
+            priority: None,
+            enabled: true,
+            other: Vec::new(),
+            children: Vec::new(),
+        }
     }
 
     pub fn from_tree(tree: &Tree) -> Rule {
@@ -170,7 +191,9 @@ impl Rule {
         for (name, value) in &tree.values {
             if name.eq_ignore_ascii_case("Actions") {
                 match value.as_list() {
-                    Some(items) => rule.actions = items.into_iter().filter(|a| !a.trim().is_empty()).collect(),
+                    Some(items) => {
+                        rule.actions = items.into_iter().filter(|a| !a.trim().is_empty()).collect()
+                    }
                     None => rule.other.push((name.clone(), value.clone())),
                 }
             } else if name.eq_ignore_ascii_case("Priority") {
@@ -183,8 +206,14 @@ impl Rule {
                     Some(e) => rule.enabled = e != 0,
                     None => rule.other.push((name.clone(), value.clone())),
                 }
-            } else if let (Some((fact, op)), Some(items)) = (name.rsplit_once('.'), value.as_list()) {
-                rule.conds.push(Cond { fact: fact.into(), op: op.into(), items, was: Some(value.clone()) });
+            } else if let (Some((fact, op)), Some(items)) = (name.rsplit_once('.'), value.as_list())
+            {
+                rule.conds.push(Cond {
+                    fact: fact.into(),
+                    op: op.into(),
+                    items,
+                    was: Some(value.clone()),
+                });
             } else {
                 rule.other.push((name.clone(), value.clone()));
             }
@@ -195,7 +224,8 @@ impl Rule {
 
     /// The rule's own values, as written: its children are their own keys.
     pub fn values(&self) -> Vec<(String, Value)> {
-        let mut out: Vec<(String, Value)> = self.conds.iter().map(|c| (c.key(), c.value())).collect();
+        let mut out: Vec<(String, Value)> =
+            self.conds.iter().map(|c| (c.key(), c.value())).collect();
         if !self.actions.is_empty() {
             out.push(("Actions".into(), Value::List(self.actions.clone())));
         }
@@ -211,22 +241,40 @@ impl Rule {
 
     /// The rule as the registry key it is written as, children included.
     pub fn tree(&self) -> Tree {
-        Tree { name: self.name.clone(), values: self.values(), children: self.children.iter().map(Rule::tree).collect() }
+        Tree {
+            name: self.name.clone(),
+            values: self.values(),
+            children: self.children.iter().map(Rule::tree).collect(),
+        }
     }
 
     /// The verdict among its actions, if it has one.
     pub fn verdict(&self) -> Option<&str> {
-        self.actions.iter().map(|a| a.trim()).find(|a| verdict_of(a).is_some())
+        self.actions
+            .iter()
+            .map(|a| a.trim())
+            .find(|a| verdict_of(a).is_some())
     }
 
     /// Its actions that are not its verdict: counting, tagging, auditing.
     pub fn effects(&self) -> Vec<&str> {
-        self.actions.iter().map(|a| a.trim()).filter(|a| verdict_of(a).is_none() && !a.eq_ignore_ascii_case("NULL")).collect()
+        self.actions
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| verdict_of(a).is_none() && !a.eq_ignore_ascii_case("NULL"))
+            .collect()
     }
 
     /// The highest `REPORT` level among its actions.
     pub fn report(&self) -> Option<u8> {
-        self.actions.iter().filter_map(|a| call(a).filter(|(n, _)| n.eq_ignore_ascii_case("REPORT")).and_then(|(_, args)| args.first()?.trim().parse().ok())).max()
+        self.actions
+            .iter()
+            .filter_map(|a| {
+                call(a)
+                    .filter(|(n, _)| n.eq_ignore_ascii_case("REPORT"))
+                    .and_then(|(_, args)| args.first()?.trim().parse().ok())
+            })
+            .max()
     }
 }
 
@@ -234,7 +282,8 @@ impl Rule {
 pub type Forest = Vec<Rule>;
 
 pub fn forest(tree: Option<&Tree>) -> Forest {
-    tree.map(|t| t.children.iter().map(Rule::from_tree).collect()).unwrap_or_default()
+    tree.map(|t| t.children.iter().map(Rule::from_tree).collect())
+        .unwrap_or_default()
 }
 
 /// A rule's path, `/`-separated names from its root.
@@ -252,9 +301,14 @@ pub fn find<'a>(forest: &'a [Rule], path: &str) -> Option<&'a Rule> {
 pub fn find_mut<'a>(forest: &'a mut [Rule], path: &str) -> Option<&'a mut Rule> {
     let mut parts = path.split('/');
     let first = parts.next()?;
-    let mut rule = forest.iter_mut().find(|r| r.name.eq_ignore_ascii_case(first))?;
+    let mut rule = forest
+        .iter_mut()
+        .find(|r| r.name.eq_ignore_ascii_case(first))?;
     for part in parts {
-        rule = rule.children.iter_mut().find(|r| r.name.eq_ignore_ascii_case(part))?;
+        rule = rule
+            .children
+            .iter_mut()
+            .find(|r| r.name.eq_ignore_ascii_case(part))?;
     }
     Some(rule)
 }
@@ -272,7 +326,9 @@ pub fn siblings_mut<'a>(forest: &'a mut Vec<Rule>, path: &str) -> Option<&'a mut
 pub fn put(forest: &mut Vec<Rule>, path: &str, mut rule: Rule) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path).to_string();
     rule.name = name.clone();
-    let Some(list) = siblings_mut(forest, path) else { return false };
+    let Some(list) = siblings_mut(forest, path) else {
+        return false;
+    };
     match list.iter_mut().find(|r| r.name.eq_ignore_ascii_case(&name)) {
         Some(there) => {
             rule.children = std::mem::take(&mut there.children);
@@ -286,15 +342,26 @@ pub fn put(forest: &mut Vec<Rule>, path: &str, mut rule: Rule) -> bool {
 pub fn remove(forest: &mut Vec<Rule>, path: &str) -> Option<Rule> {
     let name = path.rsplit('/').next().unwrap_or(path);
     let list = siblings_mut(forest, path)?;
-    let at = list.iter().position(|r| r.name.eq_ignore_ascii_case(name))?;
+    let at = list
+        .iter()
+        .position(|r| r.name.eq_ignore_ascii_case(name))?;
     Some(list.remove(at))
 }
 
 /// Every rule with its path and depth, parents before their exceptions.
 pub fn walk(forest: &[Rule]) -> Vec<(String, usize, &Rule)> {
-    fn go<'a>(list: &'a [Rule], base: &str, depth: usize, out: &mut Vec<(String, usize, &'a Rule)>) {
+    fn go<'a>(
+        list: &'a [Rule],
+        base: &str,
+        depth: usize,
+        out: &mut Vec<(String, usize, &'a Rule)>,
+    ) {
         for rule in list {
-            let path = if base.is_empty() { rule.name.clone() } else { format!("{base}/{}", rule.name) };
+            let path = if base.is_empty() {
+                rule.name.clone()
+            } else {
+                format!("{base}/{}", rule.name)
+            };
             out.push((path.clone(), depth, rule));
             go(&rule.children, &path, depth + 1, out);
         }
@@ -307,7 +374,6 @@ pub fn walk(forest: &[Rule]) -> Vec<(String, usize, &Rule)> {
 pub fn count(forest: &[Rule]) -> usize {
     walk(forest).len()
 }
-
 
 /// A name a rule may have: what a registry key may be called, and what
 /// PNP attributes a decision to.
@@ -369,8 +435,16 @@ pub fn verdict_of(action: &str) -> Option<Verdict> {
     Some(match name.as_str() {
         "PASS" => Verdict::Allow,
         "DROP" => Verdict::Block,
-        "REJECT" => Verdict::Reject { prohibited: args.first().is_some_and(|a| a.eq_ignore_ascii_case("Prohibited")) },
-        "JOIN" => Verdict::Join(args.first().map(|a| a.replace('\\', "/")).unwrap_or_default()),
+        "REJECT" => Verdict::Reject {
+            prohibited: args
+                .first()
+                .is_some_and(|a| a.eq_ignore_ascii_case("Prohibited")),
+        },
+        "JOIN" => Verdict::Join(
+            args.first()
+                .map(|a| a.replace('\\', "/"))
+                .unwrap_or_default(),
+        ),
         "IGNORE" => Verdict::Ignore,
         "DOWN" => Verdict::Down,
         _ => return None,
@@ -418,27 +492,62 @@ impl Verdict {
 /// What a rule matches, in a line of words.
 pub fn summary(conds: &[Cond], layer: Layer) -> String {
     if conds.is_empty() {
-        return if layer == Layer::Interface { "All interfaces" } else { "All traffic" }.into();
+        return if layer == Layer::Interface {
+            "All interfaces"
+        } else {
+            "All traffic"
+        }
+        .into();
     }
     let equal = |fact: &str| conds.iter().find(|c| c.fact == fact && c.op == "Equal");
     let mut used: Vec<&Cond> = Vec::new();
     let mut out: Vec<String> = Vec::new();
     if let Some(c) = equal("Direction") {
         used.push(c);
-        out.push(if c.items.first().is_some_and(|d| d.eq_ignore_ascii_case("in")) { "Incoming".into() } else { "Outgoing".into() });
+        out.push(
+            if c.items
+                .first()
+                .is_some_and(|d| d.eq_ignore_ascii_case("in"))
+            {
+                "Incoming".into()
+            } else {
+                "Outgoing".into()
+            },
+        );
     }
     let protocol = equal("Protocol");
     let port = equal("DstPort");
     if protocol.is_some() || port.is_some() {
-        let p = protocol.map(|c| c.items.iter().map(|p| protocol_word(p)).collect::<Vec<_>>().join("/")).unwrap_or_default();
+        let p = protocol
+            .map(|c| {
+                c.items
+                    .iter()
+                    .map(|p| protocol_word(p))
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .unwrap_or_default();
         let n = port.map(|c| c.text()).unwrap_or_default();
-        out.push([p, n].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" "));
+        out.push(
+            [p, n]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
         used.extend(protocol);
         used.extend(port);
     }
     if let Some(c) = equal("Interface.Kind") {
         used.push(c);
-        out.push(format!("{} interfaces", c.items.iter().map(|k| capital(k)).collect::<Vec<_>>().join(", ")));
+        out.push(format!(
+            "{} interfaces",
+            c.items
+                .iter()
+                .map(|k| capital(k))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     for c in conds {
         if used.iter().any(|u| std::ptr::eq(*u, c)) {
@@ -458,9 +567,15 @@ pub fn summary(conds: &[Cond], layer: Layer) -> String {
             "IcmpType" if eq => format!("ICMP type {v}"),
             "SrcPort" if eq => format!("source port {v}"),
             "Interface" | "Interface.Id" | "Interface.Path" if eq => v,
-            fact if fact.starts_with("Counter.") && c.op == "GreaterThan" => counter_words(fact, &v),
+            fact if fact.starts_with("Counter.") && c.op == "GreaterThan" => {
+                counter_words(fact, &v)
+            }
             _ => match c.op.as_str() {
-                "Present" => format!("{} {}", c.fact, if v.trim() == "0" { "unknown" } else { "known" }),
+                "Present" => format!(
+                    "{} {}",
+                    c.fact,
+                    if v.trim() == "0" { "unknown" } else { "known" }
+                ),
                 "Equal" => format!("{} = {v}", c.fact),
                 "GreaterThan" => format!("{} > {v}", c.fact),
                 "LessThan" => format!("{} < {v}", c.fact),
@@ -475,7 +590,13 @@ pub fn summary(conds: &[Cond], layer: Layer) -> String {
 fn counter_words(fact: &str, limit: &str) -> String {
     let spec = fact.trim_start_matches("Counter.");
     let (name, args) = match spec.split_once('(') {
-        Some((n, a)) => (n, a.trim_end_matches(')').split(',').map(|s| s.trim()).collect::<Vec<_>>()),
+        Some((n, a)) => (
+            n,
+            a.trim_end_matches(')')
+                .split(',')
+                .map(|s| s.trim())
+                .collect::<Vec<_>>(),
+        ),
         None => (spec, Vec::new()),
     };
     let mut words = format!("over {limit} {name}");
@@ -519,10 +640,18 @@ mod tests {
 
     fn ssh() -> Rule {
         let mut ssh = Rule::new("ssh");
-        ssh.conds = vec![Cond::new("Direction", "Equal", &["in"]), Cond::new("Protocol", "Equal", &["tcp"]), Cond::new("DstPort", "Equal", &["22"])];
+        ssh.conds = vec![
+            Cond::new("Direction", "Equal", &["in"]),
+            Cond::new("Protocol", "Equal", &["tcp"]),
+            Cond::new("DstPort", "Equal", &["22"]),
+        ];
         ssh.actions = vec!["PASS".into()];
         let mut fast = Rule::new("too-fast");
-        fast.conds = vec![Cond::new("Counter.ssh-tries(1m, SrcAddr)", "GreaterThan", &["10"])];
+        fast.conds = vec![Cond::new(
+            "Counter.ssh-tries(1m, SrcAddr)",
+            "GreaterThan",
+            &["10"],
+        )];
         fast.actions = vec!["REJECT(Prohibited)".into(), "REPORT(3)".into()];
         ssh.children.push(fast);
         ssh
@@ -540,7 +669,10 @@ mod tests {
     #[test]
     fn a_condition_left_alone_keeps_its_type() {
         let mut tree = Tree::new("ssh");
-        tree.values = vec![("DstPort.Equal".into(), Value::List(vec!["22".into()])), ("SrcPort.Equal".into(), Value::Int(67))];
+        tree.values = vec![
+            ("DstPort.Equal".into(), Value::List(vec!["22".into()])),
+            ("SrcPort.Equal".into(), Value::Int(67)),
+        ];
         let mut rule = Rule::from_tree(&tree);
         assert_eq!(rule.values()[..2], tree.values[..]);
         rule.conds[0].items = vec!["2222".into()];
@@ -550,7 +682,10 @@ mod tests {
     #[test]
     fn a_rule_is_found_put_and_removed_by_its_path() {
         let mut forest = vec![ssh()];
-        assert_eq!(find(&forest, "ssh/too-fast").map(|r| r.report()), Some(Some(3)));
+        assert_eq!(
+            find(&forest, "ssh/too-fast").map(|r| r.report()),
+            Some(Some(3))
+        );
         let mut lan = Rule::new("x");
         lan.actions = vec!["PASS".into()];
         assert!(put(&mut forest, "ssh/lan", lan));
@@ -566,17 +701,35 @@ mod tests {
     fn rules_are_summed_up_in_words() {
         let rule = ssh();
         assert_eq!(summary(&rule.conds, Layer::Flow), "Incoming · TCP 22");
-        assert_eq!(summary(&rule.children[0].conds, Layer::Flow), "over 10 ssh-tries a minute per source");
+        assert_eq!(
+            summary(&rule.children[0].conds, Layer::Flow),
+            "over 10 ssh-tries a minute per source"
+        );
         assert_eq!(summary(&[], Layer::Interface), "All interfaces");
-        assert_eq!(summary(&[Cond::new("Interface.Kind", "Equal", &["wired"])], Layer::Interface), "Wired interfaces");
+        assert_eq!(
+            summary(
+                &[Cond::new("Interface.Kind", "Equal", &["wired"])],
+                Layer::Interface
+            ),
+            "Wired interfaces"
+        );
     }
 
     #[test]
     fn actions_split_into_a_verdict_and_effects() {
         let rule = &ssh().children[0];
-        assert_eq!(rule.verdict().and_then(verdict_of), Some(Verdict::Reject { prohibited: true }));
+        assert_eq!(
+            rule.verdict().and_then(verdict_of),
+            Some(Verdict::Reject { prohibited: true })
+        );
         assert_eq!(rule.effects(), vec!["REPORT(3)"]);
-        assert_eq!(call("TAG(x, Add, 2)").map(|(n, a)| (n.to_string(), a.len())), Some(("TAG".into(), 3)));
-        assert_eq!(verdict_of("JOIN(default\\home)"), Some(Verdict::Join("default/home".into())));
+        assert_eq!(
+            call("TAG(x, Add, 2)").map(|(n, a)| (n.to_string(), a.len())),
+            Some(("TAG".into(), 3))
+        );
+        assert_eq!(
+            verdict_of("JOIN(default\\home)"),
+            Some(Verdict::Join("default/home".into()))
+        );
     }
 }

@@ -3,7 +3,7 @@
 //! The well-known principals by the names the documentation gives them, as
 //! `ls -l` shows them (peiosutils' sid_render), and everyone else by asking
 //! the authority, authd, on its identity socket, which is the only thing
-//! that can say. A connection a question, through libauthd-client, as
+//! that can say. A connection a question, through auth-core clients, as
 //! peiosutils does it: authd closes one left idle, and the editor may be
 //! open for an hour.
 
@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::io;
 use std::time::Duration;
 
-use libauthd::ident::{Fields, Key, Kind};
-use libauthd_client::ident::Ident;
+use auth_core::ident::{Fields, Key, Kind};
+use auth_core::client::ident::Ident;
 use peios::security::{Sid, SidRef};
 
 /// How long the authority is given to answer.
@@ -75,13 +75,21 @@ impl Default for Names {
 
 impl Names {
     pub fn new() -> Names {
-        Names { known: HashMap::new(), groups: Default::default(), ask: Some(ask) }
+        Names {
+            known: HashMap::new(),
+            groups: Default::default(),
+            ask: Some(ask),
+        }
     }
 
     /// Names that ask nobody: the well-known ones, and SIDs for the rest.
     /// For tests, and wherever the authority is not to be waited on.
     pub fn offline() -> Names {
-        Names { known: HashMap::new(), groups: Default::default(), ask: None }
+        Names {
+            known: HashMap::new(),
+            groups: Default::default(),
+            ask: None,
+        }
     }
 
     /// Whether the authority said `sid` is a group.
@@ -98,24 +106,32 @@ impl Names {
         let raw = sid.to_string();
         let name = match WELL_KNOWN.iter().find(|(known, _)| *known == raw) {
             Some((_, name)) => Some(name.to_string()),
-            None => self.ask.and_then(|ask| ask(Key::Sid(sid.as_bytes().to_vec())).ok().flatten()).map(|(_, name, group)| {
-                if group {
-                    self.groups.insert(owned);
-                }
-                name
-            }),
+            None => self
+                .ask
+                .and_then(|ask| ask(Key::Sid(sid.as_bytes().to_vec())).ok().flatten())
+                .map(|(_, name, group)| {
+                    if group {
+                        self.groups.insert(owned);
+                    }
+                    name
+                }),
         };
         self.known.insert(owned, name.unwrap_or(raw));
     }
 
     /// What `sid` is called, as far as it has been learnt; its SID otherwise.
     pub fn of(&self, sid: &SidRef) -> String {
-        self.known.get(&sid.to_sid()).cloned().unwrap_or_else(|| sid.to_string())
+        self.known
+            .get(&sid.to_sid())
+            .cloned()
+            .unwrap_or_else(|| sid.to_string())
     }
 
     /// Whether `sid` has a name, and not just its SID to go by.
     pub fn named(&self, sid: &SidRef) -> bool {
-        self.known.get(&sid.to_sid()).is_some_and(|name| *name != sid.to_string())
+        self.known
+            .get(&sid.to_sid())
+            .is_some_and(|name| *name != sid.to_string())
     }
 
     /// The principal `typed` names: a well-known one by any of its names,
@@ -131,20 +147,25 @@ impl Names {
             .iter()
             .map(|&(sid, name)| (name, sid))
             .chain(ALSO.iter().copied())
-            .find(|(name, _)| name.eq_ignore_ascii_case(typed) || bare(name).eq_ignore_ascii_case(&bare(typed)))
+            .find(|(name, _)| {
+                name.eq_ignore_ascii_case(typed) || bare(name).eq_ignore_ascii_case(&bare(typed))
+            })
             .map(|(_, sid)| sid);
         if let Some(sid) = well_known.and_then(|sid| sid.parse::<Sid>().ok()) {
             self.learn(&sid);
             return Ok(sid);
         }
         // A SID as it is written, or as SDDL abbreviates it.
-        if (typed.starts_with("S-") || (typed.len() == 2 && typed.chars().all(|c| c.is_ascii_uppercase())))
+        if (typed.starts_with("S-")
+            || (typed.len() == 2 && typed.chars().all(|c| c.is_ascii_uppercase())))
             && let Ok(sid) = typed.parse::<Sid>()
         {
             self.learn(&sid);
             return Ok(sid);
         }
-        let Some(ask) = self.ask else { return Err(format!("There is nobody called {typed}.")) };
+        let Some(ask) = self.ask else {
+            return Err(format!("There is nobody called {typed}."));
+        };
         match ask(Key::Name(typed.into())) {
             Ok(Some((sid, name, group))) => {
                 self.known.insert(sid, name);
@@ -164,9 +185,26 @@ impl Names {
 fn ask(key: Key) -> io::Result<Option<(Sid, String, bool)>> {
     // The name and the SID are always answered: no more is asked, so that
     // nothing is withheld that was not needed.
-    let Some(record) = Ident::new().with_timeout(TIMEOUT).lookup(key, Kind::Any, Fields::empty())? else { return Ok(None) };
-    let sid = SidRef::from_bytes(&record.sid).map(SidRef::to_sid).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "authd answered with a SID that isn't one"))?;
-    Ok(Some((sid, record.qualified_name, record.kind_found == Kind::Group)))
+    let Some(record) =
+        Ident::new()
+            .with_timeout(TIMEOUT)
+            .lookup(key, Kind::Any, Fields::empty())?
+    else {
+        return Ok(None);
+    };
+    let sid = SidRef::from_bytes(&record.sid)
+        .map(SidRef::to_sid)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "authd answered with a SID that isn't one",
+            )
+        })?;
+    Ok(Some((
+        sid,
+        record.qualified_name,
+        record.kind_found == Kind::Group,
+    )))
 }
 
 #[cfg(test)]
@@ -176,13 +214,36 @@ mod tests {
     #[test]
     fn the_well_known_are_known_by_any_of_their_names() {
         let mut names = Names::offline();
-        for typed in ["Everyone", "everyone", "World", " Everyone ", "WD", "S-1-1-0"] {
-            assert_eq!(names.find(typed).map(|sid| sid.to_string()), Ok("S-1-1-0".into()), "{typed}");
+        for typed in [
+            "Everyone",
+            "everyone",
+            "World",
+            " Everyone ",
+            "WD",
+            "S-1-1-0",
+        ] {
+            assert_eq!(
+                names.find(typed).map(|sid| sid.to_string()),
+                Ok("S-1-1-0".into()),
+                "{typed}"
+            );
         }
-        for typed in ["Administrators", "BUILTIN\\Administrators", "builtin\\administrators", "BA"] {
-            assert_eq!(names.find(typed).map(|sid| sid.to_string()), Ok("S-1-5-32-544".into()), "{typed}");
+        for typed in [
+            "Administrators",
+            "BUILTIN\\Administrators",
+            "builtin\\administrators",
+            "BA",
+        ] {
+            assert_eq!(
+                names.find(typed).map(|sid| sid.to_string()),
+                Ok("S-1-5-32-544".into()),
+                "{typed}"
+            );
         }
-        assert_eq!(names.find("SYSTEM").map(|sid| sid.to_string()), Ok("S-1-5-18".into()));
+        assert_eq!(
+            names.find("SYSTEM").map(|sid| sid.to_string()),
+            Ok("S-1-5-18".into())
+        );
         let admins: Sid = "S-1-5-32-544".parse().unwrap();
         assert_eq!(names.of(&admins), "BUILTIN\\Administrators");
         assert!(names.named(&admins));
@@ -191,8 +252,14 @@ mod tests {
     #[test]
     fn what_cannot_be_found_is_said_and_a_sid_goes_by_its_number() {
         let mut names = Names::offline();
-        assert_eq!(names.find("  "), Err("Type the name of a user or a group.".into()));
-        assert_eq!(names.find("jack"), Err("There is nobody called jack.".into()));
+        assert_eq!(
+            names.find("  "),
+            Err("Type the name of a user or a group.".into())
+        );
+        assert_eq!(
+            names.find("jack"),
+            Err("There is nobody called jack.".into())
+        );
         let someone: Sid = "S-1-5-21-1-2-3-1000".parse().unwrap();
         assert_eq!(names.find("S-1-5-21-1-2-3-1000"), Ok(someone));
         assert_eq!(names.of(&someone), "S-1-5-21-1-2-3-1000");

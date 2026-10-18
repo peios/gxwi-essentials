@@ -29,7 +29,10 @@ pub enum State {
 impl State {
     /// A script for it was started and never finished.
     pub fn interrupted(self) -> bool {
-        matches!(self, State::Installing | State::Enabling | State::Disabling | State::Uninstalling)
+        matches!(
+            self,
+            State::Installing | State::Enabling | State::Disabling | State::Uninstalling
+        )
     }
 }
 
@@ -74,7 +77,11 @@ pub fn list() -> Result<Vec<Feature>, String> {
 
 /// The last thing feat said on failing, without its name in front.
 fn said(stderr: &str) -> String {
-    let line = stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("feat failed without saying why");
+    let line = stderr
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("feat failed without saying why");
     line.trim().trim_start_matches("feat: ").to_string()
 }
 
@@ -84,15 +91,24 @@ fn said(stderr: &str) -> String {
 pub enum Event {
     /// A lifecycle script is starting: `phase` is install, enable, disable
     /// or uninstall, `step` of `steps`.
-    Progress { phase: String, step: usize, steps: usize },
+    Progress {
+        phase: String,
+        step: usize,
+        steps: usize,
+    },
     /// A line a script wrote, or what feat said it did.
-    Message { text: String },
+    Message {
+        text: String,
+    },
     Done {
         #[serde(default)]
         summary: String,
         state: State,
     },
-    Error { code: String, message: String },
+    Error {
+        code: String,
+        message: String,
+    },
 }
 
 impl Event {
@@ -119,7 +135,9 @@ pub fn drive(args: &[&str], mut heard: impl FnMut(Event) + Send + 'static) -> Re
         let mut ended = false;
         for line in BufReader::new(stdout).lines() {
             let Ok(line) = line else { break };
-            let Ok(event) = serde_json::from_str::<Event>(&line) else { continue };
+            let Ok(event) = serde_json::from_str::<Event>(&line) else {
+                continue;
+            };
             ended = event.ends();
             heard(event);
             if ended {
@@ -133,8 +151,15 @@ pub fn drive(args: &[&str], mut heard: impl FnMut(Event) + Send + 'static) -> Re
         let _ = std::io::Read::read_to_string(&mut BufReader::new(stderr), &mut fault);
         let _ = child.wait();
         if !ended {
-            let message = if fault.trim().is_empty() { "feat stopped without saying how it ended".to_string() } else { said(&fault) };
-            heard(Event::Error { code: "failed".into(), message });
+            let message = if fault.trim().is_empty() {
+                "feat stopped without saying how it ended".to_string()
+            } else {
+                said(&fault)
+            };
+            heard(Event::Error {
+                code: "failed".into(),
+                message,
+            });
         }
     });
     Ok(())
@@ -159,13 +184,30 @@ mod tests {
 
     #[test]
     fn events_read_as_feat_writes_them() {
-        let progress: Event = serde_json::from_str(r#"{"event":"progress","phase":"install","step":1,"steps":2}"#).unwrap();
-        assert_eq!(progress, Event::Progress { phase: "install".into(), step: 1, steps: 2 });
-        let done: Event = serde_json::from_str(r#"{"event":"done","state":"not-installed","summary":"uninstalled x"}"#).unwrap();
+        let progress: Event =
+            serde_json::from_str(r#"{"event":"progress","phase":"install","step":1,"steps":2}"#)
+                .unwrap();
+        assert_eq!(
+            progress,
+            Event::Progress {
+                phase: "install".into(),
+                step: 1,
+                steps: 2
+            }
+        );
+        let done: Event = serde_json::from_str(
+            r#"{"event":"done","state":"not-installed","summary":"uninstalled x"}"#,
+        )
+        .unwrap();
         assert!(done.ends());
         let error: Event = serde_json::from_str(r#"{"code":"script","event":"error","message":"feature x: install script failed (exit 1)"}"#).unwrap();
         assert!(error.ends());
-        assert!(!Event::Message { text: String::new() }.ends());
+        assert!(
+            !Event::Message {
+                text: String::new()
+            }
+            .ends()
+        );
     }
 
     #[test]

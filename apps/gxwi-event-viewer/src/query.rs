@@ -53,7 +53,13 @@ pub enum Range {
 
 impl Range {
     /// In the order the person is offered them.
-    pub const ALL: [Range; 5] = [Range::Minutes15, Range::Hour, Range::Day, Range::Week, Range::Any];
+    pub const ALL: [Range; 5] = [
+        Range::Minutes15,
+        Range::Hour,
+        Range::Day,
+        Range::Week,
+        Range::Any,
+    ];
 
     /// What the window opens on.
     pub const DEFAULT: Range = Range::Day;
@@ -95,7 +101,13 @@ impl Range {
 }
 
 /// What an event came from (`emitter.class`, §3.23), as the person picks it.
-pub const SOURCES: [(u8, &str); 5] = [(0, "Programs"), (1, "Kernel"), (2, "Security (KACS)"), (3, "Registry (LCS)"), (4, "Network (NTFE)")];
+pub const SOURCES: [(u8, &str); 5] = [
+    (0, "Programs"),
+    (1, "Kernel"),
+    (2, "Security (KACS)"),
+    (3, "Registry (LCS)"),
+    (4, "Network (NTFE)"),
+];
 
 /// What the person has chosen to see.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +130,15 @@ pub struct Filter {
 
 impl Filter {
     pub fn new(kind: Kind) -> Filter {
-        Filter { kind, range: Range::DEFAULT, origin: String::new(), errors: false, containing: String::new(), event_type: String::new(), source: None }
+        Filter {
+            kind,
+            range: Range::DEFAULT,
+            origin: String::new(),
+            errors: false,
+            containing: String::new(),
+            event_type: String::new(),
+            source: None,
+        }
     }
 
     /// The query without paging: what is chosen.
@@ -139,7 +159,11 @@ impl Filter {
                 }
                 let origin = self.origin.trim();
                 if !origin.is_empty() {
-                    query += &format!(" WHERE origin == {} OR origin STARTS_WITH {}", text::string(origin), text::string(&format!("{origin}/")));
+                    query += &format!(
+                        " WHERE origin == {} OR origin STARTS_WITH {}",
+                        text::string(origin),
+                        text::string(&format!("{origin}/"))
+                    );
                 }
             }
             Kind::Events => {
@@ -167,19 +191,30 @@ impl Filter {
     /// The page before a record at `timestamp`, `shown` of the records at
     /// that very time being on the screen already.
     pub fn older(&self, timestamp: i64, shown: usize) -> String {
-        let skip = if shown > 0 { format!(" SKIP {shown}") } else { String::new() };
+        let skip = if shown > 0 {
+            format!(" SKIP {shown}")
+        } else {
+            String::new()
+        };
         // An event's time is event.time; a log's is timestamp.
         let time = match self.kind {
             Kind::Logs => "timestamp",
             Kind::Events => words::EVENT_TIME,
         };
-        format!("{} WHERE {time} <= {timestamp}{skip} TAKE {PAGE}", self.chosen())
+        format!(
+            "{} WHERE {time} <= {timestamp}{skip} TAKE {PAGE}",
+            self.chosen()
+        )
     }
 
     /// What may be typed in the origin or type field, from what there is in
     /// the range: every origin, or every event type.
     pub fn suggestions(&self) -> String {
-        let since = self.range.since().map(|since| format!(" SINCE {since}")).unwrap_or_default();
+        let since = self
+            .range
+            .since()
+            .map(|since| format!(" SINCE {since}"))
+            .unwrap_or_default();
         match self.kind {
             Kind::Logs => format!("LOGS{since} DISTINCT origin"),
             Kind::Events => format!("EVENTS{since} DISTINCT {}", words::EVENT_TYPE),
@@ -189,7 +224,9 @@ impl Filter {
     /// Whether anything narrows the records beyond the range.
     pub fn narrowed(&self) -> bool {
         match self.kind {
-            Kind::Logs => self.errors || !self.containing.trim().is_empty() || !self.origin.trim().is_empty(),
+            Kind::Logs => {
+                self.errors || !self.containing.trim().is_empty() || !self.origin.trim().is_empty()
+            }
             Kind::Events => !self.event_type.trim().is_empty() || self.source.is_some(),
         }
     }
@@ -218,10 +255,16 @@ mod tests {
     fn what_is_typed_cannot_change_the_query() {
         let mut filter = Filter::new(Kind::Logs);
         filter.containing = "\" STREAM WHERE x == \"y".into();
-        assert_eq!(filter.first_page(), "LOGS SINCE 24h ago CONTAINING \"\\\" STREAM WHERE x == \\\"y\" TAKE 200 STREAM");
+        assert_eq!(
+            filter.first_page(),
+            "LOGS SINCE 24h ago CONTAINING \"\\\" STREAM WHERE x == \\\"y\" TAKE 200 STREAM"
+        );
         let mut filter = Filter::new(Kind::Events);
         filter.event_type = "kacs.* SORT".into();
-        assert_eq!(filter.first_page(), "EVENTS \"kacs.* SORT\" SINCE 24h ago TAKE 200 STREAM");
+        assert_eq!(
+            filter.first_page(),
+            "EVENTS \"kacs.* SORT\" SINCE 24h ago TAKE 200 STREAM"
+        );
     }
 
     #[test]
@@ -231,18 +274,33 @@ mod tests {
         filter.event_type = "job.*".into();
         filter.source = Some(2);
         filter.range = Range::Hour;
-        assert_eq!(filter.first_page(), "EVENTS \"job.*\" SINCE 1h ago WHERE emitter.class == 2 TAKE 200 STREAM");
-        assert_eq!(filter.suggestions(), "EVENTS SINCE 1h ago DISTINCT event.type");
+        assert_eq!(
+            filter.first_page(),
+            "EVENTS \"job.*\" SINCE 1h ago WHERE emitter.class == 2 TAKE 200 STREAM"
+        );
+        assert_eq!(
+            filter.suggestions(),
+            "EVENTS SINCE 1h ago DISTINCT event.type"
+        );
         filter.range = Range::Any;
-        assert_eq!(filter.older(1_791_017_896_125_870_148, 1), "EVENTS \"job.*\" WHERE emitter.class == 2 WHERE event.time <= 1791017896125870148 SKIP 1 TAKE 200");
+        assert_eq!(
+            filter.older(1_791_017_896_125_870_148, 1),
+            "EVENTS \"job.*\" WHERE emitter.class == 2 WHERE event.time <= 1791017896125870148 SKIP 1 TAKE 200"
+        );
     }
 
     #[test]
     fn an_older_page_starts_after_the_records_shown_at_its_time() {
         let mut filter = Filter::new(Kind::Logs);
         filter.range = Range::Any;
-        assert_eq!(filter.older(1_791_017_896_125_870_148, 0), "LOGS WHERE timestamp <= 1791017896125870148 TAKE 200");
-        assert_eq!(filter.older(1_791_017_896_125_870_148, 2), "LOGS WHERE timestamp <= 1791017896125870148 SKIP 2 TAKE 200");
+        assert_eq!(
+            filter.older(1_791_017_896_125_870_148, 0),
+            "LOGS WHERE timestamp <= 1791017896125870148 TAKE 200"
+        );
+        assert_eq!(
+            filter.older(1_791_017_896_125_870_148, 2),
+            "LOGS WHERE timestamp <= 1791017896125870148 SKIP 2 TAKE 200"
+        );
         assert_eq!(filter.suggestions(), "LOGS DISTINCT origin");
     }
 

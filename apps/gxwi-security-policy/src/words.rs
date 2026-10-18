@@ -24,7 +24,11 @@ pub fn purposes(names: &[String]) -> String {
     if names.is_empty() {
         return purpose("ServerAuth");
     }
-    names.iter().map(|name| purpose(name)).collect::<Vec<_>>().join(", ")
+    names
+        .iter()
+        .map(|name| purpose(name))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// A day, as "18 Jan 2038".
@@ -68,7 +72,11 @@ pub fn suggested_name(name: &str) -> String {
     }
     let out: String = out.trim_end_matches('-').chars().take(48).collect();
     let out = out.trim_end_matches('-').to_string();
-    if out.is_empty() { "added-ca".into() } else { out }
+    if out.is_empty() {
+        "added-ca".into()
+    } else {
+        out
+    }
 }
 
 /// A fingerprint as other tools print it: upper case, a colon between bytes.
@@ -83,7 +91,11 @@ pub fn colons(fingerprint: &str) -> String {
 
 /// "1 certificate", "2 certificates".
 pub fn count(n: usize, one: &str, many: &str) -> String {
-    if n == 1 { format!("1 {one}") } else { format!("{n} {many}") }
+    if n == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{n} {many}")
+    }
 }
 
 #[cfg(test)]
@@ -92,7 +104,10 @@ mod tests {
 
     #[test]
     fn a_suggested_name_is_a_usable_one() {
-        assert_eq!(suggested_name("Example Corp Root CA"), "example-corp-root-ca");
+        assert_eq!(
+            suggested_name("Example Corp Root CA"),
+            "example-corp-root-ca"
+        );
         assert_eq!(suggested_name("  --DigiCert, Inc.  "), "digicert-inc");
         assert_eq!(suggested_name("!!!"), "added-ca");
         assert!(trust::usable_name(&suggested_name("a/b\\c")));
@@ -110,6 +125,9 @@ mod tests {
         assert_eq!(date(2_147_471_999), "18 Jan 2038");
         assert_eq!(colons("0a1b"), "0A:1B");
         assert_eq!(purposes(&[]), "Server Authentication");
-        assert_eq!(purposes(&["ServerAuth".into(), "CodeSigning".into()]), "Server Authentication, Code Signing");
+        assert_eq!(
+            purposes(&["ServerAuth".into(), "CodeSigning".into()]),
+            "Server Authentication, Code Signing"
+        );
     }
 }

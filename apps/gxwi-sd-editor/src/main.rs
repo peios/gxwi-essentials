@@ -197,7 +197,12 @@ pub struct Editor {
 }
 
 impl Editor {
-    pub fn new(request: Request, mut names: Names, caller: Caller, learned: Learned) -> Result<Editor, String> {
+    pub fn new(
+        request: Request,
+        mut names: Names,
+        caller: Caller,
+        learned: Learned,
+    ) -> Result<Editor, String> {
         let (mut found, mut ids) = (Found::default(), Ids::default());
         let sd = Descriptor::parse(&request.sd, &mut ids, &mut found)?;
         let read = request.read.clone().unwrap_or_else(|| {
@@ -207,17 +212,30 @@ impl Editor {
             }
             all
         });
-        let (general, mut specific): (Vec<_>, Vec<_>) = request.rights.into_iter().partition(|r| r.general);
+        let (general, mut specific): (Vec<_>, Vec<_>) =
+            request.rights.into_iter().partition(|r| r.general);
         // A program that names only general rights still has the rights one
         // at a time shown: each bit of them, by its standard name where it
         // has one.
         if specific.is_empty() {
             let all = general.iter().fold(0, |a, r| a | r.mask) & !sd::SYNCHRONIZE;
-            let standard = [(0x10000, "Delete"), (sd::READ_CONTROL, "Read permissions"), (sd::WRITE_DAC, "Change permissions"), (0x80000, "Take ownership")];
+            let standard = [
+                (0x10000, "Delete"),
+                (sd::READ_CONTROL, "Read permissions"),
+                (sd::WRITE_DAC, "Change permissions"),
+                (0x80000, "Take ownership"),
+            ];
             specific = (0..32)
                 .map(|b| 1u32 << b)
                 .filter(|bit| all & bit != 0)
-                .map(|bit| gxwi_sd_editor::Right { name: standard.iter().find(|(m, _)| *m == bit).map_or_else(|| format!("Right 0x{bit:x}"), |(_, n)| n.to_string()), mask: bit, general: false })
+                .map(|bit| gxwi_sd_editor::Right {
+                    name: standard
+                        .iter()
+                        .find(|(m, _)| *m == bit)
+                        .map_or_else(|| format!("Right 0x{bit:x}"), |(_, n)| n.to_string()),
+                    mask: bit,
+                    general: false,
+                })
                 .collect();
         }
         let object = request.object;
@@ -233,11 +251,32 @@ impl Editor {
             parts: object
                 .parts
                 .iter()
-                .filter_map(|p| Some(PartDef { guid: sd::guid_parse(&p.guid)?, name: p.name.clone(), kind: p.kind, set: p.set.as_deref().and_then(sd::guid_parse) }))
+                .filter_map(|p| {
+                    Some(PartDef {
+                        guid: sd::guid_parse(&p.guid)?,
+                        name: p.name.clone(),
+                        kind: p.kind,
+                        set: p.set.as_deref().and_then(sd::guid_parse),
+                    })
+                })
                 .collect(),
-            kinds: object.kinds.iter().filter_map(|k| Some((sd::guid_parse(&k.guid)?, k.name.clone()))).collect(),
-            part_rights: object.part_rights.iter().map(|r| (r.name.clone(), r.mask)).collect(),
-            naming: object.naming.as_ref().and_then(|n| Some(NamingDef { namespace: sd::guid_parse(&n.namespace)?, noun: n.noun.clone(), example: n.example.clone() })),
+            kinds: object
+                .kinds
+                .iter()
+                .filter_map(|k| Some((sd::guid_parse(&k.guid)?, k.name.clone())))
+                .collect(),
+            part_rights: object
+                .part_rights
+                .iter()
+                .map(|r| (r.name.clone(), r.mask))
+                .collect(),
+            naming: object.naming.as_ref().and_then(|n| {
+                Some(NamingDef {
+                    namespace: sd::guid_parse(&n.namespace)?,
+                    noun: n.noun.clone(),
+                    example: n.example.clone(),
+                })
+            }),
         };
         for ace in sd.dacl.iter().chain(&sd.sacl).flat_map(|a| &a.aces) {
             if let Some(sid) = &ace.sid {
@@ -322,7 +361,11 @@ impl Editor {
     // ---- the simple view
 
     pub fn simple(&self) -> Simple {
-        Simple::read(&self.obj, self.sd.dacl.as_ref().map(|a| a.aces.as_slice()), self.sd.sacl.as_ref().map(|a| a.aces.as_slice()))
+        Simple::read(
+            &self.obj,
+            self.sd.dacl.as_ref().map(|a| a.aces.as_slice()),
+            self.sd.sacl.as_ref().map(|a| a.aces.as_slice()),
+        )
     }
 
     /// Changes the simple view, and the entries it is written back as.
@@ -346,7 +389,10 @@ impl Editor {
         self.picked = sid;
         let Some(sid) = sid else { return };
         let s = self.simple();
-        let first = s.entries().iter().find(|e| edit::plain(e) && e.ace.sid == Some(sid));
+        let first = s
+            .entries()
+            .iter()
+            .find(|e| edit::plain(e) && e.ace.sid == Some(sid));
         self.scope = match first {
             Some(e) if self.obj.container => e.ace.flags & sd::SHAPE,
             _ => self.obj.home(),
@@ -360,7 +406,10 @@ impl Editor {
         let now = self.simple().principals(self.read_sacl);
         // Whoever was added here stays, given anything yet or not.
         let listed = std::mem::take(&mut self.listed);
-        self.listed = listed.into_iter().filter(|s| now.contains(s) || self.added.contains(s)).collect();
+        self.listed = listed
+            .into_iter()
+            .filter(|s| now.contains(s) || self.added.contains(s))
+            .collect();
         for s in now {
             // Inheriting again can bring in someone not named before.
             self.names.learn(&s);
@@ -375,14 +424,28 @@ impl Editor {
 
     /// The entry an Advanced mode id names, and which list it is in.
     pub fn entry(&self, id: u32) -> Option<(&Ace, view::List)> {
-        if let Some(a) = self.sd.dacl.as_ref().and_then(|l| l.aces.iter().find(|a| a.id == id)) {
+        if let Some(a) = self
+            .sd
+            .dacl
+            .as_ref()
+            .and_then(|l| l.aces.iter().find(|a| a.id == id))
+        {
             return Some((a, view::List::Dacl));
         }
-        self.sd.sacl.as_ref().and_then(|l| l.aces.iter().find(|a| a.id == id)).map(|a| (a, view::List::Sacl))
+        self.sd
+            .sacl
+            .as_ref()
+            .and_then(|l| l.aces.iter().find(|a| a.id == id))
+            .map(|a| (a, view::List::Sacl))
     }
 
     pub fn entry_mut(&mut self, id: u32) -> Option<&mut Ace> {
-        self.sd.dacl.iter_mut().chain(self.sd.sacl.iter_mut()).flat_map(|a| a.aces.iter_mut()).find(|a| a.id == id)
+        self.sd
+            .dacl
+            .iter_mut()
+            .chain(self.sd.sacl.iter_mut())
+            .flat_map(|a| a.aces.iter_mut())
+            .find(|a| a.id == id)
     }
 
     /// The condition a key names.
@@ -417,10 +480,21 @@ impl Editor {
     /// Whether the condition a key names may be changed.
     pub fn may_cond(&self, of: CondOf) -> bool {
         match of {
-            CondOf::Card(key) => self.may_dacl() && self.simple().card(key).is_some_and(|c| !c.inherited),
+            CondOf::Card(key) => {
+                self.may_dacl() && self.simple().card(key).is_some_and(|c| !c.inherited)
+            }
             CondOf::Rule(_) => self.may_dacl(),
-            CondOf::Audit(key) => self.may_sacl() && self.simple().audits.iter().any(|a| a.ids.first() == Some(&key) && !a.inherited),
-            CondOf::Entry(id) => self.entry(id).is_some_and(|(a, l)| adv::may_entry(self, a, l) && !a.inherited()),
+            CondOf::Audit(key) => {
+                self.may_sacl()
+                    && self
+                        .simple()
+                        .audits
+                        .iter()
+                        .any(|a| a.ids.first() == Some(&key) && !a.inherited)
+            }
+            CondOf::Entry(id) => self
+                .entry(id)
+                .is_some_and(|(a, l)| adv::may_entry(self, a, l) && !a.inherited()),
         }
     }
 
@@ -437,12 +511,21 @@ impl Editor {
         if self.sd.group != self.applied.group {
             parts.push(Part::Group);
         }
-        let bytes = |acl: &Option<Acl>, keep: &dyn Fn(&Ace) -> bool| -> Option<Vec<Option<Vec<u8>>>> {
-            acl.as_ref().map(|a| a.aces.iter().filter(|x| keep(x)).map(|x| sd::ace_bytes(x, &self.found).ok()).collect())
-        };
+        let bytes =
+            |acl: &Option<Acl>, keep: &dyn Fn(&Ace) -> bool| -> Option<Vec<Option<Vec<u8>>>> {
+                acl.as_ref().map(|a| {
+                    a.aces
+                        .iter()
+                        .filter(|x| keep(x))
+                        .map(|x| sd::ace_bytes(x, &self.found).ok())
+                        .collect()
+                })
+            };
         let all = |_: &Ace| true;
         let control = |d: &Descriptor, bits: u16| d.control & bits;
-        if bytes(&self.sd.dacl, &all) != bytes(&self.applied.dacl, &all) || control(&self.sd, sd::PD | sd::DI) != control(&self.applied, sd::PD | sd::DI) {
+        if bytes(&self.sd.dacl, &all) != bytes(&self.applied.dacl, &all)
+            || control(&self.sd, sd::PD | sd::DI) != control(&self.applied, sd::PD | sd::DI)
+        {
             parts.push(Part::Dacl);
         }
         let label = |a: &Ace| a.way == Way::Label;
@@ -453,7 +536,9 @@ impl Editor {
             }
             v
         };
-        let sacl_changed = sorted(bytes(&self.sd.sacl, &rest)) != sorted(bytes(&self.applied.sacl, &rest)) || control(&self.sd, sd::PS | sd::SI) != control(&self.applied, sd::PS | sd::SI);
+        let sacl_changed = sorted(bytes(&self.sd.sacl, &rest))
+            != sorted(bytes(&self.applied.sacl, &rest))
+            || control(&self.sd, sd::PS | sd::SI) != control(&self.applied, sd::PS | sd::SI);
         let label_changed = bytes(&self.sd.sacl, &label) != bytes(&self.applied.sacl, &label);
         if (sacl_changed || (label_changed && !self.can.label)) && self.read_sacl {
             parts.push(Part::Sacl);
@@ -483,13 +568,19 @@ impl Editor {
     pub fn passes_changed(&self, parts: &[Part]) -> bool {
         let passed = |acl: &Option<Acl>| -> Option<Vec<Option<Vec<u8>>>> {
             acl.as_ref().map(|a| {
-                let mut v: Vec<_> = a.aces.iter().filter(|x| x.flags & (sd::OI | sd::CI) != 0).map(|x| sd::ace_bytes(x, &self.found).ok()).collect();
+                let mut v: Vec<_> = a
+                    .aces
+                    .iter()
+                    .filter(|x| x.flags & (sd::OI | sd::CI) != 0)
+                    .map(|x| sd::ace_bytes(x, &self.found).ok())
+                    .collect();
                 v.sort();
                 v
             })
         };
         (parts.contains(&Part::Dacl) && passed(&self.sd.dacl) != passed(&self.applied.dacl))
-            || ((parts.contains(&Part::Sacl) || parts.contains(&Part::Label)) && passed(&self.sd.sacl) != passed(&self.applied.sacl))
+            || ((parts.contains(&Part::Sacl) || parts.contains(&Part::Label))
+                && passed(&self.sd.sacl) != passed(&self.applied.sacl))
     }
 
     /// On Apply or OK: asks whether to push into what is inside first,
@@ -500,7 +591,11 @@ impl Editor {
             return false;
         }
         let parts = self.sendable(&self.changed());
-        if self.can.propagate && self.obj.container && !parts.is_empty() && self.passes_changed(&parts) {
+        if self.can.propagate
+            && self.obj.container
+            && !parts.is_empty()
+            && self.passes_changed(&parts)
+        {
             if let Some((why, place)) = self.fault() {
                 self.checked = true;
                 self.trouble = Some(why);
@@ -523,7 +618,11 @@ impl Editor {
         let parts = self.sendable(&self.changed());
         // Pushing again what was pushed before, when nothing has changed
         // since: it is applied again as it is, which changes nothing.
-        let parts = if parts.is_empty() && push { self.push_parts.clone() } else { parts };
+        let parts = if parts.is_empty() && push {
+            self.push_parts.clone()
+        } else {
+            parts
+        };
         if parts.is_empty() {
             return false;
         }
@@ -541,8 +640,13 @@ impl Editor {
             }
         };
         let push = push && self.can.propagate;
-        if !say(&FromEditor::Apply { sd, parts: parts.clone(), propagate: push }) {
-            self.trouble = Some("The program that opened this has gone, and nothing can be applied.".into());
+        if !say(&FromEditor::Apply {
+            sd,
+            parts: parts.clone(),
+            propagate: push,
+        }) {
+            self.trouble =
+                Some("The program that opened this has gone, and nothing can be applied.".into());
             return false;
         }
         self.checked = false;
@@ -579,11 +683,17 @@ impl Editor {
             }
             return false;
         }
-        let Sending::Yes { then_close } = std::mem::replace(&mut self.sending, Sending::No) else { return false };
+        let Sending::Yes { then_close } = std::mem::replace(&mut self.sending, Sending::No) else {
+            return false;
+        };
         self.status.clear();
         let pushed = self.pushing.take().is_some();
         match answer {
-            ToEditor::Applied { done, failed, stopped } => {
+            ToEditor::Applied {
+                done,
+                failed,
+                stopped,
+            } => {
                 self.learn();
                 self.applied = self.sd.clone();
                 self.trouble = None;
@@ -595,7 +705,11 @@ impl Editor {
                 if whole {
                     self.status = format!("Applied, and {} inside updated.", items(done));
                 }
-                self.pushed = Some(Walked { done, failed, stopped });
+                self.pushed = Some(Walked {
+                    done,
+                    failed,
+                    stopped,
+                });
                 then_close && whole
             }
             ToEditor::Failed { why } => {
@@ -615,7 +729,14 @@ impl Editor {
                 if let Some(node) = ace.cond.as_ref().and_then(Cond::tree) {
                     for c in node.claims() {
                         if let Node::Claim { src, name, op, val } = c {
-                            out.push((format!("{}.{}", src.word(), name.trim()), if op.valued() { cond::values(*op, val) } else { vec![] }));
+                            out.push((
+                                format!("{}.{}", src.word(), name.trim()),
+                                if op.valued() {
+                                    cond::values(*op, val)
+                                } else {
+                                    vec![]
+                                },
+                            ));
                             if let cond::Val::Claim(other, n) = val {
                                 out.push((format!("{}.{}", other.word(), n.trim()), vec![]));
                             }
@@ -631,7 +752,10 @@ impl Editor {
             out
         };
         let before = tested(&self.applied);
-        let new: Vec<_> = tested(&self.sd).into_iter().filter(|t| !before.contains(t)).collect();
+        let new: Vec<_> = tested(&self.sd)
+            .into_iter()
+            .filter(|t| !before.contains(t))
+            .collect();
         // Only whoever may write the machine's key teaches it.
         if new.is_empty() || !self.learned.writable {
             return;
@@ -656,13 +780,18 @@ impl Editor {
 
     /// The HTML attributes of a named field, noting what it holds.
     pub fn field(&self, name: &str, value: &str) -> String {
-        self.seen.borrow_mut().push((name.to_string(), value.to_string()));
+        self.seen
+            .borrow_mut()
+            .push((name.to_string(), value.to_string()));
         format!("name=\"{}\"", libgxwi::escape(name))
     }
 
     /// What a text field shows: what is being typed in it, or `value`.
     pub fn shown_text(&self, name: &str, value: &str) -> String {
-        self.typed.get(name).cloned().unwrap_or_else(|| value.to_string())
+        self.typed
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| value.to_string())
     }
 
     /// Puts every field the next render draws right, after a change: a
@@ -701,7 +830,11 @@ impl Live for Editor {
                 self.apply_or_ask(false);
             }
             "ok" => {
-                if self.sending == Sending::No && !self.apply_or_ask(true) && self.trouble.is_none() && self.sendable(&self.changed()).is_empty() {
+                if self.sending == Sending::No
+                    && !self.apply_or_ask(true)
+                    && self.trouble.is_none()
+                    && self.sendable(&self.changed()).is_empty()
+                {
                     self.close();
                 }
             }
@@ -780,7 +913,10 @@ impl Live for Editor {
 /// The request, from the first line of the input.
 fn request() -> Result<Request, String> {
     let mut first = String::new();
-    std::io::stdin().lock().read_line(&mut first).map_err(|e| format!("the request could not be read: {e}"))?;
+    std::io::stdin()
+        .lock()
+        .read_line(&mut first)
+        .map_err(|e| format!("the request could not be read: {e}"))?;
     if first.trim().is_empty() {
         return Err("no request: it is opened by a program, which says what to edit on its first line (see gxwi-sd-editor(1))".into());
     }
@@ -791,12 +927,14 @@ fn main() {
     // Gone with whatever opened it, however that went.
     // SAFETY: prctl with these arguments only sets a signal for later.
     unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) };
+    // SAFETY: getppid reads the parent PID and takes no pointers.
     if unsafe { libc::getppid() } == 1 {
         std::process::exit(0);
     }
     let request = request().unwrap_or_else(|why| die(&why));
     let title = format!("Permissions for {}", request.object.name);
-    let mut editor = Editor::new(request, Names::new(), Caller::own(), Learned::read()).unwrap_or_else(|why| die(&why));
+    let mut editor = Editor::new(request, Names::new(), Caller::own(), Learned::read())
+        .unwrap_or_else(|why| die(&why));
     editor.known = Known::read();
     let mut app = App::connect().unwrap_or_else(|e| die(&format!("no desktop to open on: {e}")));
     app.stylesheet("/editor.css", include_str!("editor.css"));
@@ -808,7 +946,9 @@ fn main() {
     std::thread::spawn(move || {
         for said in std::io::stdin().lock().lines() {
             let Ok(said) = said else { break };
-            let Ok(answer) = serde_json::from_str::<ToEditor>(&said) else { continue };
+            let Ok(answer) = serde_json::from_str::<ToEditor>(&said) else {
+                continue;
+            };
             let mut done = false;
             heard.update(|editor, fields| {
                 done = editor.answered(answer);
@@ -829,7 +969,9 @@ fn main() {
 /// Writes one line to the program. Whether it could.
 fn say(message: &FromEditor) -> bool {
     let mut out = std::io::stdout().lock();
-    out.write_all(line(message).as_bytes()).and_then(|()| out.flush()).is_ok()
+    out.write_all(line(message).as_bytes())
+        .and_then(|()| out.flush())
+        .is_ok()
 }
 
 /// "1 item", "1,204 items".
@@ -837,7 +979,7 @@ pub fn items(n: u64) -> String {
     let digits = n.to_string();
     let mut grouped = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             grouped.push(',');
         }
         grouped.push(c);

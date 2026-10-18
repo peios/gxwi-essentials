@@ -34,8 +34,20 @@ pub fn keeping_short(status: &Status) -> (String, Tone) {
         return ("Set manually".into(), Tone::Warn);
     }
     match status.sync {
-        Sync::Synchronised => (format!("Synchronised with {}", status.system_peer.as_deref().unwrap_or("a time server")), Tone::Good),
-        Sync::Settling => (format!("Synchronising with {}", status.system_peer.as_deref().unwrap_or("a time server")), Tone::Good),
+        Sync::Synchronised => (
+            format!(
+                "Synchronised with {}",
+                status.system_peer.as_deref().unwrap_or("a time server")
+            ),
+            Tone::Good,
+        ),
+        Sync::Settling => (
+            format!(
+                "Synchronising with {}",
+                status.system_peer.as_deref().unwrap_or("a time server")
+            ),
+            Tone::Good,
+        ),
         Sync::Spike => ("Verifying a time change".into(), Tone::Warn),
         Sync::Unsynchronised if status.sources == 0 => ("No time server".into(), Tone::Bad),
         Sync::Unsynchronised => ("Not synchronised".into(), Tone::Warn),
@@ -59,9 +71,17 @@ pub fn zone_line(here: &jiff::Zoned, zone: Option<&str>) -> String {
     let utc = if seconds == 0 {
         "the same as UTC".to_string()
     } else {
-        let (sign, s) = if seconds < 0 { ("behind", -seconds) } else { ("ahead of", seconds) };
+        let (sign, s) = if seconds < 0 {
+            ("behind", -seconds)
+        } else {
+            ("ahead of", seconds)
+        };
         let (h, m) = (s / 3600, s % 3600 / 60);
-        let span = if m == 0 { format!("{h} hour{}", if h == 1 { "" } else { "s" }) } else { format!("{h}:{m:02}") };
+        let span = if m == 0 {
+            format!("{h} hour{}", if h == 1 { "" } else { "s" })
+        } else {
+            format!("{h}:{m:02}")
+        };
         format!("{span} {sign} UTC")
     };
     match zone {
@@ -152,7 +172,11 @@ pub fn bytes(n: u64) -> String {
 
 /// How long the machine has been up.
 pub fn uptime(seconds: u64) -> String {
-    let (days, hours, minutes) = (seconds / 86_400, seconds % 86_400 / 3600, seconds % 3600 / 60);
+    let (days, hours, minutes) = (
+        seconds / 86_400,
+        seconds % 86_400 / 3600,
+        seconds % 3600 / 60,
+    );
     let part = |n: u64, unit: &str| format!("{n} {unit}{}", if n == 1 { "" } else { "s" });
     match (days, hours) {
         (0, 0) => part(minutes.max(1), "minute"),
@@ -171,8 +195,13 @@ pub fn boot_mode(boot: &peinit::client::Boot) -> String {
     };
     match boot.reason.as_str() {
         "requested" => format!("{mode}, as requested by peios.safemode=1"),
-        "safe_mode_downgrade" if boot.downgrade.is_empty() => format!("{mode}, because a normal boot couldn't be planned"),
-        "safe_mode_downgrade" => format!("{mode}, because a normal boot couldn't be planned: {}", boot.downgrade.join("; ")),
+        "safe_mode_downgrade" if boot.downgrade.is_empty() => {
+            format!("{mode}, because a normal boot couldn't be planned")
+        }
+        "safe_mode_downgrade" => format!(
+            "{mode}, because a normal boot couldn't be planned: {}",
+            boot.downgrade.join("; ")
+        ),
         _ => mode.to_string(),
     }
 }
@@ -184,13 +213,23 @@ pub fn boot_health(boot: &peinit::client::Boot) -> String {
     } else if let Some(why) = &boot.confirm_error {
         format!("This boot can't be confirmed and will count as failed: {why}.")
     } else if !boot.waiting_on.is_empty() {
-        format!("Confirming: waiting for {} to run for {} seconds.", boot.waiting_on.join(", "), boot.grace_seconds)
+        format!(
+            "Confirming: waiting for {} to run for {} seconds.",
+            boot.waiting_on.join(", "),
+            boot.grace_seconds
+        )
     } else {
-        format!("Confirming: essential services must run for {} seconds.", boot.grace_seconds)
+        format!(
+            "Confirming: essential services must run for {} seconds.",
+            boot.grace_seconds
+        )
     };
     let before = match (boot.attempts, boot.max_attempts) {
         (0, _) => String::new(),
-        (n, 0) => format!(" {n} failed boot{} before this one.", if n == 1 { "" } else { "s" }),
+        (n, 0) => format!(
+            " {n} failed boot{} before this one.",
+            if n == 1 { "" } else { "s" }
+        ),
         (n, max) => format!(
             " {n} failed boot{} before this one; after {max} in a row, the machine starts in recovery.",
             if n == 1 { "" } else { "s" }
@@ -206,7 +245,10 @@ mod tests {
     #[test]
     fn zones_read_as_places() {
         assert_eq!(zone_place("Europe/London"), "London");
-        assert_eq!(zone_place("America/Argentina/Buenos_Aires"), "Argentina, Buenos Aires");
+        assert_eq!(
+            zone_place("America/Argentina/Buenos_Aires"),
+            "Argentina, Buenos Aires"
+        );
         assert_eq!(zone_place("UTC"), "UTC");
     }
 
@@ -227,7 +269,10 @@ mod tests {
 
     #[test]
     fn a_status_says_how_the_clock_is_kept() {
-        let manual = Status { manual: true, ..Status::default() };
+        let manual = Status {
+            manual: true,
+            ..Status::default()
+        };
         assert!(keeping(&manual).starts_with("Set manually"));
         let none = Status::default();
         assert!(keeping(&none).contains("no time server"));
@@ -238,6 +283,9 @@ mod tests {
             sources: 4,
             ..Status::default()
         };
-        assert_eq!(keeping(&kept), "Kept from 1.time.peios.org, within 12.0 ms.");
+        assert_eq!(
+            keeping(&kept),
+            "Kept from 1.time.peios.org, within 12.0 ms."
+        );
     }
 }

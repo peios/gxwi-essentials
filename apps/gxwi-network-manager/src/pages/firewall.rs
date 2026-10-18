@@ -7,7 +7,10 @@ use crate::engine::{self, Conn, Context, Judge, Policy};
 use crate::live;
 use crate::manager::{Col, Manager, Tab};
 use crate::rules::{self, Layer, Rule, Verdict};
-use crate::ui::{actions, alert, bar_chart, bytes, decision, duration, example, h, locked, number, phead, ppath, svg, tag, values, LOCKED};
+use crate::ui::{
+    actions, alert, bar_chart, bytes, decision, duration, example, h, locked, number, phead, ppath,
+    svg, tag, values, LOCKED,
+};
 
 /// What a cell of the exposure matrix shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,10 +60,17 @@ const ELSEWHERE: u16 = 9999;
 /// Every listening service, and whether `policy` lets a new connection
 /// reach it from a private network, a public network, and this machine.
 pub fn exposure(m: &Manager, policy: &Policy) -> Vec<Row> {
-    let Ok(judge) = Judge::new(policy) else { return Vec::new() };
+    let Ok(judge) = Judge::new(policy) else {
+        return Vec::new();
+    };
     let interface = m.state.online().or(m.state.interfaces.first());
-    let iface = interface.map(|i| i.name().to_string()).unwrap_or_else(|| "eth0".into());
-    let here = interface.and_then(|i| i.status.addresses.iter().find(|a| !a.contains(':'))).map(|a| a.split('/').next().unwrap_or_default().to_string()).unwrap_or_else(|| "192.0.2.10".into());
+    let iface = interface
+        .map(|i| i.name().to_string())
+        .unwrap_or_else(|| "eth0".into());
+    let here = interface
+        .and_then(|i| i.status.addresses.iter().find(|a| !a.contains(':')))
+        .map(|a| a.split('/').next().unwrap_or_default().to_string())
+        .unwrap_or_else(|| "192.0.2.10".into());
     let mut seen: Vec<(u8, u16)> = Vec::new();
     let mut listeners: Vec<(String, Option<String>, String, u16, bool)> = Vec::new();
     for l in &m.live.listeners {
@@ -68,9 +78,21 @@ pub fn exposure(m: &Manager, policy: &Policy) -> Vec<Row> {
             continue;
         }
         seen.push((l.protocol, l.port));
-        listeners.push((live::listener_title(l), live::service(&l.owner).map(String::from), live::protocol_name(l.protocol).into(), l.port, live::loopback_only(l)));
+        listeners.push((
+            live::listener_title(l),
+            live::service(&l.owner).map(String::from),
+            live::protocol_name(l.protocol).into(),
+            l.port,
+            live::loopback_only(l),
+        ));
     }
-    listeners.push(("Any other port".into(), None, "tcp".into(), ELSEWHERE, false));
+    listeners.push((
+        "Any other port".into(),
+        None,
+        "tcp".into(),
+        ELSEWHERE,
+        false,
+    ));
     listeners
         .into_iter()
         .map(|(title, service, protocol, port, local_only)| {
@@ -78,40 +100,88 @@ pub fn exposure(m: &Manager, policy: &Policy) -> Vec<Row> {
                 .into_iter()
                 .map(|col| {
                     let conn = match col {
-                        Col::Local => Conn { protocol: protocol.clone(), remote: "127.0.0.1".into(), local: "127.0.0.1".into(), local_port: port, interface: "lo".into(), service: service.clone(), ..Conn::default() },
+                        Col::Local => Conn {
+                            protocol: protocol.clone(),
+                            remote: "127.0.0.1".into(),
+                            local: "127.0.0.1".into(),
+                            local_port: port,
+                            interface: "lo".into(),
+                            service: service.clone(),
+                            ..Conn::default()
+                        },
                         _ => Conn {
                             protocol: protocol.clone(),
-                            remote: if col == Col::Private { "192.168.1.77".into() } else { "198.51.100.7".into() },
+                            remote: if col == Col::Private {
+                                "192.168.1.77".into()
+                            } else {
+                                "198.51.100.7".into()
+                            },
                             local: here.clone(),
                             local_port: port,
                             interface: iface.clone(),
-                            network: Context { trust: Some(col.id().into()), ..Context::default() },
+                            network: Context {
+                                trust: Some(col.id().into()),
+                                ..Context::default()
+                            },
                             service: service.clone(),
                             ..Conn::default()
                         },
                     };
                     if local_only && col != Col::Local {
-                        return Cell { col, state: State::NotListening, by: None, conn };
+                        return Cell {
+                            col,
+                            state: State::NotListening,
+                            by: None,
+                            conn,
+                        };
                     }
                     let decided = judge.result(&conn, &engine::no_counts);
                     let (state, by) = match decided {
                         Ok(d) if d.passes() => {
-                            let narrowed = d.by.as_deref().and_then(|p| rules::find(policy.forest(d.layer), p)).is_some_and(|r| refuses_some(&r.children));
-                            (if narrowed { State::Limited } else { State::Allow }, d.by)
+                            let narrowed =
+                                d.by.as_deref()
+                                    .and_then(|p| rules::find(policy.forest(d.layer), p))
+                                    .is_some_and(|r| refuses_some(&r.children));
+                            (
+                                if narrowed {
+                                    State::Limited
+                                } else {
+                                    State::Allow
+                                },
+                                d.by,
+                            )
                         }
                         Ok(d) => (State::Block, d.by),
                         Err(_) => (State::Block, None),
                     };
-                    Cell { col, state, by, conn }
+                    Cell {
+                        col,
+                        state,
+                        by,
+                        conn,
+                    }
                 })
                 .collect();
-            Row { title, service, protocol, port, cells }
+            Row {
+                title,
+                service,
+                protocol,
+                port,
+                cells,
+            }
         })
         .collect()
 }
 
 fn refuses_some(rules: &[Rule]) -> bool {
-    rules.iter().any(|r| r.enabled && (r.verdict().and_then(rules::verdict_of).is_some_and(|v| v != Verdict::Allow) || refuses_some(&r.children)))
+    rules.iter().any(|r| {
+        r.enabled
+            && (r
+                .verdict()
+                .and_then(rules::verdict_of)
+                .is_some_and(|v| v != Verdict::Allow)
+                || refuses_some(&r.children))
+    })
 }
 
 fn cell_html(cell: &Cell, row: usize) -> String {
@@ -132,19 +202,46 @@ fn cell_html(cell: &Cell, row: usize) -> String {
 
 /// The live state is the engine's, which only administrators may read.
 fn administrators_only(title: &str, what: &str) -> String {
-    format!("{}{}", phead(title, "", ""), alert("lock", "lock", &h(what)))
+    format!(
+        "{}{}",
+        phead(title, "", ""),
+        alert("lock", "lock", &h(what))
+    )
 }
 
 pub fn exposure_page(m: &Manager) -> String {
     if !m.config.may.rules {
-        return administrators_only("Exposure", "Only administrators can see which services are listening.");
+        return administrators_only(
+            "Exposure",
+            "Only administrators can see which services are listening.",
+        );
     }
     let rows = exposure(m, &m.config.policy);
-    let public: Vec<&Row> = rows.iter().filter(|r| r.service.is_some() && r.cells.iter().any(|c| c.col == Col::Public && c.open())).collect();
+    let public: Vec<&Row> = rows
+        .iter()
+        .filter(|r| r.service.is_some() && r.cells.iter().any(|c| c.col == Col::Public && c.open()))
+        .collect();
     let summary = if public.is_empty() {
-        alert("info", "info", "No services can be reached from public networks.")
+        alert(
+            "info",
+            "info",
+            "No services can be reached from public networks.",
+        )
     } else {
-        alert("warn", "warn", &format!("<b>{} service{} reachable from public networks:</b> {}.", public.len(), if public.len() == 1 { " is" } else { "s are" }, public.iter().map(|r| h(&r.title)).collect::<Vec<_>>().join(", ")))
+        alert(
+            "warn",
+            "warn",
+            &format!(
+                "<b>{} service{} reachable from public networks:</b> {}.",
+                public.len(),
+                if public.len() == 1 { " is" } else { "s are" },
+                public
+                    .iter()
+                    .map(|r| h(&r.title))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )
     };
     let body: String = rows
         .iter()
@@ -159,8 +256,14 @@ pub fn exposure_page(m: &Manager) -> String {
         .collect();
     format!(
         r#"{}{}{summary}<div class="panel scroll"><table class="tbl matrix"><thead><tr><th>Service</th><th class="col">Private networks</th><th class="col">Public networks</th><th class="col">This machine</th></tr></thead><tbody>{body}</tbody></table></div><div class="footnote">Each cell is judged by this machine's rules, as a new connection from a network of that trust level. Select one to see why, or to change it.</div>"#,
-        phead("Exposure", "Services listening on this machine, and where they can be reached from.", ""),
-        example("Which services are listening comes from the firewall's live state, which programs can't read yet. The decisions are your real rules.")
+        phead(
+            "Exposure",
+            "Services listening on this machine, and where they can be reached from.",
+            ""
+        ),
+        example(
+            "Which services are listening comes from the firewall's live state, which programs can't read yet. The decisions are your real rules."
+        )
     )
 }
 
@@ -190,24 +293,51 @@ pub fn built_in(layer: Layer, path: &str) -> bool {
 pub fn rule_table(m: &Manager, forest: &[Rule], layer: Layer) -> String {
     let may = m.may_rules();
     let mut rows = String::new();
-    fn walk(list: &[Rule], base: &str, depth: usize, inherited: i64, layer: Layer, may: bool, rows: &mut String) {
+    fn walk(
+        list: &[Rule],
+        base: &str,
+        depth: usize,
+        inherited: i64,
+        layer: Layer,
+        may: bool,
+        rows: &mut String,
+    ) {
         for r in list {
-            let path = if base.is_empty() { r.name.clone() } else { format!("{base}/{}", r.name) };
+            let path = if base.is_empty() {
+                r.name.clone()
+            } else {
+                format!("{base}/{}", r.name)
+            };
             let priority = r.priority.unwrap_or(inherited);
             let open = values(&[("layer", layer.key()), ("p", &path)]);
             *rows += &format!(
                 r#"<tr class="click{}" fx-click="rule-open"{open}><td><div class="rname {}">{}{}{}{}</div></td><td class="rsum">{}</td><td class="w">{}</td><td class="r w">{}</td><td class="w"><button class="btn ghost sm rowact" fx-click="rule-child-of"{open}{} title="Add an exception to {}">{}Exception</button></td></tr>"#,
                 if r.enabled { "" } else { " off" },
                 crate::ui::depth(depth),
-                if depth > 0 { r#"<span class="elbow"></span>"# } else { "" },
+                if depth > 0 {
+                    r#"<span class="elbow"></span>"#
+                } else {
+                    ""
+                },
                 h(&r.name),
-                if built_in(layer, &path) { r#" <span class="tag outline">Built-in</span>"# } else { "" },
-                if r.enabled { "" } else { r#" <span class="tag">Off</span>"# },
+                if built_in(layer, &path) {
+                    r#" <span class="tag outline">Built-in</span>"#
+                } else {
+                    ""
+                },
+                if r.enabled {
+                    ""
+                } else {
+                    r#" <span class="tag">Off</span>"#
+                },
                 h(&rules::summary(&r.conds, layer)),
                 actions(&r.actions, layer),
                 match r.priority {
                     Some(p) => p.to_string(),
-                    None => format!(r#"<span class="muted" title="{}">{inherited}</span>"#, if depth > 0 { "Inherited" } else { "Default" }),
+                    None => format!(
+                        r#"<span class="muted" title="{}">{inherited}</span>"#,
+                        if depth > 0 { "Inherited" } else { "Default" }
+                    ),
                 },
                 if may { "" } else { " disabled" },
                 h(&r.name),
@@ -220,7 +350,14 @@ pub fn rule_table(m: &Manager, forest: &[Rule], layer: Layer) -> String {
     if rows.is_empty() {
         rows = r#"<tr><td colspan="5" class="muted">No rules.</td></tr>"#.into();
     }
-    format!(r#"<div class="panel scroll"><table class="tbl rtable"><thead><tr><th>Rule</th><th>Matches</th><th>{}</th><th class="r">Priority</th><th></th></tr></thead><tbody>{rows}</tbody></table></div>"#, if layer == Layer::Interface { "Profile" } else { "Action" })
+    format!(
+        r#"<div class="panel scroll"><table class="tbl rtable"><thead><tr><th>Rule</th><th>Matches</th><th>{}</th><th class="r">Priority</th><th></th></tr></thead><tbody>{rows}</tbody></table></div>"#,
+        if layer == Layer::Interface {
+            "Profile"
+        } else {
+            "Action"
+        }
+    )
 }
 
 pub fn rules_page(m: &Manager) -> String {
@@ -231,13 +368,32 @@ pub fn rules_page(m: &Manager) -> String {
         .map(|l| format!(r#"<button role="tab" aria-pressed="{}" fx-click="layer"{}>{} <span class="muted">{}</span></button>"#, *l == layer, values(&[("l", l.key())]), l.title(), rules::count(m.config.policy.forest(*l))))
         .collect();
     let report = engine::check(&m.config.policy, &m.subjects());
-    let lints: Vec<&String> = report.lints.iter().filter(|l| rules::walk(m.config.policy.forest(layer)).iter().any(|(p, _, _)| l.contains(&format!("Rule {p}:")))).collect();
+    let lints: Vec<&String> = report
+        .lints
+        .iter()
+        .filter(|l| {
+            rules::walk(m.config.policy.forest(layer))
+                .iter()
+                .any(|(p, _, _)| l.contains(&format!("Rule {p}:")))
+        })
+        .collect();
     let mut notes = String::new();
     if !report.ok() {
-        notes += &alert("bad", "warn", &format!("<b>The machine would refuse these rules:</b> {}", h(&report.refusals.join(" "))));
+        notes += &alert(
+            "bad",
+            "warn",
+            &format!(
+                "<b>The machine would refuse these rules:</b> {}",
+                h(&report.refusals.join(" "))
+            ),
+        );
     }
     if !lints.is_empty() {
-        notes += &alert("warn", "warn", &lints.iter().map(|l| h(l)).collect::<Vec<_>>().join("<br>"));
+        notes += &alert(
+            "warn",
+            "warn",
+            &lints.iter().map(|l| h(l)).collect::<Vec<_>>().join("<br>"),
+        );
     }
     let extra = format!(
         r#"<button class="btn" fx-click="test-open">{}Test a connection</button><button class="btn primary" fx-click="rule-new"{}{}>{}New rule</button>"#,
@@ -248,7 +404,11 @@ pub fn rules_page(m: &Manager) -> String {
     );
     format!(
         r#"{}{}{notes}<div class="layerbar"><div class="seg" role="tablist">{tabs}</div><span class="note">{}</span></div>{}<div class="footnote">Traffic no rule allows is blocked.</div>"#,
-        phead("Firewall rules", "Exceptions sit under the rule they narrow. Order has no effect: the highest priority wins, and a tie goes to the stricter action.", &extra),
+        phead(
+            "Firewall rules",
+            "Exceptions sit under the rule they narrow. Order has no effect: the highest priority wins, and a tie goes to the stricter action.",
+            &extra
+        ),
         locked(m.config.may.rules, LOCKED),
         layer.about(),
         rule_table(m, m.config.policy.forest(layer), layer)
@@ -257,14 +417,19 @@ pub fn rules_page(m: &Manager) -> String {
 
 pub fn activity_page(m: &Manager) -> String {
     if !m.config.may.rules {
-        return administrators_only("Activity", "Only administrators can see the firewall's decisions and live connections.");
+        return administrators_only(
+            "Activity",
+            "Only administrators can see the firewall's decisions and live connections.",
+        );
     }
     let now = crate::ui::now();
     let minute = now / 60;
     let mut buckets: Vec<(u64, u64, u64)> = vec![(0, 0, 0); 15];
     for e in &m.live.events {
         let at = e.time_ns / 1_000_000_000 / 60;
-        let Some(back) = minute.checked_sub(at) else { continue };
+        let Some(back) = minute.checked_sub(at) else {
+            continue;
+        };
         if back >= 15 {
             continue;
         }
@@ -284,10 +449,11 @@ pub fn activity_page(m: &Manager) -> String {
         number(total(|b| b.1))
     );
     let tab = m.tab;
-    let streams: BTreeMap<&str, Vec<&ntfe::Counter>> = m.live.counters.iter().fold(BTreeMap::new(), |mut map, c| {
-        map.entry(c.name.as_str()).or_insert_with(Vec::new).push(c);
-        map
-    });
+    let streams: BTreeMap<&str, Vec<&ntfe::Counter>> =
+        m.live.counters.iter().fold(BTreeMap::new(), |mut map, c| {
+            map.entry(c.name.as_str()).or_insert_with(Vec::new).push(c);
+            map
+        });
     let tabs = format!(
         r#"<div class="layerbar"><div class="seg"><button aria-pressed="{}" fx-click="tab"{}>Connections <span class="muted">{}</span></button><button aria-pressed="{}" fx-click="tab"{}>Counters <span class="muted">{}</span></button></div></div>"#,
         tab == Tab::Connections,
@@ -378,7 +544,13 @@ pub fn activity_page(m: &Manager) -> String {
     };
     format!(
         "{}{}{chart}{tabs}{body}",
-        phead("Activity", "What the firewall has been deciding, and the connections open now.", ""),
-        example("The firewall's live state can't be read by programs yet. The decisions shown are your real rules judging example traffic.")
+        phead(
+            "Activity",
+            "What the firewall has been deciding, and the connections open now.",
+            ""
+        ),
+        example(
+            "The firewall's live state can't be read by programs yet. The decisions shown are your real rules judging example traffic."
+        )
     )
 }

@@ -57,7 +57,12 @@ pub enum PartitionType {
 }
 
 impl PartitionType {
-    pub const ALL: [PartitionType; 4] = [PartitionType::Linux, PartitionType::Esp, PartitionType::Swap, PartitionType::MicrosoftData];
+    pub const ALL: [PartitionType; 4] = [
+        PartitionType::Linux,
+        PartitionType::Esp,
+        PartitionType::Swap,
+        PartitionType::MicrosoftData,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -97,16 +102,50 @@ pub struct Startup {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
     /// A new, empty GPT table, which loses everything on the disk.
-    NewTable { disk: String },
-    AddPartition { disk: String, start: u64, size: u64, kind: PartitionType, name: String, format: Option<(Format, String)>, root: Option<Vec<u8>> },
-    DeletePartition { volume: String },
-    Format { volume: String, format: Format, label: String, root: Option<Vec<u8>> },
-    Mount { volume: String, target: String, read_only: bool, policy: MountPolicy, at_startup: bool },
-    Unmount { target: String },
-    SetPolicy { target: String, policy: MountPolicy },
-    AddStartup { startup: Startup },
-    RemoveStartup { id: String },
-    Eject { disk: String },
+    NewTable {
+        disk: String,
+    },
+    AddPartition {
+        disk: String,
+        start: u64,
+        size: u64,
+        kind: PartitionType,
+        name: String,
+        format: Option<(Format, String)>,
+        root: Option<Vec<u8>>,
+    },
+    DeletePartition {
+        volume: String,
+    },
+    Format {
+        volume: String,
+        format: Format,
+        label: String,
+        root: Option<Vec<u8>>,
+    },
+    Mount {
+        volume: String,
+        target: String,
+        read_only: bool,
+        policy: MountPolicy,
+        at_startup: bool,
+    },
+    Unmount {
+        target: String,
+    },
+    SetPolicy {
+        target: String,
+        policy: MountPolicy,
+    },
+    AddStartup {
+        startup: Startup,
+    },
+    RemoveStartup {
+        id: String,
+    },
+    Eject {
+        disk: String,
+    },
 }
 
 impl Change {
@@ -136,7 +175,9 @@ impl Change {
             Change::Mount { target, .. } => format!("Mounted at {target}."),
             Change::Unmount { target } => format!("{target} unmounted."),
             Change::SetPolicy { target, .. } => format!("Policy of {target} changed."),
-            Change::AddStartup { startup } => format!("{} is mounted at every startup now.", startup.target),
+            Change::AddStartup { startup } => {
+                format!("{} is mounted at every startup now.", startup.target)
+            }
             Change::RemoveStartup { .. } => "Removed from startup.".into(),
             Change::Eject { disk } => format!("{disk} ejected: it can be taken out."),
         }
@@ -151,7 +192,11 @@ impl Change {
 pub enum Heard {
     /// How far it has got: `done` of `of` (0 when not known), and what it
     /// is doing now.
-    Progress { done: usize, of: usize, text: String },
+    Progress {
+        done: usize,
+        of: usize,
+        text: String,
+    },
     /// Made: what was done, or nothing for the change's own words.
     Done(String),
     Failed(String),
@@ -164,7 +209,8 @@ impl Heard {
 }
 
 /// Why nothing changes, until the service exists.
-pub const WAITING: &str = "Nothing was changed: changing disks waits for Peios's disk service, which isn't built yet.";
+pub const WAITING: &str =
+    "Nothing was changed: changing disks waits for Peios's disk service, which isn't built yet.";
 
 /// Makes `change`, on a thread, telling `heard` how it goes until it ends.
 pub fn request(change: Change, heard: impl Fn(Heard) + Send + Sync + 'static) {
@@ -201,7 +247,9 @@ pub fn make(change: Change) -> Result<String, String> {
 pub fn may() -> Result<(), String> {
     use peios::security::Privileges;
     use peios::token::{Token, TokenAccess};
-    let held = Token::open_self(false, TokenAccess::QUERY).and_then(|t| t.privileges()).map(|p| p.present.contains(Privileges::MANAGE_VOLUME));
+    let held = Token::open_self(false, TokenAccess::QUERY)
+        .and_then(|t| t.privileges())
+        .map(|p| p.present.contains(Privileges::MANAGE_VOLUME));
     match held {
         Ok(true) => Ok(()),
         Ok(false) => Err("Changing disks needs the Manage Volumes privilege, which Administrators hold. You can look at everything here.".into()),

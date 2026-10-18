@@ -19,7 +19,10 @@ libgxwi::icon!(b"dev.peios.gxwi-feature-manager");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
-        eprintln!("gxwi-feature-manager: usage: gxwi-feature-manager (given {:?})", std::env::args().skip(1).collect::<Vec<_>>());
+        eprintln!(
+            "gxwi-feature-manager: usage: gxwi-feature-manager (given {:?})",
+            std::env::args().skip(1).collect::<Vec<_>>()
+        );
         std::process::exit(64);
     }
     let mut app = match App::connect() {
@@ -30,7 +33,10 @@ fn main() {
         }
     };
     libgxwi::settings::stylesheet(&mut app);
-    app.stylesheet("/gxwi-feature-manager.css", include_str!("gxwi-feature-manager.css"));
+    app.stylesheet(
+        "/gxwi-feature-manager.css",
+        include_str!("gxwi-feature-manager.css"),
+    );
     let window = app.live("Feature Manager", Manager::new());
     let aside = std::sync::Arc::downgrade(&window);
     window.update(|manager, _| {

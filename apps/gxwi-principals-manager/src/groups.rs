@@ -6,8 +6,8 @@
 //! is put in or taken out of is named by its SID, which lpsd reads as
 //! readily, and which can't mean a different group.
 
-use libauthd::ident::Record;
-use libauthd_client::admin::Admin;
+use auth_core::ident::Record;
+use auth_core::client::admin::Admin;
 use libgxwi::{Fields, escape};
 
 use crate::accounts::{self, Doing, form, options, short};
@@ -27,7 +27,12 @@ pub struct Team {
 impl Team {
     pub fn of(record: &Record) -> Team {
         let sid = directory::sid_text(&record.sid);
-        Team { name: short(&record.qualified_name).to_string(), description: directory::description(record), local: directory::local(&sid), sid }
+        Team {
+            name: short(&record.qualified_name).to_string(),
+            description: directory::description(record),
+            local: directory::local(&sid),
+            sid,
+        }
     }
 }
 
@@ -43,8 +48,15 @@ pub fn fill(doing: &Doing, team: &Team, fields: &mut Fields) {
 
 /// The form for what is being done to a group, or a new one. `choices` are
 /// the users who may be added, by name and how they are shown.
-pub fn render(doing: &Doing, team: Option<&Team>, said: &str, choices: &[(String, String)]) -> String {
-    let form = |label: &str, title: &str, id: &str, body: &str, save: &str| form(label, title, id, &format!("{body}{said}"), save);
+pub fn render(
+    doing: &Doing,
+    team: Option<&Team>,
+    said: &str,
+    choices: &[(String, String)],
+) -> String {
+    let form = |label: &str, title: &str, id: &str, body: &str, save: &str| {
+        form(label, title, id, &format!("{body}{said}"), save)
+    };
     match (doing, team) {
         (Doing::NewGroup, _) => form(
             "A new group",
@@ -120,7 +132,9 @@ pub fn create(admin: &Admin, fields: &Fields) -> Result<(String, u32), String> {
     if name.is_empty() {
         return Err("Give it a name.".into());
     }
-    let rid = admin.group_create(&name, fields.get("description").trim()).map_err(|refusal| refusal.reason)?;
+    let rid = admin
+        .group_create(&name, fields.get("description").trim())
+        .map_err(|refusal| refusal.reason)?;
     Ok((name, rid))
 }
 
@@ -130,8 +144,18 @@ pub fn save_description(admin: &Admin, team: &Team, fields: &Fields) -> Result<S
     if description == team.description {
         return Ok("Nothing was changed.".into());
     }
-    admin.group_describe(&team.name, description).map_err(|refusal| refusal.reason)?;
-    Ok(format!("{}'s description is {}.", team.name, if description.is_empty() { "cleared" } else { "set" }))
+    admin
+        .group_describe(&team.name, description)
+        .map_err(|refusal| refusal.reason)?;
+    Ok(format!(
+        "{}'s description is {}.",
+        team.name,
+        if description.is_empty() {
+            "cleared"
+        } else {
+            "set"
+        }
+    ))
 }
 
 /// Saves the rename form. Answers what was done.
@@ -140,7 +164,9 @@ pub fn save_rename(admin: &Admin, team: &Team, fields: &Fields) -> Result<String
     if new_name.is_empty() {
         return Err("Give it a name.".into());
     }
-    admin.group_rename(&team.name, &new_name).map_err(|refusal| refusal.reason)?;
+    admin
+        .group_rename(&team.name, &new_name)
+        .map_err(|refusal| refusal.reason)?;
     Ok(format!("{} is now called {new_name}.", team.name))
 }
 
@@ -150,23 +176,37 @@ pub fn save_member(admin: &Admin, team: &Team, fields: &Fields) -> Result<String
     if member.is_empty() {
         return Err("Choose someone to add.".into());
     }
-    admin.group_add(member, &team.sid).map_err(|refusal| refusal.reason)?;
-    Ok(format!("{member} is in {}. It applies from their next sign-in.", team.name))
+    admin
+        .group_add(member, &team.sid)
+        .map_err(|refusal| refusal.reason)?;
+    Ok(format!(
+        "{member} is in {}. It applies from their next sign-in.",
+        team.name
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libauthd::ident::{Kind, Value};
+    use auth_core::ident::{Kind, Value};
 
     fn developers() -> Team {
-        Team { name: "developers".into(), sid: "S-1-5-21-1-2-3-1100".into(), description: "Builds the software".into(), local: true }
+        Team {
+            name: "developers".into(),
+            sid: "S-1-5-21-1-2-3-1100".into(),
+            description: "Builds the software".into(),
+            local: true,
+        }
     }
 
     #[test]
     fn a_group_is_read_from_its_record() {
         let record = Record {
-            sid: "S-1-5-21-1-2-3-1100".parse::<peios::security::Sid>().unwrap().as_bytes().to_vec(),
+            sid: "S-1-5-21-1-2-3-1100"
+                .parse::<peios::security::Sid>()
+                .unwrap()
+                .as_bytes()
+                .to_vec(),
             qualified_name: "PEIOS\\developers".into(),
             kind_found: Kind::Group,
             values: vec![Value::Description("Builds the software".into())],
@@ -178,14 +218,23 @@ mod tests {
     #[test]
     fn a_group_with_members_is_not_offered_for_deleting() {
         let asked = asking_delete(&developers(), 2);
-        assert!(asked.contains("has 2 members") && !asked.contains("delete-group-yes"), "{asked}");
+        assert!(
+            asked.contains("has 2 members") && !asked.contains("delete-group-yes"),
+            "{asked}"
+        );
         assert!(asking_delete(&developers(), 0).contains("delete-group-yes"));
     }
 
     #[test]
     fn adding_a_member_offers_who_may_be_added() {
         let choices = vec![("alice".to_string(), "alice".to_string())];
-        assert!(render(&Doing::AddMember, Some(&developers()), "", &choices).contains("<option value=\"alice\">alice</option>"));
-        assert!(render(&Doing::AddMember, Some(&developers()), "", &[]).contains("Every local user is in it already."));
+        assert!(
+            render(&Doing::AddMember, Some(&developers()), "", &choices)
+                .contains("<option value=\"alice\">alice</option>")
+        );
+        assert!(
+            render(&Doing::AddMember, Some(&developers()), "", &[])
+                .contains("Every local user is in it already.")
+        );
     }
 }

@@ -16,17 +16,24 @@ use peios::security::AccessMask;
 
 /// The trust key's own descriptor.
 pub fn trust_key() -> Result<(Request, Apply), String> {
-    let (mut request, apply) = key_permissions::key(TRUST_KEY, "Trust", "You can't change who may change what this machine trusts.")?;
+    let (mut request, apply) = key_permissions::key(
+        TRUST_KEY,
+        "Trust",
+        "You can't change who may change what this machine trusts.",
+    )?;
     request.object.kind = format!("What this machine trusts, kept in {TRUST_KEY}");
     Ok((request, apply))
 }
 
 /// The descriptor trustd checks its requests against, as it is now.
 fn control_security() -> Result<Vec<u8>, String> {
-    let key = Key::open(None, TRUST_KEY, KeyAccess::QUERY_VALUE, OpenFlags::empty()).map_err(|e| format!("it couldn't be read ({e})"))?;
+    let key = Key::open(None, TRUST_KEY, KeyAccess::QUERY_VALUE, OpenFlags::empty())
+        .map_err(|e| format!("it couldn't be read ({e})"))?;
     match key.query_value(CONTROL_SECURITY_VALUE.as_bytes(), None) {
         Ok(value) => Ok(value.data),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(libtrust::default_control_security().as_bytes().to_vec()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(libtrust::default_control_security().as_bytes().to_vec())
+        }
         Err(e) => Err(format!("it couldn't be read ({e})")),
     }
 }
@@ -35,10 +42,24 @@ fn control_security() -> Result<Vec<u8>, String> {
 /// change the trust key's values, which is what changing it takes.
 pub fn service(may: bool) -> Result<(Request, Apply), String> {
     let rc = AccessMask::READ_CONTROL.bits();
-    let general = |name: &str, mask: u32| Right { name: name.into(), mask, general: true };
-    let special = |name: &str, mask: u32| Right { name: name.into(), mask, general: false };
+    let general = |name: &str, mask: u32| Right {
+        name: name.into(),
+        mask,
+        general: true,
+    };
+    let special = |name: &str, mask: u32| Right {
+        name: name.into(),
+        mask,
+        general: false,
+    };
     let request = Request {
-        object: Object { name: "Trust Service".into(), kind: "The trust service, trustd".into(), container: false, children: Children::All, ..Object::default() },
+        object: Object {
+            name: "Trust Service".into(),
+            kind: "The trust service, trustd".into(),
+            container: false,
+            children: Children::All,
+            ..Object::default()
+        },
         sd: control_security()?,
         rights: vec![
             general("Full control", TRUST_ALL_ACCESS),
@@ -48,8 +69,18 @@ pub fn service(may: bool) -> Result<(Request, Apply), String> {
             special("Change permissions", AccessMask::WRITE_DAC.bits()),
             special("Take ownership", AccessMask::WRITE_OWNER.bits()),
         ],
-        generic: Generic { read: TRUST_QUERY | rc, write: TRUST_CONTROL | rc, execute: TRUST_QUERY, all: TRUST_ALL_ACCESS },
-        can: Can { dacl: may, owner: may, why: (!may).then(|| "You can't change who may control the trust service.".to_string()), ..Can::default() },
+        generic: Generic {
+            read: TRUST_QUERY | rc,
+            write: TRUST_CONTROL | rc,
+            execute: TRUST_QUERY,
+            all: TRUST_ALL_ACCESS,
+        },
+        can: Can {
+            dacl: may,
+            owner: may,
+            why: (!may).then(|| "You can't change who may control the trust service.".to_string()),
+            ..Can::default()
+        },
         ..Request::default()
     };
     let apply = move |sd: &[u8], parts: &[Part]| {
@@ -57,10 +88,17 @@ pub fn service(may: bool) -> Result<(Request, Apply), String> {
         // not the editor's to write back.
         let now = control_security()?;
         let value = splice(&now, sd, parts)?;
-        let key = Key::open(None, TRUST_KEY, KeyAccess::SET_VALUE, OpenFlags::empty()).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::PermissionDenied { "you are not allowed to".to_string() } else { e.to_string() }
-        })?;
-        key.set_value(CONTROL_SECURITY_VALUE.as_bytes(), ValueType::BINARY, &value).call().map_err(|e| e.to_string())
+        let key =
+            Key::open(None, TRUST_KEY, KeyAccess::SET_VALUE, OpenFlags::empty()).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    "you are not allowed to".to_string()
+                } else {
+                    e.to_string()
+                }
+            })?;
+        key.set_value(CONTROL_SECURITY_VALUE.as_bytes(), ValueType::BINARY, &value)
+            .call()
+            .map_err(|e| e.to_string())
     };
     Ok((request, Box::new(apply)))
 }

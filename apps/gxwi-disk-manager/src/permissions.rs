@@ -11,18 +11,28 @@ use peios::security::AccessMask;
 /// otherwise, and what a template is: the installer's own, for the root
 /// it formats. SYSTEM and Administrators have full control, everyone may
 /// read and run, and whoever makes something inside owns it.
-pub const DEFAULT_SDDL: &str = "O:SYG:SYD:(A;OICI;GA;;;SY)(A;OICI;GA;;;BA)(A;OICI;GRGX;;;WD)(A;OICIIO;GA;;;S-1-3-0)";
+pub const DEFAULT_SDDL: &str =
+    "O:SYG:SYD:(A;OICI;GA;;;SY)(A;OICI;GA;;;BA)(A;OICI;GRGX;;;WD)(A;OICIIO;GA;;;S-1-3-0)";
 
 pub fn default_root() -> Vec<u8> {
-    peios::security::sddl::parse(DEFAULT_SDDL).map(|sd| sd.as_bytes().to_vec()).unwrap_or_default()
+    peios::security::sddl::parse(DEFAULT_SDDL)
+        .map(|sd| sd.as_bytes().to_vec())
+        .unwrap_or_default()
 }
 
 fn rights() -> Vec<Right> {
     let generic = generic();
-    let right = |name: &str, mask: u32| Right { name: name.into(), mask, general: true };
+    let right = |name: &str, mask: u32| Right {
+        name: name.into(),
+        mask,
+        general: true,
+    };
     vec![
         right("Full control", generic.all),
-        right("Modify", generic.read | generic.write | generic.execute | AccessMask::DELETE.bits()),
+        right(
+            "Modify",
+            generic.read | generic.write | generic.execute | AccessMask::DELETE.bits(),
+        ),
         right("Read & execute", generic.read | generic.execute),
         right("Read", generic.read),
         right("Write", generic.write),
@@ -54,11 +64,22 @@ pub fn edit(
 ) -> Result<(), String> {
     let mut apply = apply;
     let request = Request {
-        object: Object { name: what.to_string(), kind: "Folder".into(), container: true, children: Children::All, ..Object::default() },
+        object: Object {
+            name: what.to_string(),
+            kind: "Folder".into(),
+            container: true,
+            children: Children::All,
+            ..Object::default()
+        },
         sd: sd.to_vec(),
         rights: rights(),
         generic: generic(),
-        can: Can { dacl: may, owner: may, why: if may { None } else { why }, ..Can::default() },
+        can: Can {
+            dacl: may,
+            owner: may,
+            why: if may { None } else { why },
+            ..Can::default()
+        },
         ..Request::default()
     };
     gxwi_sd_editor::edit(&request, move |sd, _parts| apply(sd), done).map_err(|e| {

@@ -12,7 +12,7 @@ use crate::query::SOURCES;
 #[derive(Debug, Clone)]
 pub enum Clock {
     Machine,
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     Fixed(Timestamp, TimeZone),
 }
 
@@ -20,6 +20,7 @@ impl Clock {
     pub fn now(&self) -> (Timestamp, TimeZone) {
         match self {
             Clock::Machine => (Timestamp::now(), TimeZone::system()),
+            #[cfg(test)]
             Clock::Fixed(now, zone) => (*now, zone.clone()),
         }
     }
@@ -78,7 +79,9 @@ pub fn timestamp(record: &Record) -> Option<i64> {
 /// A time as the list has it: the time of day, to the millisecond, and the
 /// day when it is not today.
 pub fn when(at: i64, now: Timestamp, zone: &TimeZone) -> String {
-    let Ok(at) = Timestamp::from_nanosecond(i128::from(at)) else { return at.to_string() };
+    let Ok(at) = Timestamp::from_nanosecond(i128::from(at)) else {
+        return at.to_string();
+    };
     let (at, now) = (at.to_zoned(zone.clone()), now.to_zoned(zone.clone()));
     if at.date() == now.date() {
         at.strftime("%H:%M:%S%.3f").to_string()
@@ -93,7 +96,10 @@ pub fn when(at: i64, now: Timestamp, zone: &TimeZone) -> String {
 /// offset it is said at.
 pub fn when_exactly(at: i64, zone: &TimeZone) -> String {
     match Timestamp::from_nanosecond(i128::from(at)) {
-        Ok(at) => at.to_zoned(zone.clone()).strftime("%A %-d %B %Y, %H:%M:%S%.9f (%:z)").to_string(),
+        Ok(at) => at
+            .to_zoned(zone.clone())
+            .strftime("%A %-d %B %Y, %H:%M:%S%.9f (%:z)")
+            .to_string(),
         Err(_) => at.to_string(),
     }
 }
@@ -122,8 +128,18 @@ pub fn value(value: &Value) -> String {
         Value::Float(number) => number.to_string(),
         Value::String(text) => text.clone(),
         Value::Binary(bytes) => sid(bytes).unwrap_or_else(|| hex(bytes)),
-        Value::Array(items) => format!("[{}]", items.iter().map(self::value).collect::<Vec<_>>().join(", ")),
-        Value::Map(entries) => format!("{{{}}}", entries.iter().map(|(key, item)| format!("{}: {}", self::value(key), self::value(item))).collect::<Vec<_>>().join(", ")),
+        Value::Array(items) => format!(
+            "[{}]",
+            items.iter().map(self::value).collect::<Vec<_>>().join(", ")
+        ),
+        Value::Map(entries) => format!(
+            "{{{}}}",
+            entries
+                .iter()
+                .map(|(key, item)| format!("{}: {}", self::value(key), self::value(item)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         Value::Extension(kind, bytes) => format!("extension {kind}: {}", hex(bytes)),
     }
 }
@@ -140,9 +156,20 @@ fn sid(bytes: &[u8]) -> Option<String> {
     if revision != 1 || count > 15 || rest.len() != usize::from(count) * 4 {
         return None;
     }
-    let authority = authority.iter().fold(0u64, |sum, byte| sum << 8 | u64::from(*byte));
-    let parts: Vec<String> = rest.as_chunks::<4>().0.iter().map(|part| u32::from_le_bytes(*part).to_string()).collect();
-    let tail = if parts.is_empty() { String::new() } else { format!("-{}", parts.join("-")) };
+    let authority = authority
+        .iter()
+        .fold(0u64, |sum, byte| sum << 8 | u64::from(*byte));
+    let parts: Vec<String> = rest
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|part| u32::from_le_bytes(*part).to_string())
+        .collect();
+    let tail = if parts.is_empty() {
+        String::new()
+    } else {
+        format!("-{}", parts.join("-"))
+    };
     Some(format!("S-1-{authority}{tail}"))
 }
 
@@ -152,19 +179,35 @@ mod tests {
 
     fn clock() -> (Timestamp, TimeZone) {
         // Saturday 3 October 2026, 13:20, on a clock an hour east of UTC.
-        ("2026-10-03T12:20:00Z".parse().unwrap(), TimeZone::fixed(jiff::tz::offset(1)))
+        (
+            "2026-10-03T12:20:00Z".parse().unwrap(),
+            TimeZone::fixed(jiff::tz::offset(1)),
+        )
     }
 
     #[test]
     fn a_time_says_its_day_only_when_it_is_not_today() {
         let (now, zone) = clock();
-        let at = |text: &str| i64::try_from(text.parse::<Timestamp>().unwrap().as_nanosecond()).unwrap();
-        assert_eq!(when(at("2026-10-03T12:05:03.123456Z"), now, &zone), "13:05:03.123");
+        let at =
+            |text: &str| i64::try_from(text.parse::<Timestamp>().unwrap().as_nanosecond()).unwrap();
+        assert_eq!(
+            when(at("2026-10-03T12:05:03.123456Z"), now, &zone),
+            "13:05:03.123"
+        );
         // Yesterday in UTC, and today on this clock.
         assert_eq!(when(at("2026-10-02T23:30:00Z"), now, &zone), "00:30:00.000");
-        assert_eq!(when(at("2026-10-02T12:00:00Z"), now, &zone), "2 Oct 13:00:00.000");
-        assert_eq!(when(at("2025-12-31T12:00:00Z"), now, &zone), "31 Dec 2025 13:00:00");
-        assert_eq!(when_exactly(at("2026-10-03T12:05:03.000000007Z"), &zone), "Saturday 3 October 2026, 13:05:03.000000007 (+01:00)");
+        assert_eq!(
+            when(at("2026-10-02T12:00:00Z"), now, &zone),
+            "2 Oct 13:00:00.000"
+        );
+        assert_eq!(
+            when(at("2025-12-31T12:00:00Z"), now, &zone),
+            "31 Dec 2025 13:00:00"
+        );
+        assert_eq!(
+            when_exactly(at("2026-10-03T12:05:03.000000007Z"), &zone),
+            "Saturday 3 October 2026, 13:05:03.000000007 (+01:00)"
+        );
     }
 
     #[test]
@@ -174,15 +217,26 @@ mod tests {
         let local_system = [1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
         assert_eq!(value(&Value::Binary(local_system.to_vec())), "S-1-5-18");
         // Not a SID: its count does not match its length.
-        assert_eq!(value(&Value::Binary(vec![1, 2, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0])), "010200000000000512000000");
-        assert_eq!(value(&Value::Array(vec![Value::Signed(1), Value::String("a".into())])), "[1, a]");
+        assert_eq!(
+            value(&Value::Binary(vec![1, 2, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0])),
+            "010200000000000512000000"
+        );
+        assert_eq!(
+            value(&Value::Array(vec![
+                Value::Signed(1),
+                Value::String("a".into())
+            ])),
+            "[1, a]"
+        );
         assert_eq!(source(&Value::Signed(2)), "Security (KACS)");
         assert_eq!(source(&Value::Signed(9)), "9");
     }
 
     #[test]
     fn a_records_time_is_its_timestamp() {
-        let record: Record = [("timestamp".to_string(), Value::Signed(1))].into_iter().collect();
+        let record: Record = [("timestamp".to_string(), Value::Signed(1))]
+            .into_iter()
+            .collect();
         assert_eq!(timestamp(&record), Some(1));
         assert_eq!(timestamp(&Record::new()), None);
     }

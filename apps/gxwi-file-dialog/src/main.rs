@@ -64,7 +64,11 @@ impl Chooser {
     fn new(request: Request) -> Chooser {
         let home = home();
         // The folder asked for, if it is one the person may list (PSPU §9.4).
-        let folder = request.folder.clone().filter(|folder| folder.is_absolute() && folder::list(folder, false).is_ok()).unwrap_or(home);
+        let folder = request
+            .folder
+            .clone()
+            .filter(|folder| folder.is_absolute() && folder::list(folder, false).is_ok())
+            .unwrap_or(home);
         let filter = (!request.filters.is_empty()).then_some(0);
         let mut chooser = Chooser {
             request,
@@ -101,11 +105,19 @@ impl Chooser {
     /// Whether a file of this name is shown: in a dialog for opening, only
     /// files of the kind chosen.
     fn shows(&self, entry: &Entry) -> bool {
-        entry.folder || self.request.mode == Mode::Save || self.filter.is_none_or(|at| self.request.filters[at].takes(&entry.name))
+        entry.folder
+            || self.request.mode == Mode::Save
+            || self
+                .filter
+                .is_none_or(|at| self.request.filters[at].takes(&entry.name))
     }
 
     fn entry(&self, name: &str) -> Option<&Entry> {
-        self.entries.as_ref().ok()?.iter().find(|entry| entry.name == name)
+        self.entries
+            .as_ref()
+            .ok()?
+            .iter()
+            .find(|entry| entry.name == name)
     }
 
     /// Tells the program what was chosen, once, and goes.
@@ -115,7 +127,9 @@ impl Chooser {
         }
         self.answered = true;
         let mut out = std::io::stdout().lock();
-        let _ = out.write_all(line(&answer).as_bytes()).and_then(|()| out.flush());
+        let _ = out
+            .write_all(line(&answer).as_bytes())
+            .and_then(|()| out.flush());
         if let Some(closer) = &self.closer {
             closer.close();
         }
@@ -124,7 +138,9 @@ impl Chooser {
     /// Opens what is named `name` in the folder: a folder is gone into; a
     /// file is chosen, or for saving, named.
     fn open(&mut self, name: &str, fields: &mut Fields) {
-        let Some(entry) = self.entry(name).cloned() else { return };
+        let Some(entry) = self.entry(name).cloned() else {
+            return;
+        };
         let path = self.folder.join(&entry.name);
         if entry.folder {
             fields.set("path", &path.to_string_lossy());
@@ -163,7 +179,9 @@ impl Chooser {
         }
         // A name without an extension takes the kind chosen's.
         let named = match self.filter.map(|at| &self.request.filters[at]) {
-            Some(filter) if !typed.contains('.') && !filter.extensions.is_empty() => format!("{typed}.{}", filter.extensions[0]),
+            Some(filter) if !typed.contains('.') && !filter.extensions.is_empty() => {
+                format!("{typed}.{}", filter.extensions[0])
+            }
             _ => typed,
         };
         let path = self.folder.join(&named);
@@ -173,7 +191,9 @@ impl Chooser {
                 self.go(&path);
             }
             Ok(_) => self.doing = Doing::Overwriting(path),
-            Err(_) if !self.may.add_file => self.said = Some(("You may not save files in this folder.".into(), true)),
+            Err(_) if !self.may.add_file => {
+                self.said = Some(("You may not save files in this folder.".into(), true))
+            }
             Err(_) => self.answer(Answer::Chosen { path }),
         }
     }
@@ -185,8 +205,10 @@ impl Chooser {
             Err(why) => return self.said = Some((why, true)),
         };
         let done = match self.doing.clone() {
-            Doing::NewFolder => folder::make_folder(&self.folder, &typed).map(|_| format!("Made the folder {typed}.")),
-            Doing::Renaming(was) => folder::rename(&self.folder, &was, &typed).map(|()| format!("Renamed {was} to {typed}.")),
+            Doing::NewFolder => folder::make_folder(&self.folder, &typed)
+                .map(|_| format!("Made the folder {typed}.")),
+            Doing::Renaming(was) => folder::rename(&self.folder, &was, &typed)
+                .map(|()| format!("Renamed {was} to {typed}.")),
             _ => return,
         };
         match done {
@@ -204,7 +226,11 @@ impl Chooser {
         let changed = entry
             .changed
             .and_then(|at| Timestamp::try_from(at).ok())
-            .map(|at| at.to_zoned(self.zone.clone()).strftime("%-d %b %Y, %H:%M").to_string())
+            .map(|at| {
+                at.to_zoned(self.zone.clone())
+                    .strftime("%-d %b %Y, %H:%M")
+                    .to_string()
+            })
             .unwrap_or_default();
         format!(
             "<li><button type=\"button\" class=\"{kind}\" fx-click=\"pick\" fx-dblclick=\"open\" fx-value-name=\"{name}\" aria-selected=\"{picked}\">\
@@ -213,7 +239,11 @@ impl Chooser {
             kind = if entry.folder { "folder" } else { "file" },
             name = escape(&entry.name),
             picked = self.picked.as_deref() == Some(entry.name.as_str()),
-            size = if entry.folder { String::new() } else { folder::size(entry.size) },
+            size = if entry.folder {
+                String::new()
+            } else {
+                folder::size(entry.size)
+            },
             changed = escape(&changed),
         )
     }
@@ -221,10 +251,26 @@ impl Chooser {
     /// The tools for the folder and what is picked, offered as far as the
     /// person may use them.
     fn tools(&self) -> String {
-        let off = |allowed: bool, why: &str| if allowed { String::new() } else { format!(" disabled title=\"{}\"", escape(why)) };
-        let picked = self.picked.as_deref().filter(|name| self.entry(name).is_some());
-        let may_delete = picked.is_some_and(|name| folder::may_delete(&self.folder.join(name), self.may));
-        let pick_first = |allowed: bool, why: &str| if picked.is_none() { " disabled title=\"Pick something first.\"".to_string() } else { off(allowed, why) };
+        let off = |allowed: bool, why: &str| {
+            if allowed {
+                String::new()
+            } else {
+                format!(" disabled title=\"{}\"", escape(why))
+            }
+        };
+        let picked = self
+            .picked
+            .as_deref()
+            .filter(|name| self.entry(name).is_some());
+        let may_delete =
+            picked.is_some_and(|name| folder::may_delete(&self.folder.join(name), self.may));
+        let pick_first = |allowed: bool, why: &str| {
+            if picked.is_none() {
+                " disabled title=\"Pick something first.\"".to_string()
+            } else {
+                off(allowed, why)
+            }
+        };
         format!(
             "<div class=\"tools\">\
              <button type=\"button\" fx-click=\"new-folder\"{new}>New folder…</button>\
@@ -232,7 +278,10 @@ impl Chooser {
              <button type=\"button\" fx-click=\"delete\"{delete}>Delete…</button>\
              <button type=\"button\" class=\"hidden-toggle\" fx-click=\"hidden\" aria-pressed=\"{hidden}\">Hidden files</button></div>",
             new = match &self.entries {
-                Err(_) => off(false, "Nothing can be made in a folder that can't be listed."),
+                Err(_) => off(
+                    false,
+                    "Nothing can be made in a folder that can't be listed."
+                ),
                 Ok(_) => off(self.may.add_folder, "You may not make folders here."),
             },
             rename = pick_first(may_delete && self.may.add_file, "You may not rename this."),
@@ -248,12 +297,28 @@ impl Chooser {
             Doing::NewFolder | Doing::Renaming(_) => format!(
                 "<form class=\"strip\" fx-submit=\"named\"><label>{}<input name=\"new-name\" autocomplete=\"off\" spellcheck=\"false\" fx-autofocus></label>\
                  <button type=\"submit\" class=\"primary\">{}</button><button type=\"button\" fx-click=\"back\">Cancel</button></form>",
-                if self.doing == Doing::NewFolder { "New folder" } else { "New name" },
-                if self.doing == Doing::NewFolder { "Make" } else { "Rename" },
+                if self.doing == Doing::NewFolder {
+                    "New folder"
+                } else {
+                    "New name"
+                },
+                if self.doing == Doing::NewFolder {
+                    "Make"
+                } else {
+                    "Rename"
+                },
             ),
             Doing::Deleting(name) => {
-                let what = if self.entry(name).is_some_and(|entry| entry.folder) { "the folder" } else { "" };
-                let under = if what.is_empty() { "" } else { " and everything in it" };
+                let what = if self.entry(name).is_some_and(|entry| entry.folder) {
+                    "the folder"
+                } else {
+                    ""
+                };
+                let under = if what.is_empty() {
+                    ""
+                } else {
+                    " and everything in it"
+                };
                 format!(
                     "<div class=\"strip asking\"><p>Delete {what} <strong>{name}</strong>{under}? This can't be undone.</p>\
                      <button type=\"button\" class=\"danger\" fx-click=\"delete-yes\" fx-autofocus>Delete</button><button type=\"button\" fx-click=\"back\">Cancel</button></div>",
@@ -271,15 +336,30 @@ impl Chooser {
 
 impl Live for Chooser {
     fn render(&self, _: &Facts) -> String {
-        let purpose = self.request.purpose.as_ref().map(|purpose| format!("<p>{}</p>", escape(purpose))).unwrap_or_default();
+        let purpose = self
+            .request
+            .purpose
+            .as_ref()
+            .map(|purpose| format!("<p>{}</p>", escape(purpose)))
+            .unwrap_or_default();
         let said = self
             .said
             .as_ref()
-            .map(|(text, bad)| format!("<p class=\"said{}\" role=\"status\">{}</p>", if *bad { " bad" } else { "" }, escape(text)))
+            .map(|(text, bad)| {
+                format!(
+                    "<p class=\"said{}\" role=\"status\">{}</p>",
+                    if *bad { " bad" } else { "" },
+                    escape(text)
+                )
+            })
             .unwrap_or_default();
         let listing = match &self.entries {
             Ok(entries) => {
-                let rows: String = entries.iter().filter(|entry| self.shows(entry)).map(|entry| self.row(entry)).collect();
+                let rows: String = entries
+                    .iter()
+                    .filter(|entry| self.shows(entry))
+                    .map(|entry| self.row(entry))
+                    .collect();
                 if rows.is_empty() {
                     "<p class=\"empty\">Nothing here.</p>".to_string()
                 } else {
@@ -297,8 +377,17 @@ impl Live for Chooser {
                 .iter()
                 .enumerate()
                 .map(|(at, filter)| {
-                    let extensions = filter.extensions.iter().map(|e| format!("*.{e}")).collect::<Vec<_>>().join(" ");
-                    format!("<option value=\"{at}\">{} ({})</option>", escape(&filter.name), escape(&extensions))
+                    let extensions = filter
+                        .extensions
+                        .iter()
+                        .map(|e| format!("*.{e}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    format!(
+                        "<option value=\"{at}\">{} ({})</option>",
+                        escape(&filter.name),
+                        escape(&extensions)
+                    )
                 })
                 .collect();
             options += "<option value=\"all\">All files</option>";
@@ -335,7 +424,11 @@ impl Live for Chooser {
         match name {
             "go" => {
                 let typed = fields.get("path").trim().to_string();
-                let path = if typed.starts_with('/') { PathBuf::from(typed) } else { self.folder.join(typed) };
+                let path = if typed.starts_with('/') {
+                    PathBuf::from(typed)
+                } else {
+                    self.folder.join(typed)
+                };
                 self.go(&path);
             }
             "up" => {
@@ -346,7 +439,9 @@ impl Live for Chooser {
             "home" => self.go(&home()),
             "pick" => {
                 if let Some(picked) = named {
-                    if self.request.mode == Mode::Save && self.entry(&picked).is_some_and(|entry| !entry.folder) {
+                    if self.request.mode == Mode::Save
+                        && self.entry(&picked).is_some_and(|entry| !entry.folder)
+                    {
                         fields.set("name", &picked);
                     }
                     self.picked = Some(picked);
@@ -408,7 +503,11 @@ impl Live for Chooser {
 
     fn input(&mut self, name: &str, fields: &mut Fields) {
         if name == "filter" {
-            self.filter = fields.get("filter").parse().ok().filter(|at| *at < self.request.filters.len());
+            self.filter = fields
+                .get("filter")
+                .parse()
+                .ok()
+                .filter(|at| *at < self.request.filters.len());
         }
     }
 
@@ -420,13 +519,19 @@ impl Live for Chooser {
 
 /// The person's home folder.
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_dir()).unwrap_or_else(|| PathBuf::from("/"))
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|home| home.is_dir())
+        .unwrap_or_else(|| PathBuf::from("/"))
 }
 
 /// The request, from the first line of the input.
 fn request() -> Result<Request, String> {
     let mut first = String::new();
-    std::io::stdin().lock().read_line(&mut first).map_err(|e| format!("the request could not be read: {e}"))?;
+    std::io::stdin()
+        .lock()
+        .read_line(&mut first)
+        .map_err(|e| format!("the request could not be read: {e}"))?;
     if first.trim().is_empty() {
         return Err("no request: it is opened by a program, which says what is wanted on its first line (see gxwi-file-dialog(1))".into());
     }
@@ -437,6 +542,7 @@ fn main() {
     // Gone with whatever opened it, however that went.
     // SAFETY: prctl with these arguments only sets a signal for later.
     unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) };
+    // SAFETY: getppid reads the parent PID and takes no pointers.
     if unsafe { libc::getppid() } == 1 {
         std::process::exit(0);
     }
@@ -482,7 +588,10 @@ mod tests {
     use gxwi_file_dialog::Filter;
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("gxwi-file-dialog-main-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "gxwi-file-dialog-main-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("Sub")).unwrap();
         std::fs::write(dir.join("a.json"), "{}").unwrap();
@@ -497,7 +606,10 @@ mod tests {
             purpose: Some("For a test.".into()),
             folder: Some(dir.to_path_buf()),
             name: None,
-            filters: vec![Filter { name: "Documents".into(), extensions: vec!["json".into()] }],
+            filters: vec![Filter {
+                name: "Documents".into(),
+                extensions: vec!["json".into()],
+            }],
         });
         // No writing to the test's own output.
         chooser.answered = false;
@@ -505,7 +617,10 @@ mod tests {
     }
 
     fn shown(chooser: &Chooser) -> String {
-        chooser.render(&Facts { views: 1, fields: &Fields::default() })
+        chooser.render(&Facts {
+            views: 1,
+            fields: &Fields::default(),
+        })
     }
 
     #[test]
@@ -513,7 +628,9 @@ mod tests {
         let dir = scratch("open");
         let mut chooser = chooser(Mode::Open, &dir);
         let html = shown(&chooser);
-        assert!(html.contains("fx-value-name=\"Sub\"") && html.contains("fx-value-name=\"a.json\""));
+        assert!(
+            html.contains("fx-value-name=\"Sub\"") && html.contains("fx-value-name=\"a.json\"")
+        );
         assert!(!html.contains("notes.txt"));
         let mut fields = Fields::default();
         fields.set("filter", "all");
@@ -543,7 +660,12 @@ mod tests {
         assert_eq!(chooser.folder, dir.join("Sub"));
         fields.set("name", "../x");
         chooser.save(&mut fields);
-        assert!(chooser.said.as_ref().is_some_and(|(said, bad)| *bad && said.contains("can't be")));
+        assert!(
+            chooser
+                .said
+                .as_ref()
+                .is_some_and(|(said, bad)| *bad && said.contains("can't be"))
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -563,7 +685,10 @@ mod tests {
         chooser.event("named", &serde_json::json!({}), &mut fields);
         assert!(dir.join("Renamed").is_dir());
         chooser.event("delete", &serde_json::json!({}), &mut fields);
-        assert!(shown(&chooser).contains("Delete the folder <strong>Renamed</strong> and everything in it?"));
+        assert!(
+            shown(&chooser)
+                .contains("Delete the folder <strong>Renamed</strong> and everything in it?")
+        );
         chooser.event("delete-yes", &serde_json::json!({}), &mut fields);
         assert!(!dir.join("Renamed").exists());
         std::fs::remove_dir_all(dir).unwrap();
@@ -584,7 +709,10 @@ mod tests {
     fn nothing_picked_leaves_rename_and_delete_waiting() {
         let dir = scratch("tools");
         let chooser = chooser(Mode::Open, &dir);
-        assert!(shown(&chooser).contains("fx-click=\"delete\" disabled title=\"Pick something first.\""));
+        assert!(
+            shown(&chooser)
+                .contains("fx-click=\"delete\" disabled title=\"Pick something first.\"")
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

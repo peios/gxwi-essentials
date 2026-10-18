@@ -42,8 +42,16 @@ fn watch(window: Weak<Surface<Editor>>) {
     let mut watching: HashMap<String, (String, Key)> = HashMap::new();
     let mut buffer = vec![0u8; 4096];
     loop {
-        let Some(wanted) = window.upgrade().map(|window| window.look(|editor, _, _| editor.watched())) else { return };
-        let wanted: HashMap<String, String> = wanted.into_iter().map(|path| (path.to_lowercase(), path)).collect();
+        let Some(wanted) = window
+            .upgrade()
+            .map(|window| window.look(|editor, _, _| editor.watched()))
+        else {
+            return;
+        };
+        let wanted: HashMap<String, String> = wanted
+            .into_iter()
+            .map(|path| (path.to_lowercase(), path))
+            .collect();
         watching.retain(|lower, _| wanted.contains_key(lower));
         for (lower, path) in &wanted {
             if watching.contains_key(lower) {
@@ -51,17 +59,34 @@ fn watch(window: Weak<Surface<Editor>>) {
             }
             if let Some(key) = keys::watchable(path)
                 && key.set_nonblocking(true).is_ok()
-                && key.notify(NotifyFilter::VALUE | NotifyFilter::SUBKEY | NotifyFilter::SD, false).is_ok()
+                && key
+                    .notify(
+                        NotifyFilter::VALUE | NotifyFilter::SUBKEY | NotifyFilter::SD,
+                        false,
+                    )
+                    .is_ok()
             {
                 watching.insert(lower.clone(), (path.clone(), key));
             }
         }
         let order: Vec<&String> = watching.keys().collect();
-        let mut polls: Vec<libc::pollfd> =
-            order.iter().map(|lower| libc::pollfd { fd: watching[*lower].1.as_raw_fd() as RawFd, events: libc::POLLIN, revents: 0 }).collect();
+        let mut polls: Vec<libc::pollfd> = order
+            .iter()
+            .map(|lower| libc::pollfd {
+                fd: watching[*lower].1.as_raw_fd() as RawFd,
+                events: libc::POLLIN,
+                revents: 0,
+            })
+            .collect();
         // SAFETY: `polls` is a live array of `polls.len()` pollfds, whose fds
         // are held open by `watching` for the call.
-        let ready = unsafe { libc::poll(polls.as_mut_ptr(), polls.len() as libc::nfds_t, LOOK_AGAIN_MS) };
+        let ready = unsafe {
+            libc::poll(
+                polls.as_mut_ptr(),
+                polls.len() as libc::nfds_t,
+                LOOK_AGAIN_MS,
+            )
+        };
         if ready <= 0 {
             continue;
         }
@@ -78,7 +103,10 @@ fn watch(window: Weak<Surface<Editor>>) {
                     changed.push(path.clone());
                     // A key deleted is watched no more; if it comes back, a
                     // new watch is armed on the new key.
-                    if events.iter().any(|event| event.event_type == WatchEventType::KeyDeleted) {
+                    if events
+                        .iter()
+                        .any(|event| event.event_type == WatchEventType::KeyDeleted)
+                    {
                         gone.push((*lower).clone());
                     }
                 }
@@ -91,7 +119,9 @@ fn watch(window: Weak<Surface<Editor>>) {
         if changed.is_empty() {
             continue;
         }
-        let Some(window) = window.upgrade() else { return };
+        let Some(window) = window.upgrade() else {
+            return;
+        };
         window.update(|editor, _| {
             for path in &changed {
                 editor.changed(path);
@@ -102,7 +132,12 @@ fn watch(window: Weak<Surface<Editor>>) {
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let start = match arguments.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+    let start = match arguments
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
         ["--key", path] => match keys::tidy(path) {
             Some(path) => Some(path),
             None => {
@@ -126,7 +161,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gxwi-registry-editor.css", include_str!("gxwi-registry-editor.css"));
+    app.stylesheet(
+        "/gxwi-registry-editor.css",
+        include_str!("gxwi-registry-editor.css"),
+    );
     let Some(start) = start else {
         let window = app.live("Registry Editor: Layers", LayersWindow::new(Names::new()));
         let aside = Arc::downgrade(&window);

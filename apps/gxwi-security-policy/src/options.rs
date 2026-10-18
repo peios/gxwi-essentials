@@ -17,18 +17,36 @@ fn as_seen(path: &str) -> String {
 }
 
 pub fn render(store: &Store, asking: Option<&Asking>) -> String {
-    let mut page = settings::head(Glyph::Server, Tile::Slate, "Settings", "How trusted certificates reach programs, and who can change them.");
+    let mut page = settings::head(
+        Glyph::Server,
+        Tile::Slate,
+        "Settings",
+        "How trusted certificates reach programs, and who can change them.",
+    );
 
     // The trust service.
     let (state, about) = match &store.status {
-        None => (settings::pill("Not Answering", Tone::Bad), "Programs keep trusting what they trusted before.".to_string()),
+        None => (
+            settings::pill("Not Answering", Tone::Bad),
+            "Programs keep trusting what they trusted before.".to_string(),
+        ),
         Some(status) if status.health == Health::Degraded => (
             settings::pill("Needs Attention", Tone::Bad),
-            status.message.clone().unwrap_or_else(|| "It couldn't bring the certificates up to date.".into()),
+            status
+                .message
+                .clone()
+                .unwrap_or_else(|| "It couldn't bring the certificates up to date.".into()),
         ),
-        Some(_) => (settings::pill("Up to Date", Tone::Good), "Keeps the trusted certificates current and tells programs when they change.".into()),
+        Some(_) => (
+            settings::pill("Up to Date", Tone::Good),
+            "Keeps the trusted certificates current and tells programs when they change.".into(),
+        ),
     };
-    let reload = if store.may_reload && store.status.is_some() { settings::button("Reload", "reload", &[], Kind::Plain, true) } else { String::new() };
+    let reload = if store.may_reload && store.status.is_some() {
+        settings::button("Reload", "reload", &[], Kind::Plain, true)
+    } else {
+        String::new()
+    };
     page.push_str(&settings::group(
         "Trust Service",
         &settings::row("Status", &about, &format!("{state}{reload}")),
@@ -56,14 +74,20 @@ pub fn render(store: &Store, asking: Option<&Asking>) -> String {
             ));
         }
         for path in &status.rendered {
-            let label = if path.ends_with("ca-certificates.crt") { "Bundle" } else { "OpenSSL File" };
+            let label = if path.ends_with("ca-certificates.crt") {
+                "Bundle"
+            } else {
+                "OpenSSL File"
+            };
             rows.push_str(&settings::fact(label, &as_seen(path), true));
         }
         if status.compat_mode != 0 {
             rows.push_str(&settings::fact("OpenSSL Directory", "/etc/ssl/certs", true));
         }
         let foot = match &store.may_compat {
-            Ok(()) => settings::hint("The files are written by the trust service and rewritten on every change. Editing one changes nothing."),
+            Ok(()) => settings::hint(
+                "The files are written by the trust service and rewritten on every change. Editing one changes nothing.",
+            ),
             Err(why) => settings::locked(why),
         };
         page.push_str(&settings::group("Linux Compatibility", &rows, &foot));

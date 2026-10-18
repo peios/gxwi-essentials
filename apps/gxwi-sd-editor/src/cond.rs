@@ -96,7 +96,18 @@ pub enum Op {
 }
 
 impl Op {
-    pub const ALL: [Op; 10] = [Op::Eq, Op::Ne, Op::AnyOf, Op::Contains, Op::Ge, Op::Gt, Op::Le, Op::Lt, Op::Exists, Op::NotExists];
+    pub const ALL: [Op; 10] = [
+        Op::Eq,
+        Op::Ne,
+        Op::AnyOf,
+        Op::Contains,
+        Op::Ge,
+        Op::Gt,
+        Op::Le,
+        Op::Lt,
+        Op::Exists,
+        Op::NotExists,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -154,7 +165,12 @@ pub enum MemberOp {
 }
 
 impl MemberOp {
-    pub const ALL: [MemberOp; 4] = [MemberOp::Of, MemberOp::OfAny, MemberOp::NotOf, MemberOp::NotOfAny];
+    pub const ALL: [MemberOp; 4] = [
+        MemberOp::Of,
+        MemberOp::OfAny,
+        MemberOp::NotOf,
+        MemberOp::NotOfAny,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -176,7 +192,11 @@ impl MemberOp {
             MemberOp::NotOf => "Not_Member_of",
             MemberOp::NotOfAny => "Not_Member_of_Any",
         };
-        if device { base.replace("Member_of", "Device_Member_of") } else { base.into() }
+        if device {
+            base.replace("Member_of", "Device_Member_of")
+        } else {
+            base.into()
+        }
     }
 }
 
@@ -191,8 +211,17 @@ pub enum Val {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Group(Mode, Vec<Node>),
-    Claim { src: Src, name: String, op: Op, val: Val },
-    Member { device: bool, op: MemberOp, sids: Vec<Sid> },
+    Claim {
+        src: Src,
+        name: String,
+        op: Op,
+        val: Val,
+    },
+    Member {
+        device: bool,
+        op: MemberOp,
+        sids: Vec<Sid>,
+    },
 }
 
 impl Node {
@@ -202,7 +231,12 @@ impl Node {
     }
 
     pub fn blank_claim() -> Node {
-        Node::Claim { src: Src::User, name: String::new(), op: Op::Eq, val: Val::Value(String::new()) }
+        Node::Claim {
+            src: Src::User,
+            name: String::new(),
+            op: Op::Eq,
+            val: Val::Value(String::new()),
+        }
     }
 
     /// The node at `path`, counted from 0 down the groups: "" is this one.
@@ -237,15 +271,27 @@ impl Node {
 /// What a claim's name may be: what libpeios' SDDL can write
 /// (`grammar/cond.rs`, `is_ident_continue`).
 pub fn name_ok(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '.'))
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '.'))
 }
 
 /// A test's values, as typed: split at commas where it takes several.
 pub fn values(op: Op, val: &Val) -> Vec<String> {
     match val {
         Val::Claim(..) => vec![],
-        Val::Value(text) if op.several() => text.split(',').map(str::trim).filter(|v| !v.is_empty()).map(String::from).collect(),
-        Val::Value(text) => [text.trim()].into_iter().filter(|v| !v.is_empty()).map(String::from).collect(),
+        Val::Value(text) if op.several() => text
+            .split(',')
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(String::from)
+            .collect(),
+        Val::Value(text) => [text.trim()]
+            .into_iter()
+            .filter(|v| !v.is_empty())
+            .map(String::from)
+            .collect(),
     }
 }
 
@@ -253,9 +299,13 @@ pub fn values(op: Op, val: &Val) -> Vec<String> {
 /// fields: "name", "val" or "sids".
 pub fn problem(node: &Node) -> Option<(&'static str, String)> {
     match node {
-        Node::Group(_, items) if items.is_empty() => Some(("", "This group has nothing in it.".into())),
+        Node::Group(_, items) if items.is_empty() => {
+            Some(("", "This group has nothing in it.".into()))
+        }
         Node::Group(..) => None,
-        Node::Member { sids, .. } if sids.is_empty() => Some(("sids", "Pick at least one group.".into())),
+        Node::Member { sids, .. } if sids.is_empty() => {
+            Some(("sids", "Pick at least one group.".into()))
+        }
         Node::Member { .. } => None,
         Node::Claim { name, op, val, .. } => {
             let name = name.trim();
@@ -263,17 +313,29 @@ pub fn problem(node: &Node) -> Option<(&'static str, String)> {
                 return Some(("name", "Name the claim to test.".into()));
             }
             if !name_ok(name) {
-                return Some(("name", "A claim's name can use letters, digits, _, : and . only.".into()));
+                return Some((
+                    "name",
+                    "A claim's name can use letters, digits, _, : and . only.".into(),
+                ));
             }
             if !op.valued() {
                 return None;
             }
             match val {
-                Val::Claim(_, other) if other.trim().is_empty() => Some(("val", "Name the claim to compare it with.".into())),
-                Val::Claim(_, other) if !name_ok(other.trim()) => Some(("val", "A claim's name can use letters, digits, _, : and . only.".into())),
+                Val::Claim(_, other) if other.trim().is_empty() => {
+                    Some(("val", "Name the claim to compare it with.".into()))
+                }
+                Val::Claim(_, other) if !name_ok(other.trim()) => Some((
+                    "val",
+                    "A claim's name can use letters, digits, _, : and . only.".into(),
+                )),
                 Val::Claim(..) => None,
-                Val::Value(text) if text.contains('"') => Some(("val", "A value can't contain a double quote.".into())),
-                Val::Value(_) if values(*op, val).is_empty() => Some(("val", "Give the value to test for.".into())),
+                Val::Value(text) if text.contains('"') => {
+                    Some(("val", "A value can't contain a double quote.".into()))
+                }
+                Val::Value(_) if values(*op, val).is_empty() => {
+                    Some(("val", "Give the value to test for.".into()))
+                }
                 Val::Value(_) => None,
             }
         }
@@ -295,7 +357,12 @@ pub fn tree_problem(node: &Node) -> Option<String> {
 /// text in quotes.
 fn literal(value: &str) -> String {
     let v = value.trim();
-    if !v.is_empty() && v.strip_prefix('-').unwrap_or(v).chars().all(|c| c.is_ascii_digit()) {
+    if !v.is_empty()
+        && v.strip_prefix('-')
+            .unwrap_or(v)
+            .chars()
+            .all(|c| c.is_ascii_digit())
+    {
         v.into()
     } else if v.eq_ignore_ascii_case("true") {
         "1".into()
@@ -314,10 +381,22 @@ pub fn expr(node: &Node) -> String {
 fn write(node: &Node, top: bool) -> String {
     match node {
         Node::Group(mode, items) => {
-            let inner = items.iter().map(|n| write(n, false)).collect::<Vec<_>>().join(if mode.and() { " && " } else { " || " });
-            let inner = if inner.is_empty() { "true".into() } else { inner };
+            let inner = items
+                .iter()
+                .map(|n| write(n, false))
+                .collect::<Vec<_>>()
+                .join(if mode.and() { " && " } else { " || " });
+            let inner = if inner.is_empty() {
+                "true".into()
+            } else {
+                inner
+            };
             let negated = matches!(mode, Mode::None | Mode::NotAll);
-            let wrapped = if items.len() > 1 || negated { format!("({inner})") } else { inner.clone() };
+            let wrapped = if items.len() > 1 || negated {
+                format!("({inner})")
+            } else {
+                inner.clone()
+            };
             if negated {
                 format!("!{wrapped}")
             } else if top {
@@ -327,18 +406,42 @@ fn write(node: &Node, top: bool) -> String {
             }
         }
         Node::Member { device, op, sids } => {
-            format!("{} {{{}}}", op.function(*device), sids.iter().map(|s| format!("SID({s})")).collect::<Vec<_>>().join(", "))
+            format!(
+                "{} {{{}}}",
+                op.function(*device),
+                sids.iter()
+                    .map(|s| format!("SID({s})"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
         Node::Claim { src, name, op, val } => {
             let name = name.trim();
-            let at = format!("@{}.{}", src.word(), if name.is_empty() { "?" } else { name });
+            let at = format!(
+                "@{}.{}",
+                src.word(),
+                if name.is_empty() { "?" } else { name }
+            );
             if !op.valued() {
                 return format!("{} {at}", op.sddl());
             }
             match val {
-                Val::Claim(other, n) => format!("{at} {} @{}.{}", op.sddl(), other.word(), if n.trim().is_empty() { "?" } else { n.trim() }),
+                Val::Claim(other, n) => format!(
+                    "{at} {} @{}.{}",
+                    op.sddl(),
+                    other.word(),
+                    if n.trim().is_empty() { "?" } else { n.trim() }
+                ),
                 Val::Value(_) if op.several() => {
-                    format!("{at} {} {{{}}}", op.sddl(), values(*op, val).iter().map(|v| literal(v)).collect::<Vec<_>>().join(", "))
+                    format!(
+                        "{at} {} {{{}}}",
+                        op.sddl(),
+                        values(*op, val)
+                            .iter()
+                            .map(|v| literal(v))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
                 }
                 Val::Value(text) => format!("{at} {} {}", op.sddl(), literal(text)),
             }
@@ -372,7 +475,8 @@ impl Cond {
                 if let Some(why) = tree_problem(node) {
                     return Err(format!("A condition isn't finished: {why}"));
                 }
-                sddl::parse_condition(&expr(node)).map_err(|e| format!("A condition could not be written ({e}): {}", expr(node)))
+                sddl::parse_condition(&expr(node))
+                    .map_err(|e| format!("A condition could not be written ({e}): {}", expr(node)))
             }
         }
     }
@@ -381,7 +485,9 @@ impl Cond {
     pub fn text(&self) -> String {
         match self {
             Cond::Tree(node) => expr(node),
-            Cond::Opaque(bytes) => sddl::format_condition(bytes).unwrap_or_else(|_| format!("a condition this editor can't read ({} bytes)", bytes.len())),
+            Cond::Opaque(bytes) => sddl::format_condition(bytes).unwrap_or_else(|_| {
+                format!("a condition this editor can't read ({} bytes)", bytes.len())
+            }),
         }
     }
 
@@ -415,10 +521,15 @@ fn u32_at(b: &[u8], at: usize) -> Option<usize> {
 }
 
 fn utf16(b: &[u8]) -> Option<String> {
-    if b.len() % 2 != 0 {
+    if !b.len().is_multiple_of(2) {
         return None;
     }
-    String::from_utf16(&b.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect::<Vec<_>>()).ok()
+    String::from_utf16(
+        &b.chunks(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect::<Vec<_>>(),
+    )
+    .ok()
 }
 
 /// One literal at `at`, and where the next token starts.
@@ -497,7 +608,11 @@ fn decode(data: &[u8]) -> Option<E> {
             0xa0 | 0xa1 => {
                 let right = stack.pop()?;
                 let left = stack.pop()?;
-                stack.push(if t == 0xa0 { E::And(Box::new(left), Box::new(right)) } else { E::Or(Box::new(left), Box::new(right)) });
+                stack.push(if t == 0xa0 {
+                    E::And(Box::new(left), Box::new(right))
+                } else {
+                    E::Or(Box::new(left), Box::new(right))
+                });
                 at += 1;
             }
             0xa2 => {
@@ -526,11 +641,35 @@ fn chain(e: &E, and: bool) -> Vec<&E> {
 /// An expression as a group, the shape a condition's root always has.
 fn group(e: &E) -> Option<Node> {
     match e {
-        E::And(..) => Some(Node::Group(Mode::All, chain(e, true).into_iter().map(node).collect::<Option<_>>()?)),
-        E::Or(..) => Some(Node::Group(Mode::Any, chain(e, false).into_iter().map(node).collect::<Option<_>>()?)),
+        E::And(..) => Some(Node::Group(
+            Mode::All,
+            chain(e, true)
+                .into_iter()
+                .map(node)
+                .collect::<Option<_>>()?,
+        )),
+        E::Or(..) => Some(Node::Group(
+            Mode::Any,
+            chain(e, false)
+                .into_iter()
+                .map(node)
+                .collect::<Option<_>>()?,
+        )),
         E::Not(inner) => match &**inner {
-            E::Or(..) => Some(Node::Group(Mode::None, chain(inner, false).into_iter().map(node).collect::<Option<_>>()?)),
-            E::And(..) => Some(Node::Group(Mode::NotAll, chain(inner, true).into_iter().map(node).collect::<Option<_>>()?)),
+            E::Or(..) => Some(Node::Group(
+                Mode::None,
+                chain(inner, false)
+                    .into_iter()
+                    .map(node)
+                    .collect::<Option<_>>()?,
+            )),
+            E::And(..) => Some(Node::Group(
+                Mode::NotAll,
+                chain(inner, true)
+                    .into_iter()
+                    .map(node)
+                    .collect::<Option<_>>()?,
+            )),
             other => Some(Node::Group(Mode::None, vec![node(other)?])),
         },
         _ => Some(Node::Group(Mode::All, vec![node(e)?])),
@@ -542,7 +681,11 @@ fn group(e: &E) -> Option<Node> {
 fn value_text(e: &E) -> Option<String> {
     match e {
         E::Int(v) => Some(v.to_string()),
-        E::Str(s) if !s.contains(',') && !s.contains('"') && !s.trim().is_empty() && s.trim() == s => Some(s.clone()),
+        E::Str(s)
+            if !s.contains(',') && !s.contains('"') && !s.trim().is_empty() && s.trim() == s =>
+        {
+            Some(s.clone())
+        }
         _ => None,
     }
 }
@@ -551,9 +694,20 @@ fn node(e: &E) -> Option<Node> {
     match e {
         E::And(..) | E::Or(..) | E::Not(..) => group(e),
         E::Un(t @ (0x87 | 0x8d), operand) => {
-            let E::Attr(src, name) = &**operand else { return None };
-            let op = if *t == 0x87 { Op::Exists } else { Op::NotExists };
-            Some(Node::Claim { src: *src, name: name.clone(), op, val: Val::Value(String::new()) })
+            let E::Attr(src, name) = &**operand else {
+                return None;
+            };
+            let op = if *t == 0x87 {
+                Op::Exists
+            } else {
+                Op::NotExists
+            };
+            Some(Node::Claim {
+                src: *src,
+                name: name.clone(),
+                op,
+                val: Val::Value(String::new()),
+            })
         }
         E::Un(t, operand) => {
             let (device, op) = match t {
@@ -569,13 +723,18 @@ fn node(e: &E) -> Option<Node> {
             };
             let sids = match &**operand {
                 E::Sid(s) => vec![*s],
-                E::Composite(items) => items.iter().map(|i| if let E::Sid(s) = i { Some(*s) } else { None }).collect::<Option<_>>()?,
+                E::Composite(items) => items
+                    .iter()
+                    .map(|i| if let E::Sid(s) = i { Some(*s) } else { None })
+                    .collect::<Option<_>>()?,
                 _ => return None,
             };
             Some(Node::Member { device, op, sids })
         }
         E::Rel(t, left, right) => {
-            let E::Attr(src, name) = &**left else { return None };
+            let E::Attr(src, name) = &**left else {
+                return None;
+            };
             // The negated set tests, as a group of one that is negated.
             let (op, negated) = match t {
                 0x80 => (Op::Eq, false),
@@ -592,12 +751,27 @@ fn node(e: &E) -> Option<Node> {
             };
             let val = match &**right {
                 E::Attr(other, n) => Val::Claim(*other, n.clone()),
-                E::Composite(items) if op.several() => Val::Value(items.iter().map(value_text).collect::<Option<Vec<_>>>()?.join(", ")),
+                E::Composite(items) if op.several() => Val::Value(
+                    items
+                        .iter()
+                        .map(value_text)
+                        .collect::<Option<Vec<_>>>()?
+                        .join(", "),
+                ),
                 single if !matches!(single, E::Composite(_)) => Val::Value(value_text(single)?),
                 _ => return None,
             };
-            let claim = Node::Claim { src: *src, name: name.clone(), op, val };
-            Some(if negated { Node::Group(Mode::None, vec![claim]) } else { claim })
+            let claim = Node::Claim {
+                src: *src,
+                name: name.clone(),
+                op,
+                val,
+            };
+            Some(if negated {
+                Node::Group(Mode::None, vec![claim])
+            } else {
+                claim
+            })
         }
         _ => None,
     }
@@ -612,7 +786,12 @@ mod tests {
         match Cond::read(&bytes) {
             Cond::Tree(node) => {
                 // What the tree writes is the same condition.
-                assert_eq!(sddl::parse_condition(&expr(&node)).unwrap(), bytes, "{text} → {}", expr(&node));
+                assert_eq!(
+                    sddl::parse_condition(&expr(&node)).unwrap(),
+                    bytes,
+                    "{text} → {}",
+                    expr(&node)
+                );
                 node
             }
             Cond::Opaque(_) => panic!("{text} was not read"),
@@ -622,17 +801,36 @@ mod tests {
     #[test]
     fn conditions_are_read_into_the_tree_and_written_back_the_same() {
         round("@User.Department == \"Finance\"");
-        round("@Device.Compliance == \"Compliant\" || Device_Member_of_Any {SID(S-1-5-21-1-2-3-2002)}");
+        round(
+            "@Device.Compliance == \"Compliant\" || Device_Member_of_Any {SID(S-1-5-21-1-2-3-2002)}",
+        );
         round("@User.Department == @Resource.Department");
-        round("@User.Clearance >= 3 && !(@User.Projects Any_of {\"Atlas\", \"Kestrel\"} || Exists @Device.Managed)");
+        round(
+            "@User.Clearance >= 3 && !(@User.Projects Any_of {\"Atlas\", \"Kestrel\"} || Exists @Device.Managed)",
+        );
         round("Member_of {SID(S-1-5-32-544), SID(S-1-5-11)} && Not_Exists @Local.X");
         let node = round("@User.Level == -4");
-        assert_eq!(node, Node::Group(Mode::All, vec![Node::Claim { src: Src::User, name: "Level".into(), op: Op::Eq, val: Val::Value("-4".into()) }]));
+        assert_eq!(
+            node,
+            Node::Group(
+                Mode::All,
+                vec![Node::Claim {
+                    src: Src::User,
+                    name: "Level".into(),
+                    op: Op::Eq,
+                    val: Val::Value("-4".into())
+                }]
+            )
+        );
     }
 
     #[test]
     fn what_the_tree_cannot_say_is_kept_as_it_came() {
-        for text in ["@User.Name == \"a,b\"", "1 == @User.X", "@User.Blob == #0a0b"] {
+        for text in [
+            "@User.Name == \"a,b\"",
+            "1 == @User.X",
+            "@User.Blob == #0a0b",
+        ] {
             let bytes = sddl::parse_condition(text).unwrap();
             let cond = Cond::read(&bytes);
             assert_eq!(cond, Cond::Opaque(bytes.clone()), "{text}");
@@ -643,11 +841,27 @@ mod tests {
 
     #[test]
     fn an_unfinished_tree_says_what_is_missing() {
-        assert_eq!(Cond::Tree(Node::fresh()).bytes().unwrap_err(), "A condition isn't finished: Name the claim to test.");
-        let bad = Node::Claim { src: Src::User, name: "a b".into(), op: Op::Eq, val: Val::Value("x".into()) };
+        assert_eq!(
+            Cond::Tree(Node::fresh()).bytes().unwrap_err(),
+            "A condition isn't finished: Name the claim to test."
+        );
+        let bad = Node::Claim {
+            src: Src::User,
+            name: "a b".into(),
+            op: Op::Eq,
+            val: Val::Value("x".into()),
+        };
         assert_eq!(problem(&bad).unwrap().0, "name");
-        let no_value = Node::Claim { src: Src::User, name: "X".into(), op: Op::AnyOf, val: Val::Value(" , ".into()) };
+        let no_value = Node::Claim {
+            src: Src::User,
+            name: "X".into(),
+            op: Op::AnyOf,
+            val: Val::Value(" , ".into()),
+        };
         assert_eq!(problem(&no_value).unwrap().1, "Give the value to test for.");
-        assert_eq!(expr(&Node::Group(Mode::None, vec![bad])), "!(@User.a b == \"x\")");
+        assert_eq!(
+            expr(&Node::Group(Mode::None, vec![bad])),
+            "!(@User.a b == \"x\")"
+        );
     }
 }

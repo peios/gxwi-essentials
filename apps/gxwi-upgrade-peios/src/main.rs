@@ -19,7 +19,10 @@ libgxwi::icon!(b"dev.peios.gxwi-upgrade-peios");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
-        eprintln!("gxwi-upgrade-peios: usage: gxwi-upgrade-peios (given {:?})", std::env::args().skip(1).collect::<Vec<_>>());
+        eprintln!(
+            "gxwi-upgrade-peios: usage: gxwi-upgrade-peios (given {:?})",
+            std::env::args().skip(1).collect::<Vec<_>>()
+        );
         std::process::exit(64);
     }
     let mut app = match App::connect() {
@@ -30,7 +33,10 @@ fn main() {
         }
     };
     libgxwi::settings::stylesheet(&mut app);
-    app.stylesheet("/gxwi-upgrade-peios.css", include_str!("gxwi-upgrade-peios.css"));
+    app.stylesheet(
+        "/gxwi-upgrade-peios.css",
+        include_str!("gxwi-upgrade-peios.css"),
+    );
     let window = app.live("Upgrade Peios", Manager::new());
     let aside = std::sync::Arc::downgrade(&window);
     window.update(|manager, _| {

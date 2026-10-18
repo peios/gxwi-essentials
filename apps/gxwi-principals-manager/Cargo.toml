@@ -1,23 +1,14 @@
 [package]
 name = "gxwi-principals-manager"
-version = "0.0.1"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 publish = false
 
 [dependencies]
-# libgxwi as of the gxwi release dev.peios.gxwi-sdk stages, which a package
-# build takes it from (gxwi's dev/pins.toml).
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "5629140add3de075511b3379fd690fdabd06dcaf" }
-# SIDs, read and written. The revision libgxwi pins, which it must:
-# `peios-sys` links libpeios, and a program can hold only one of it.
-peios = { git = "https://github.com/peios/peios-rs.git", rev = "f8c84930f2b71763bcf0550df0b1420a0f63b21e", package = "peios" }
-# What the principals are, from authd's identity socket, and what changes
-# them, on lpsd's admin socket: the protocols, and their clients.
-libauthd = { git = "https://github.com/peios/authd.git", rev = "90471e3d4db127528862fb325b04edb3d4f0fc30" }
-libauthd-client = { git = "https://github.com/peios/authd.git", rev = "90471e3d4db127528862fb325b04edb3d4f0fc30" }
-# What this machine grants a principal, read and worked out by the code authd
-# mints from, and written back to the registry.
-libauthd-policy = { git = "https://github.com/peios/authd.git", rev = "90471e3d4db127528862fb325b04edb3d4f0fc30", features = ["write"] }
-# The day a key was added, on this machine's clock.
-jiff = "0.2.29"
+auth-core = { workspace = true, features = ["client"] }
+auth-policy = { workspace = true, features = ["write"] }
+jiff = { workspace = true }
+libgxwi = { workspace = true }
+peios = { workspace = true }
