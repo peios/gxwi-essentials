@@ -1,0 +1,127 @@
+//! Services Manager: every service defined on this machine, what each is
+//! doing, and the commands that start, stop, restart, reload and reset them.
+//! With `--definition SERVICE`, or `--new`, it is instead a service's
+//! definition in a window of its own, which the list opens (`definition`).
+//!
+//! It asks peinit, on its control socket, and the registry, and it does what
+//! peinit's control interface does, on behalf of whoever is looking: nothing
+//! here has more authority than they have. What is running now, service or
+//! not, is Task Manager's to show; what is defined is this.
+
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+
+use libgxwi::{App, Surface};
+
+mod definition;
+mod fields;
+mod manager;
+mod permissions;
+mod store;
+mod system;
+mod words;
+
+use definition::Editor;
+use manager::Manager;
+
+// What this program looks like, to whatever lists it. The icon itself is
+// `gxwi-services-manager.svg` at the repo root, installed as the base
+// theme's.
+libgxwi::icon!(b"dev.peios.gxwi-services-manager");
+
+/// How often the window looks again at what the services are doing. peinit
+/// says nothing when a service changes state, so the window asks.
+const EVERY: Duration = Duration::from_secs(2);
+
+/// How long a change to the registry is given to finish before it is read:
+/// a definition saved is several values, and is read once, not once each.
+const SETTLE: Duration = Duration::from_millis(150);
+
+/// Looks at the services, and at the one picked in full, every so often,
+/// for as long as the window is there. peinit is asked every time; the
+/// registry is read when it changes, which it says, or when what peinit
+/// lists is more than was read of it.
+fn watch(window: Weak<Surface<Manager>>) {
+    let (changed, told) = mpsc::channel();
+    let mut watched = system::watch_registry(changed);
+    let mut registry: Option<system::Registry> = None;
+    loop {
+        let Some((picked, chosen)) = window.upgrade().map(|window| window.look(|manager, _, _| (manager.picked(), manager.chosen()))) else { return };
+        let services = system::listing();
+        let read = match registry.take() {
+            Some(registry) if watched && registry.covers(&services, chosen.as_deref()) => registry,
+            _ => system::registry(&services, chosen.as_deref()),
+        };
+        let seen = system::seen(services, &read);
+        registry = Some(read);
+        let status = picked.map(|picked| {
+            let status = system::status(&picked);
+            (picked, status)
+        });
+        let Some(window_now) = window.upgrade() else { return };
+        window_now.update(|manager, _| {
+            manager.seen(seen);
+            if let Some((picked, status)) = status {
+                manager.detailed(&picked, status);
+            }
+        });
+        drop(window_now);
+        if !watched {
+            std::thread::sleep(EVERY);
+            continue;
+        }
+        // Until it is time to ask peinit again, or the registry changes,
+        // which is looked at straight away.
+        match told.recv_timeout(EVERY) {
+            Ok(()) => {
+                std::thread::sleep(SETTLE);
+                while told.try_recv().is_ok() {}
+                registry = None;
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => watched = false,
+        }
+    }
+}
+
+fn main() {
+    let mut app = match App::connect() {
+        Ok(app) => app,
+        Err(e) => {
+            eprintln!("gxwi-services-manager: no desktop to open on: {e}");
+            eprintln!("gxwi-services-manager: on a terminal, svctl does what this does");
+            std::process::exit(1);
+        }
+    };
+    app.stylesheet("/gxwi-services-manager.css", include_str!("gxwi-services-manager.css"));
+    // A definition, in a window of its own, which the list opens.
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let editor = match arguments.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        ["--definition", service] => Some(Editor::open(service)),
+        ["--new"] => Some(Editor::new_service()),
+        [] => None,
+        _ => {
+            eprintln!("gxwi-services-manager: usage: gxwi-services-manager [--definition SERVICE | --new]");
+            std::process::exit(64);
+        }
+    };
+    if let Some(editor) = editor {
+        let window = app.live(&editor.title(), editor);
+        let (aside, closer) = (Arc::downgrade(&window), window.closer());
+        window.update(|editor, fields| {
+            editor.window = aside;
+            editor.closer = Some(closer);
+            editor.fill(fields);
+        });
+    } else {
+        let window = app.live("Services Manager", Manager::new());
+        let aside = Arc::downgrade(&window);
+        window.update(|manager, _| manager.window = aside.clone());
+        std::thread::spawn(move || watch(aside));
+    }
+    if let Err(e) = app.run() {
+        eprintln!("gxwi-services-manager: {e}");
+        std::process::exit(1);
+    }
+}
