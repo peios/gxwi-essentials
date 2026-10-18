@@ -5,9 +5,9 @@
 //! (Upgrading Peios, for a program). Upgrade Peios never parses the words
 //! either tool prints for a person.
 
-use std::io::{BufRead, BufReader, Write};
-use std::process::{ChildStdin, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::process::{Command, Stdio};
+
+pub use gxwi_process::Answers;
 
 use serde::Deserialize;
 
@@ -148,81 +148,34 @@ pub struct Progress {
     pub package: Option<String>,
 }
 
-/// Where a driven run's answers go: upgrade-peios hands its input to
-/// peipkg, so these reach peipkg under its own question ids. Dropping every
-/// copy closes it, which refuses whatever is asked next.
-#[derive(Clone)]
-pub struct Answers(Arc<Mutex<Option<ChildStdin>>>);
-
-impl Answers {
-    /// Answers question `id`.
-    pub fn answer(&self, id: u64, answer: &str) {
-        let line = serde_json::json!({ "id": id, "answer": answer }).to_string() + "\n";
-        if let Some(stdin) = self.0.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
-            let _ = stdin
-                .write_all(line.as_bytes())
-                .and_then(|()| stdin.flush());
-        }
-    }
-
-    /// Closes the input: whatever is asked next is refused.
-    pub fn close(&self) {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).take();
-    }
-}
-
-/// Starts `program --driven` with `args`, handing each event to `heard` on
-/// a thread of its own, ending with exactly one that [`Event::ends`] it.
+/// Starts a driven release or package operation with its typed events.
 fn drive_program(
     program: &'static str,
     args: &[String],
-    mut heard: impl FnMut(Event) + Send + 'static,
+    heard: impl FnMut(Event) + Send + 'static,
 ) -> Result<Answers, String> {
     let name = program.rsplit('/').next().unwrap_or(program);
-    let mut child = Command::new(program)
-        .arg("--driven")
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("{name} couldn't be run: {e}"))?;
-    let stdout = child.stdout.take().expect("piped");
-    let stderr = child.stderr.take().expect("piped");
-    let answers = Answers(Arc::new(Mutex::new(child.stdin.take())));
-    let closing = answers.clone();
-    std::thread::spawn(move || {
-        let mut ended = false;
-        for line in BufReader::new(stdout).lines() {
-            let Ok(line) = line else { break };
-            let Ok(event) = serde_json::from_str::<Event>(&line) else {
-                continue;
-            };
-            ended = event.ends();
-            heard(event);
-            if ended {
-                break;
-            }
-        }
-        closing.close();
-        // Anything written outside the events is a fault: a panic, say. It
-        // is the best word on a run that ended unsaid.
-        let mut fault = String::new();
-        let _ = std::io::Read::read_to_string(&mut BufReader::new(stderr), &mut fault);
-        let _ = child.wait();
-        if !ended {
-            let message = if fault.trim().is_empty() {
-                format!("{name} stopped without saying how it ended")
-            } else {
-                said(&fault, name)
-            };
-            heard(Event::Error {
-                code: "failed".into(),
-                message,
-            });
-        }
-    });
-    Ok(answers)
+    let mut command = Command::new(program);
+    command.arg("--driven").args(args).stdin(Stdio::piped());
+    gxwi_process::drive(
+        command,
+        Event::ends,
+        move |fault| failed(fault, name),
+        heard,
+    )
+    .map_err(|error| format!("{name} couldn't be run: {error}"))
+}
+
+fn failed(fault: &str, name: &str) -> Event {
+    let message = if fault.trim().is_empty() {
+        format!("{name} stopped without saying how it ended")
+    } else {
+        said(fault, name)
+    };
+    Event::Error {
+        code: "failed".into(),
+        message,
+    }
 }
 
 /// Starts `upgrade-peios --driven` with `args`.

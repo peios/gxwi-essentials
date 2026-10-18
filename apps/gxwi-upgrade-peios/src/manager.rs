@@ -127,7 +127,9 @@ impl Run {
     /// Answers the open question.
     pub fn answer(&mut self, id: u64, answer: &str) {
         if let Some(answers) = &self.answers {
-            answers.answer(id, answer);
+            // A closed child is reported by the event reader; do not report the
+            // same failure again from this UI answer callback.
+            let _ = answers.answer(id, answer);
         }
         if answer == "yes"
             && self
