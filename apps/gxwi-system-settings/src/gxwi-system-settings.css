@@ -1,0 +1,3 @@
+/* What is System Settings' alone; the rest is libgxwi's settings stylesheet.
+   The clock is the time section's figure, in the face's tabular digits. */
+.st-hero time { font-variant-numeric: tabular-nums; }
