@@ -18,6 +18,8 @@ use peios::registry::Data;
 
 use crate::reg;
 
+mod command_line;
+
 pub const BOOT_KEY: &str = "Machine\\System\\Boot";
 pub const LOGIN_KEY: &str = "Machine\\System\\Services\\login-console";
 const NEXT_CMDLINE: &str = "/lcl/etc/boot/cmdline";
@@ -253,13 +255,11 @@ pub fn save_cmdline(startup: &Startup, fields: &Fields) -> Result<String, String
     );
     // Beside it, then over it: mkuki-watch makes the boot image again as
     // soon as the file changes, and must never find it half-written.
-    let staging = format!("{NEXT_CMDLINE}.new");
-    std::fs::write(&staging, format!("{line}\n"))
-        .and_then(|()| std::fs::rename(&staging, NEXT_CMDLINE))
-        .map_err(|e| {
-            let _ = std::fs::remove_file(&staging);
-            format!("The command line couldn't be written: {e}.")
-        })?;
+    command_line::write(
+        std::path::Path::new(NEXT_CMDLINE),
+        format!("{line}\n").as_bytes(),
+    )
+    .map_err(|error| format!("The command line couldn't be written: {error}."))?;
     Ok("Saved. It applies at the next boot.".into())
 }
 
