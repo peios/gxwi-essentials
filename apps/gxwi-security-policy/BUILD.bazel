@@ -1,0 +1,51 @@
+load("@crates//:crates.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//build:version.bzl", "VERSION")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.toml",
+    "BUILD.bazel",
+])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "**/__pycache__/**",
+            "**/*.pyc",
+            "target/**",
+        ],
+    ),
+)
+
+rust_binary(
+    name = "gxwi-security-policy",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["Cargo.toml"] + glob(
+        [
+            "src/**/*.css",
+            "page/**",
+        ],
+        allow_empty = True,
+    ),
+    crate_features = [],
+    crate_root = "src/main.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = VERSION,
+    deps = all_crate_deps(normal = True) + [
+        "//apps/gxwi-file-dialog:library",
+        "//apps/gxwi-sd-editor:library",
+    ],
+)
+
+rust_test(
+    name = "tests",
+    size = "small",
+    crate = ":gxwi-security-policy",
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+    deps = all_crate_deps(normal_dev = True),
+)

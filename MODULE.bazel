@@ -1,0 +1,186 @@
+module(
+    name = "gxwi-essentials",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_rust", version = "0.74.0")
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "platforms", version = "1.1.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    extra_rustc_flags = [
+        "-Cdebuginfo=2",
+        "-Cstrip=none",
+        "--remap-path-prefix=$${output_base}=/usr/src/debug/dev.peios.gxwi-essentials/.build",
+        "--remap-path-prefix=$${pwd}=/usr/src/debug/dev.peios.gxwi-essentials",
+        "--remap-path-prefix=$${exec_root}=/usr/src/debug/dev.peios.gxwi-essentials",
+        "--remap-path-prefix=external=/usr/src/debug/dev.peios.gxwi-essentials/external",
+        "--remap-path-prefix=.=/usr/src/debug/dev.peios.gxwi-essentials",
+    ],
+    extra_target_triples = [],
+    versions = ["1.98.1"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+sdk_repository = use_repo_rule("//build:sdk.bzl", "sdk_repository")
+
+sdk_repository(name = "peios_sdk")
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.annotation(
+    build_script_data = [
+        "@peios_sdk//:files",
+        "@peios_sdk//:root",
+    ],
+    build_script_env = {
+        "PEIOS_BAZEL_SDK_ROOT": "$(execpath @peios_sdk//:root)",
+    },
+    crate = "peios-sys",
+    label_injections = {"@peios_sdk//:root": "@peios_sdk"},
+    link_deps = ["@peios_sdk//:peios"],
+    patch_args = ["-p1"],
+    patches = ["//build:peios-sys.patch"],
+    repositories = ["crates"],
+)
+
+# GXWI's settings widgets compile their owned stylesheet into the crate.
+crate.annotation(
+    compile_data_glob = ["src/**/*.css"],
+    crate = "libgxwi",
+    # crate_universe strips the workspace root. Preserve its exact version and
+    # license from GXWI e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76 for packaging.
+    patch_args = ["-p1"],
+    patches = ["//build:libgxwi-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from d9833bff0ebb0707add6bfb1fd78dd5d49261eaf.
+crate.annotation(
+    crate = "eventd-client",
+    patch_args = ["-p1"],
+    patches = ["//build:eventd-client-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from 23af1f6b84f3764d9327eb009ced56b2a16b7aa8.
+crate.annotation(
+    crate = "libnetd",
+    patch_args = ["-p1"],
+    patches = ["//build:libnetd-metadata.patch"],
+    repositories = ["crates"],
+    deps = [
+        "@@//vendor/kernel:ntfe",
+        "@@//vendor/kernel:pnp-core",
+    ],
+)
+
+# Preserve package metadata inherited from 67ffede760dc1c5767fbb3c6c66e5fc5e12b7314.
+crate.annotation(
+    crate = "libreg",
+    patch_args = ["-p1"],
+    patches = ["//build:libreg-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from 67ffede760dc1c5767fbb3c6c66e5fc5e12b7314.
+crate.annotation(
+    crate = "libregman",
+    patch_args = ["-p1"],
+    patches = ["//build:libregman-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from 9c96d693c9672e635cc40ee1e2ea8122e64f017e.
+crate.annotation(
+    crate = "libresolv",
+    patch_args = ["-p1"],
+    patches = ["//build:libresolv-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from c1db503a60108542c8586c574802e5f2339dbcb4.
+crate.annotation(
+    crate = "libtimed",
+    patch_args = ["-p1"],
+    patches = ["//build:libtimed-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from 2fd7d86aac00e207320bda1ae11045aec3d61fbf.
+crate.annotation(
+    crate = "libtrust",
+    patch_args = ["-p1"],
+    patches = ["//build:libtrust-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from 2fd7d86aac00e207320bda1ae11045aec3d61fbf.
+crate.annotation(
+    crate = "trust",
+    patch_args = ["-p1"],
+    patches = ["//build:trust-metadata.patch"],
+    repositories = ["crates"],
+)
+
+# Preserve package metadata inherited from 2fd7d86aac00e207320bda1ae11045aec3d61fbf.
+crate.annotation(
+    crate = "trustd",
+    patch_args = ["-p1"],
+    patches = ["//build:trustd-metadata.patch"],
+    repositories = ["crates"],
+)
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+    skip_cargo_lockfile_overwrite = True,
+    supported_platform_triples = ["x86_64-unknown-linux-gnu"],
+)
+use_repo(crate, "crates")
+
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+
+http_file(
+    name = "buildifier",
+    executable = True,
+    sha256 = "31b6a8aa1e5c746696788f428729701770ad91925873d8256cb885c60e12c77e",
+    urls = ["https://github.com/bazel-contrib/buildtools/releases/download/v10.1.0/buildifier-linux-amd64"],
+)
+
+native_rust = use_repo_rule("//build:native-rust.bzl", "native_rust")
+
+native_rust(name = "peios_rust")
+
+# System-provided cc_import libraries must not add build-tree runtime paths.
+single_version_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = ["//build:rules-rust-system-libraries.patch"],
+    version = "0.74.0",
+)
+
+# Use the same canonical writer snapshot and dependency lock as the kernel.
+crate.from_cargo(
+    name = "ppk_crates",
+    cargo_lockfile = "//vendor/ppk:Cargo.lock",
+    manifests = ["//vendor/ppk:Cargo.toml"],
+    skip_cargo_lockfile_overwrite = True,
+    supported_platform_triples = ["x86_64-unknown-linux-gnu"],
+)
+use_repo(crate, "ppk_crates")
+
+crate.annotation(
+    compile_data_glob = [
+        "Cargo.toml",
+        "LICENSE*",
+        "LICENCE*",
+        "COPYING*",
+        "NOTICE*",
+        "UNLICENSE*",
+    ],
+    crate = "*",
+)

@@ -1,0 +1,152 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//build:checks.bzl", "host_test")
+load(":build.bzl", "suite_stage")
+load(":names.bzl", "PACKAGE_NAMES")
+load(":package.bzl", "package_store_test", "suite_package")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "**/__pycache__/**",
+            "**/*.pyc",
+        ],
+    ),
+)
+
+rust_binary(
+    name = "check-blobs",
+    srcs = ["check_blobs.rs"],
+    edition = "2024",
+    deps = [
+        "@ppk_crates//:anyhow",
+        "@ppk_crates//:sha2",
+        "@ppk_crates//:zstd",
+    ],
+)
+
+suite_stage(
+    name = "stage",
+    components = {
+        "//apps/gxwi-disk-manager": "gxwi-disk-manager",
+        "//apps/gxwi-event-viewer": "gxwi-event-viewer",
+        "//apps/gxwi-feature-manager": "gxwi-feature-manager",
+        "//apps/gxwi-file-dialog": "gxwi-file-dialog",
+        "//apps/gxwi-file-explorer": "gxwi-file-explorer",
+        "//apps/gxwi-my-settings": "gxwi-my-settings",
+        "//apps/gxwi-network-manager": "gxwi-network-manager",
+        "//apps/gxwi-package-manager": "gxwi-package-manager",
+        "//apps/gxwi-principals-manager": "gxwi-principals-manager",
+        "//apps/gxwi-registry-editor": "gxwi-registry-editor",
+        "//apps/gxwi-sd-editor": "gxwi-sd-editor",
+        "//apps/gxwi-security-policy": "gxwi-security-policy",
+        "//apps/gxwi-services-manager": "gxwi-services-manager",
+        "//apps/gxwi-system-settings": "gxwi-system-settings",
+        "//apps/gxwi-task-manager": "gxwi-task-manager",
+        "//apps/gxwi-terminal": "gxwi-terminal",
+        "//apps/gxwi-text-editor": "gxwi-text-editor",
+        "//apps/gxwi-upgrade-peios": "gxwi-upgrade-peios",
+    },
+    data = ["//:package-data"],
+    driver = "stage.py",
+    drivers = [
+        "stage.py",
+        "licences.py",
+        "validate.py",
+    ],
+    native = select({
+        "//build:native": True,
+        "//conditions:default": False,
+    }),
+)
+
+[
+    suite_package(
+        name = name,
+        srcs = ["//:LICENSE"],
+        definition = "definitions/" + name + ".json",
+        stage = ":stage",
+    )
+    for name in PACKAGE_NAMES
+]
+
+suite_package(
+    name = "gxwi-essentials-source",
+    srcs = ["//:package-sources"],
+    source = True,
+)
+
+filegroup(
+    name = "all",
+    srcs = [":" + name for name in PACKAGE_NAMES] + [":gxwi-essentials-source"],
+)
+
+package_store_test(
+    name = "store-test",
+    size = "small",
+    srcs = [
+        "assembly.py",
+        "package.py",
+    ],
+    main = "test_store.py",
+)
+
+host_test(
+    name = "assembly-test",
+    size = "small",
+    command = "exec python3 packages/test_assembly.py",
+    data = [
+        "assembly.py",
+        "test_assembly.py",
+    ],
+)
+
+filegroup(
+    name = "definitions",
+    srcs = glob(["definitions/*.json"]),
+)
+
+filegroup(
+    name = "build-files",
+    srcs = ["BUILD.bazel"] + glob(["*.bzl"]),
+)
+
+host_test(
+    name = "family-test",
+    size = "small",
+    command = "exec python3 packages/test_family.py",
+    data = [
+        "test_family.py",
+        "//:packages",
+    ],
+    tags = [
+        "external",
+        "no-remote",
+    ],
+)
+
+host_test(
+    name = "licences-test",
+    size = "small",
+    command = "exec python3 packages/test_licences.py",
+    data = [
+        "licences.py",
+        "test_licences.py",
+    ],
+)
+
+host_test(
+    name = "payload-test",
+    size = "small",
+    command = "exec python3 packages/test_payload.py",
+    data = [
+        "licences.py",
+        "stage.py",
+        "test_payload.py",
+        "validate.py",
+        "//:package-data",
+    ],
+)
