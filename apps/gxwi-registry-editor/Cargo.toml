@@ -1,0 +1,31 @@
+[package]
+name = "gxwi-registry-editor"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+# libgxwi as of the gxwi release dev.peios.gxwi-sdk stages, which a package
+# build takes it from (gxwi's dev/pins.toml).
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "5629140add3de075511b3379fd690fdabd06dcaf" }
+# The registry, and its values decoded by their types. The revision libgxwi
+# pins, which it must: `peios-sys` links libpeios, and a program can hold
+# only one of it.
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "f8c84930f2b71763bcf0550df0b1420a0f63b21e", package = "peios" }
+# The permissions editor, opened on a key or on a descriptor a value holds,
+# and who a key under Users is, said as the editor says it.
+gxwi-sd-editor = { git = "https://github.com/peios/gxwi-sd-editor.git", rev = "27239eb3411ab82d711262bfd59e537c66c29e9e", default-features = false, features = ["names", "splice", "registry", "propagate"] }
+# What the registry manual says of a key and its values, read as regman
+# reads it.
+libregman = { git = "https://github.com/peios/peiosutils.git", rev = "67ffede760dc1c5767fbb3c6c66e5fc5e12b7314" }
+# The registry document, written and read as reg writes and reads it.
+libreg = { git = "https://github.com/peios/peiosutils.git", rev = "67ffede760dc1c5767fbb3c6c66e5fc5e12b7314" }
+serde_json = "1"
+# The file to export to, import from, back up to or restore from, chosen in
+# the shared file dialog: its protocol, and nothing of its program.
+gxwi-file-dialog = { git = "https://github.com/peios/gxwi-file-dialog.git", rev = "65b6015e7bc65cdade2e043f31f0b4838106298c", default-features = false }
+# A key's last change, said on this machine's clock.
+jiff = "0.2.29"
+# For waiting on the keys being watched.
+libc = "0.2"

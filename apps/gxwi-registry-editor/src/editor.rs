@@ -1,0 +1,1668 @@
+//! The window: the registry's keys as a tree, the values of the key shown,
+//! and, beside them, the value picked or the key itself in full.
+//!
+//! A key is read when it is opened in the tree or shown, and again whenever
+//! the registry says it changed (`main`'s watch). The tree lists what may be
+//! listed. A key reached by typing its path is shown under its parent even
+//! where the parent may not be listed, since the registry checks only the
+//! key opened.
+
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::Weak;
+
+use gxwi_sd_editor::names::Names;
+use jiff::tz::TimeZone;
+use libgxwi::{Facts, Fields, Live, Surface, Value, escape};
+use peios::registry::layers::{BASE, Layer};
+use peios::registry::{Data, ValueType};
+use peios::security::Sid;
+
+use crate::docs::{self, Docs};
+use libregman::fragment::Record;
+use crate::edit::{self, Base, Form};
+use crate::files::{self, Held, Purpose};
+use crate::keys::{self, May, Origin, Read};
+use crate::{permissions, words};
+use libreg::Document;
+use std::path::PathBuf;
+
+pub struct Editor {
+    pub window: Weak<Surface<Editor>>,
+    /// What has been read of each key in sight, by its path in lower case.
+    reads: HashMap<String, Result<Read, String>>,
+    /// The keys whose subkeys are shown, by their paths in lower case.
+    open: BTreeSet<String>,
+    /// The key whose values are shown, and what the person may change of it.
+    key: String,
+    may: May,
+    /// The value picked, by name, and where its data came from.
+    value: Option<String>,
+    origin: Option<Origin>,
+    /// What the pane beside the values is doing.
+    doing: Doing,
+    /// What came of what the person last did, or why the path typed could
+    /// not be gone to.
+    said: Option<Said>,
+    /// What the permissions editor is open on: a key's path, or a key's
+    /// path and a value's name, in lower case.
+    editing: HashSet<String>,
+    /// What the registry manual says of the key shown and its values.
+    docs: Docs,
+    /// The layers, and the one writes go to (`None`: the base layer), and
+    /// why the person may not write into it, if they may not.
+    layers: Vec<Layer>,
+    layer: Option<String>,
+    layer_refused: Option<String>,
+    /// The backup privileges the person holds, and whether the file
+    /// dialog is open.
+    held: Held,
+    choosing: bool,
+    names: Names,
+    zone: TimeZone,
+}
+
+/// What the pane beside the values is doing, if not showing what is picked.
+#[derive(Debug, Clone, PartialEq)]
+enum Doing {
+    Looking,
+    /// A value being edited, or a new one (`name` is `None`). Its type, and
+    /// whether its data doesn't fit the type, which is then edited as bytes.
+    /// `sequence` is the value's when the editing began: it is saved only
+    /// if no one has changed it since. A new value the manual documents
+    /// comes `documented`, named already, so its data is what is typed.
+    Editing { name: Option<String>, ty: ValueType, misfit: bool, base: Base, sequence: Option<u64>, documented: bool },
+    /// A new key under the one shown.
+    NewKey,
+    /// Asking before the value is deleted.
+    DeletingValue(String),
+    /// Asking before the key shown is deleted, and what is under it.
+    DeletingKey,
+    /// Asking before a registry document read from a file is written.
+    Importing { doc: Document, file: PathBuf },
+    /// Asking before the key shown is replaced from a backup.
+    Restoring(PathBuf),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Said {
+    text: String,
+    bad: bool,
+}
+
+impl Said {
+    fn good(text: impl Into<String>) -> Option<Said> {
+        Some(Said { text: text.into(), bad: false })
+    }
+
+    fn bad(text: impl Into<String>) -> Option<Said> {
+        Some(Said { text: text.into(), bad: true })
+    }
+}
+
+impl Editor {
+    /// The window, showing the key at `path`, with the tree open down to it
+    /// and at it.
+    pub fn new(path: &str, names: Names) -> Editor {
+        let mut editor = Editor {
+            window: Weak::new(),
+            reads: HashMap::new(),
+            open: BTreeSet::new(),
+            key: String::new(),
+            may: May::default(),
+            value: None,
+            origin: None,
+            doing: Doing::Looking,
+            said: None,
+            editing: HashSet::new(),
+            docs: Docs::default(),
+            layers: Vec::new(),
+            layer: None,
+            layer_refused: None,
+            held: files::held(),
+            choosing: false,
+            names,
+            zone: TimeZone::system(),
+        };
+        editor.read_layers();
+        editor.go(path);
+        editor.open.insert(editor.key.to_lowercase());
+        editor
+    }
+
+    /// The key shown, for the path box and the title.
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    /// The keys to be told about: every one open in the tree, and the one
+    /// shown.
+    pub fn watched(&self) -> Vec<String> {
+        let mut paths: Vec<String> = self.open.iter().filter_map(|open| self.spelt(open)).collect();
+        if !paths.iter().any(|path| keys::same(path, &self.key)) {
+            paths.push(self.key.clone());
+        }
+        paths
+    }
+
+    /// Reads the key at `path` again, which the registry says has changed.
+    pub fn changed(&mut self, path: &str) {
+        if self.reads.contains_key(&path.to_lowercase()) {
+            self.read(path);
+        }
+        if keys::same(path, &self.key) {
+            // Its permissions may be what changed.
+            self.look_at_may();
+            self.pick(self.value.clone());
+        }
+    }
+
+    /// Reads everything in sight again, the layers included.
+    fn refresh(&mut self) {
+        let paths: Vec<String> = self.watched();
+        self.reads.clear();
+        for path in paths {
+            self.read(&path);
+        }
+        self.read_layers();
+        self.look_at_may();
+        self.docs = docs::of(&self.key);
+        self.pick(self.value.clone());
+    }
+
+    /// The layers writes may go to. A layer chosen that has gone is given up
+    /// for the base layer.
+    fn read_layers(&mut self) {
+        self.layers = peios::registry::layers::list().unwrap_or_default();
+        if let Some(chosen) = &self.layer
+            && !self.layers.iter().any(|layer| layer.name.eq_ignore_ascii_case(chosen))
+        {
+            self.layer = None;
+        }
+    }
+
+    /// What the person may change of the key shown, writing into the layer
+    /// chosen: a write needs the key's right and the layer's both.
+    fn look_at_may(&mut self) {
+        self.may = keys::may(&self.key);
+        self.layer_refused = keys::may_write_into(self.layer.as_deref()).err();
+        if self.layer_refused.is_some() {
+            self.may.set_values = false;
+            self.may.create_keys = false;
+            self.may.delete = false;
+        }
+    }
+
+    /// Shows the key at `path`, with the tree open down to it.
+    fn go(&mut self, path: &str) {
+        let mut above = String::new();
+        for name in keys::names(path) {
+            if !above.is_empty() {
+                self.open.insert(above.to_lowercase());
+                if !self.reads.contains_key(&above.to_lowercase()) {
+                    self.read(&above.clone());
+                }
+                above.push('\\');
+                above += self.listed(&above, name).unwrap_or(name);
+            } else {
+                above += keys::ROOTS.iter().find(|root| keys::same(root, name)).map_or(name, |root| root);
+            }
+        }
+        self.key = above;
+        self.read(&self.key.clone());
+        self.look_at_may();
+        self.docs = docs::of(&self.key);
+        self.value = None;
+        self.origin = None;
+        self.doing = Doing::Looking;
+    }
+
+    /// `name` as the key listed under `parent` spells it, if it is listed.
+    fn listed(&self, parent: &str, name: &str) -> Option<&str> {
+        let parent = parent.strip_suffix('\\')?;
+        let read = self.reads.get(&parent.to_lowercase())?.as_ref().ok()?;
+        read.subkeys.as_ref().ok()?.iter().find(|listed| keys::same(listed, name)).map(String::as_str)
+    }
+
+    /// The path of an open key as it is spelt where it was read.
+    fn spelt(&self, lower: &str) -> Option<String> {
+        let mut spelt = String::new();
+        for name in keys::names(lower) {
+            if spelt.is_empty() {
+                spelt = keys::ROOTS.iter().find(|root| keys::same(root, name)).map_or(name, |root| root).to_string();
+            } else {
+                let found = self.listed(&format!("{spelt}\\"), name).unwrap_or(name).to_string();
+                spelt = keys::join(&spelt, &found);
+            }
+        }
+        (!spelt.is_empty()).then_some(spelt)
+    }
+
+    fn read(&mut self, path: &str) {
+        let read = keys::read(path);
+        // The keys under Users are named for whose they are, which the
+        // tree says beside them.
+        if keys::same(path, "Users")
+            && let Ok(Read { subkeys: Ok(names), .. }) = &read
+        {
+            for sid in names.iter().filter_map(|name| name.parse::<Sid>().ok()) {
+                self.names.learn(&sid);
+            }
+        }
+        self.reads.insert(path.to_lowercase(), read);
+    }
+
+    /// Picks the value `name`: one set here, or one the manual documents
+    /// that isn't.
+    fn pick(&mut self, value: Option<String>) {
+        let set = |name: &str| self.values().is_some_and(|values| values.iter().any(|value| value.name == name));
+        let still = value.filter(|name| set(name) || self.unset().iter().any(|(documented, _)| documented == name));
+        self.origin = still.as_deref().filter(|name| set(name)).and_then(|name| keys::origin(&self.key, name));
+        self.value = still;
+    }
+
+    /// The values the manual documents for the key shown that aren't set
+    /// here, by name. None, if its values can't be read.
+    fn unset(&self) -> Vec<&(String, Record)> {
+        let Some(values) = self.values() else { return Vec::new() };
+        let set: HashSet<String> = values.iter().map(|value| libregman::fold::fold(&value.name)).collect();
+        self.docs.values.iter().filter(|(name, _)| !set.contains(&libregman::fold::fold(name))).collect()
+    }
+
+    /// The documented value picked, if the one picked isn't set here.
+    fn picked_unset(&self) -> Option<&(String, Record)> {
+        let name = self.value.as_deref()?;
+        self.unset().into_iter().find(|(documented, _)| documented == name)
+    }
+
+    fn shown(&self) -> Option<&Result<Read, String>> {
+        self.reads.get(&self.key.to_lowercase())
+    }
+
+    fn values(&self) -> Option<&[keys::Value]> {
+        match self.shown() {
+            Some(Ok(Read { values: Ok(values), .. })) => Some(values),
+            _ => None,
+        }
+    }
+
+    fn toggle(&mut self, path: &str) {
+        let lower = path.to_lowercase();
+        if !self.open.remove(&lower) {
+            self.open.insert(lower);
+            self.read(path);
+        }
+    }
+
+    /// One key in the tree, and, if it is open, what is under it.
+    fn node(&self, path: &str, name: &str, reached: bool) -> String {
+        let lower = path.to_lowercase();
+        let open = self.open.contains(&lower);
+        let read = self.reads.get(&lower);
+        let empty = matches!(read, Some(Ok(Read { subkeys: Ok(subkeys), .. })) if subkeys.is_empty()) && self.beneath(path).is_none();
+        let twist = if empty {
+            "<span class=\"twist\"></span>".to_string()
+        } else {
+            format!(
+                "<button type=\"button\" class=\"twist\" fx-click=\"toggle\" fx-value-path=\"{}\" aria-label=\"{} {}\">{}</button>",
+                escape(path),
+                if open { "Close" } else { "Open" },
+                escape(name),
+                if open { "▾" } else { "▸" },
+            )
+        };
+        // A key under Users is named for whose it is: who goes first, since
+        // a SID is too long to be read at a glance.
+        let shown = match (keys::parent(path), name.parse::<Sid>()) {
+            (Some(parent), Ok(sid)) if keys::same(parent, "Users") && self.names.named(&sid) => {
+                format!("{} <span class=\"sid\">{}</span>", escape(&self.names.of(&sid)), escape(name))
+            }
+            _ => escape(name),
+        };
+        let mut under = String::new();
+        if open {
+            under = self.under(path);
+        }
+        // Only the key shown has a menu: what may be done to it is known.
+        let selected = keys::same(path, &self.key);
+        format!(
+            "<li role=\"treeitem\"{expanded}><div class=\"row\">{twist}<button type=\"button\" class=\"name{reached}\" fx-click=\"show\"{menu} fx-value-path=\"{path}\" aria-selected=\"{selected}\"{title}>{shown}</button></div>{under}</li>",
+            expanded = if empty { String::new() } else { format!(" aria-expanded=\"{open}\"") },
+            reached = if reached { " reached" } else { "" },
+            menu = if selected { " fx-menu=\"key-menu\"" } else { "" },
+            path = escape(path),
+            title = if reached { " title=\"Reached by its path: the key above it may not be listed\"" } else { "" },
+        )
+    }
+
+    /// What is under the open key at `path`.
+    fn under(&self, path: &str) -> String {
+        let mut items = String::new();
+        let listed: &[String] = match self.reads.get(&path.to_lowercase()) {
+            Some(Ok(Read { subkeys: Ok(subkeys), .. })) => subkeys,
+            Some(Ok(Read { subkeys: Err(why), .. }) | Err(why)) => {
+                items += &format!("<li class=\"why\">{}</li>", escape(why));
+                &[]
+            }
+            None => &[],
+        };
+        for name in listed {
+            items += &self.node(&keys::join(path, name), name, false);
+        }
+        if let Some(next) = self.beneath(path)
+            && !listed.iter().any(|name| keys::same(name, next))
+        {
+            items += &self.node(&keys::join(path, next), next, true);
+        }
+        format!("<ul role=\"group\">{items}</ul>")
+    }
+
+    /// The name, under `path`, of the key on the way to the one shown.
+    fn beneath(&self, path: &str) -> Option<&str> {
+        let rest = self.key.get(path.len()..)?.strip_prefix('\\')?;
+        keys::same(&self.key[..path.len()], path).then(|| rest.split('\\').next()).flatten()
+    }
+
+    fn listing(&self) -> String {
+        let read = match self.shown() {
+            Some(Ok(read)) => read,
+            Some(Err(why)) => return format!("<p class=\"trouble\">{}</p>", escape(why)),
+            None => return String::new(),
+        };
+        let values = match &read.values {
+            Ok(values) => values,
+            Err(why) => return format!("<p class=\"trouble\">{}</p>", escape(why)),
+        };
+        let unset = self.unset();
+        if values.is_empty() && unset.is_empty() {
+            return "<p class=\"more\">This key has no values.</p>".into();
+        }
+        let mut rows: String = values
+            .iter()
+            .map(|value| {
+                let misfit = words::misfit(&value.data).is_some();
+                format!(
+                    "<li><button type=\"button\" fx-click=\"value\"{edit} fx-menu=\"value-menu\" fx-value-name=\"{name}\" aria-selected=\"{picked}\">\
+                     <span class=\"name{default}\">{shown}</span><span class=\"type\">{kind}</span><span class=\"data{misfit}\">{data}</span>\
+                     </button></li>",
+                    edit = if self.may.set_values { " fx-dblclick=\"edit\"" } else { "" },
+                    name = escape(&value.name),
+                    picked = self.value.as_deref() == Some(value.name.as_str()),
+                    default = if value.name.is_empty() { " default" } else { "" },
+                    shown = escape(words::value_name(&value.name)),
+                    kind = escape(&if value.sddl.is_some() { "Security descriptor".to_string() } else { words::kind(value.data.ty()) }),
+                    misfit = if misfit { " misfit" } else { "" },
+                    data = escape(&value.sddl.clone().unwrap_or_else(|| words::line(&value.data))),
+                )
+            })
+            .collect();
+        // Then those the manual documents that aren't set, greyed: they
+        // aren't values, so they have no menu, and double-clicking one sets
+        // it.
+        for (name, record) in unset {
+            let kind = docs::ty(record).map(words::kind).or_else(|| record.type_.clone()).unwrap_or_default();
+            let data = match docs::default(record) {
+                Some(default) => format!("Not set · default {default}"),
+                None => "Not set".into(),
+            };
+            rows += &format!(
+                "<li class=\"unset\"><button type=\"button\" fx-click=\"value\"{set} fx-value-name=\"{name}\" aria-selected=\"{picked}\" title=\"Not set here: documented in the registry manual\">\
+                 <span class=\"name\">{name}</span><span class=\"type\">{kind}</span><span class=\"data\">{data}</span></button></li>",
+                set = if self.may.set_values { " fx-dblclick=\"set-documented\"" } else { "" },
+                name = escape(name),
+                picked = self.value.as_deref() == Some(name.as_str()),
+                kind = escape(&kind),
+                data = escape(&data),
+            );
+        }
+        format!("<ul class=\"entries\">{rows}</ul>")
+    }
+
+    fn picked(&self) -> Option<&keys::Value> {
+        self.value.as_deref().and_then(|name| self.values()?.iter().find(|value| value.name == name))
+    }
+
+    /// Whether the key shown could be read, so that what may be changed of
+    /// it is worth saying.
+    fn readable(&self) -> bool {
+        matches!(self.shown(), Some(Ok(_)))
+    }
+
+    /// The pane beside the values: a form or a question, if one is open;
+    /// otherwise the value picked, or else the key.
+    fn details(&self) -> String {
+        match &self.doing {
+            Doing::Editing { name, ty, misfit, base, documented, .. } => return self.value_form(name.as_deref(), *ty, *misfit, *base, *documented),
+            Doing::NewKey => return self.key_form(),
+            Doing::DeletingKey => return self.asking_key(),
+            Doing::Importing { doc, file } => return self.asking_import(doc, file),
+            Doing::Restoring(file) => return self.asking_restore(file),
+            Doing::DeletingValue(_) | Doing::Looking => {}
+        }
+        let row = |name: &str, value: &str| format!("<dt>{name}</dt><dd>{}</dd>", escape(value));
+        if let Some(value) = self.picked() {
+            let mut facts = row("Type", &format!("{} ({})", words::kind(value.data.ty()), words::type_name(value.data.ty())));
+            facts += &row("Size", &words::bytes_count(value.size));
+            if let Some(origin) = &self.origin {
+                facts += &row("Layer", &origin.layer);
+            }
+            let mut note = words::misfit(&value.data).map(|why| format!("<p class=\"note bad\">{}</p>", escape(&why))).unwrap_or_default();
+            note += &self.layer_note();
+            let actions = if self.doing == Doing::DeletingValue(value.name.clone()) {
+                format!(
+                    "<div class=\"asking\" role=\"alertdialog\" aria-label=\"Delete the value\"><p>Delete the value <strong>{}</strong>? This can't be undone.</p>\
+                     <button type=\"button\" class=\"danger\" fx-click=\"delete-value-yes\" fx-autofocus>Delete</button><button type=\"button\" fx-click=\"cancel\">Cancel</button></div>",
+                    escape(words::value_name(&value.name)),
+                )
+            } else {
+                let off = disabled(self.may.set_values, &self.because("You may not change this key's values."));
+                // Who a descriptor lets in can be looked at by anyone who
+                // can read it; the editor says why it can't be changed.
+                let permissions = if value.sddl.is_some() {
+                    format!("<button type=\"button\" fx-click=\"permissions\" fx-value-name=\"{}\">Permissions…</button>", escape(&value.name))
+                } else {
+                    String::new()
+                };
+                format!(
+                    "<p class=\"actions\">{permissions}<button type=\"button\" fx-click=\"edit\" fx-value-name=\"{name}\"{off}>Edit…</button>\
+                     <button type=\"button\" fx-click=\"delete-value\" fx-value-name=\"{name}\"{off}>Delete…</button></p>{may}",
+                    name = escape(&value.name),
+                    may = if self.may.set_values {
+                        String::new()
+                    } else {
+                        format!("<p class=\"may\">{}</p>", escape(&self.because("You may not change this key's values.")))
+                    },
+                )
+            };
+            let data = match &value.sddl {
+                Some(sddl) => format!(
+                    "<h3>Security descriptor</h3><p class=\"note\">It holds a security descriptor, shown here as SDDL. Permissions… shows who it lets in.</p>\
+                     <pre class=\"text\">{}</pre>",
+                    escape(sddl)
+                ),
+                None => format!("<h3>Data</h3>{}", data(&value.data)),
+            };
+            return format!(
+                "<aside class=\"details\" aria-label=\"The value\"><h2>{name}</h2><dl>{facts}</dl>{note}{data}{actions}{about}</aside>",
+                name = escape(words::value_name(&value.name)),
+                about = self.value_docs(&value.name, Some(value.data.ty())),
+            );
+        }
+        if let Some((name, _)) = self.picked_unset() {
+            let why = self.because("You may not change this key's values.");
+            let may = if self.may.set_values { String::new() } else { format!("<p class=\"may\">{}</p>", escape(&why)) };
+            return format!(
+                "<aside class=\"details\" aria-label=\"The value\"><h2>{shown}</h2>\
+                 <p class=\"note\">It isn't set here, so whatever reads it uses its default. The registry manual documents it.</p>\
+                 <p class=\"actions\"><button type=\"button\" fx-click=\"set-documented\" fx-value-name=\"{name}\"{off}>Set…</button></p>{may}{about}</aside>",
+                shown = escape(words::value_name(name)),
+                name = escape(name),
+                off = disabled(self.may.set_values, &why),
+                about = self.value_docs(name, None),
+            );
+        }
+        let name = keys::names(&self.key).last().unwrap_or_default();
+        let mut facts = String::new();
+        let mut notes = String::new();
+        match self.shown() {
+            Some(Ok(read)) => {
+                if let Some(said) = &read.facts {
+                    facts += &row("Last changed", &words::when(said.changed, &self.zone));
+                    if said.volatile {
+                        notes += "<p class=\"note\">This key is kept only until the machine restarts.</p>";
+                    }
+                    if said.link {
+                        notes += "<p class=\"note\">This key is a link to another key.</p>";
+                    }
+                }
+                if let Ok(subkeys) = &read.subkeys {
+                    facts += &row("Subkeys", &subkeys.len().to_string());
+                }
+                if let Ok(values) = &read.values {
+                    facts += &row("Values", &values.len().to_string());
+                }
+                for why in [read.subkeys.as_ref().err(), read.values.as_ref().err()].into_iter().flatten() {
+                    notes += &format!("<p class=\"note\">{}</p>", escape(why));
+                }
+            }
+            Some(Err(why)) => notes += &format!("<p class=\"note bad\">{}</p>", escape(why)),
+            None => {}
+        }
+        let mut actions = String::new();
+        if self.readable() {
+            actions += &format!(
+                "<button type=\"button\" fx-click=\"new-key\"{}>New key…</button><button type=\"button\" fx-click=\"new-value\"{}>New value…</button>",
+                disabled(self.may.create_keys, &self.because("You may not create keys under this key.")),
+                disabled(self.may.set_values, &self.because("You may not change this key's values.")),
+            );
+            if keys::parent(&self.key).is_some() {
+                actions += &format!(
+                    "<button type=\"button\" fx-click=\"delete-key\"{}>Delete key…</button>",
+                    disabled(self.may.delete, &self.because("You may not delete this key."))
+                );
+            }
+        }
+        if self.shown().is_some() {
+            actions += &format!(
+                "<button type=\"button\" fx-click=\"permissions\"{}>Permissions…</button>",
+                disabled(self.may.read_permissions, "You may not read who may use this key.")
+            );
+        }
+        format!(
+            "<aside class=\"details\" aria-label=\"The key\"><h2>{name}</h2><p class=\"id\">{path}</p><dl>{facts}</dl>{notes}\
+             <p class=\"actions\">{actions}<button type=\"button\" fx-copy=\"path\" fx-value-path=\"{path}\">Copy path</button></p>{may}{files}{about}</aside>",
+            files = self.file_buttons(),
+            name = escape(name),
+            path = escape(&self.key),
+            may = self.may_words().map(|said| format!("<p class=\"may\">{said}</p>")).unwrap_or_default(),
+            about = self.key_docs(),
+        )
+    }
+
+    /// What the manual says of the key shown. The values it documents that
+    /// aren't set here are in the list, after those that are.
+    fn key_docs(&self) -> String {
+        match &self.docs.key {
+            Some(record) => format!("<section class=\"docs\"><h3>About this key</h3><div class=\"prose\">{}</div></section>", docs::html(&record.body)),
+            None if !self.docs.values.is_empty() => "<section class=\"docs\"><p class=\"note\">The registry manual documents values of this key, but not the key itself.</p></section>".into(),
+            None => "<section class=\"docs\"><p class=\"note\">The registry manual says nothing of this key.</p></section>".into(),
+        }
+    }
+
+    /// What the manual says of the value `name` of the key shown, which is
+    /// of the type `ty`, if it is set.
+    fn value_docs(&self, name: &str, ty: Option<ValueType>) -> String {
+        let Some(record) = self.docs.value(name) else {
+            return "<section class=\"docs\"><p class=\"note\">The registry manual says nothing of this value.</p></section>".into();
+        };
+        let row = |name: &str, said: &str| format!("<dt>{name}</dt><dd>{}</dd>", escape(said));
+        let mut facts = String::new();
+        let mut notes = String::new();
+        if let Some(documented) = record.type_.as_deref() {
+            facts += &row("Type", documented);
+            if let (Some(expected), Some(ty)) = (docs::ty(record), ty)
+                && expected != ty
+            {
+                notes += &format!(
+                    "<p class=\"note bad\">The manual says it should be {}, but it is {}, which whatever reads it may not accept.</p>",
+                    escape(documented),
+                    escape(&words::type_name(ty)),
+                );
+            }
+        }
+        if let Some(default) = &record.default {
+            facts += &row("Default", default);
+        }
+        if let Some(valid) = &record.valid {
+            facts += &row("May be", valid);
+        }
+        if let Some(applies) = docs::applies(record) {
+            facts += &row("A change applies", applies);
+        }
+        if let Some(instead) = &record.deprecated {
+            notes += &format!("<p class=\"note bad\">It is being retired: {}</p>", escape(instead));
+        }
+        format!("<section class=\"docs\"><h3>From the registry manual</h3><dl>{facts}</dl>{notes}<div class=\"prose\">{}</div></section>", docs::html(&record.body))
+    }
+
+    /// The layers a write may go to, the base layer first as "" and the
+    /// rest by precedence. A disabled one is said to be.
+    fn layer_options(&self) -> String {
+        let mut options = "<option value=\"\">base</option>".to_string();
+        for layer in self.layers.iter().filter(|layer| layer.name != BASE) {
+            options += &format!(
+                "<option value=\"{name}\">{name}{disabled}</option>",
+                name = escape(&layer.name),
+                disabled = if layer.enabled { "" } else { " (disabled)" },
+            );
+        }
+        options
+    }
+
+    /// Opens the layers in a window of their own: this program, as
+    /// `--layers`.
+    fn open_layers(&mut self) {
+        let program = std::env::current_exe().unwrap_or_else(|_| "/usr/bin/gxwi-registry-editor".into());
+        if let Err(e) = std::process::Command::new(program).arg("--layers").spawn() {
+            self.said = Said::bad(format!("The layers could not be opened: {e}."));
+        }
+    }
+
+    /// What the layers mean for the value picked: that only the entry that
+    /// wins is shown, and where a change to it goes.
+    fn layer_note(&self) -> String {
+        if self.layers.iter().all(|layer| layer.name == BASE) {
+            return String::new();
+        }
+        let mut said = "Only the entry that wins is shown. Entries for it in lower layers, if any, aren't: the registry has no call that lists them yet.".to_string();
+        let from = self.origin.as_ref().map(|origin| origin.layer.as_str()).unwrap_or(BASE);
+        let to = self.layer.as_deref().unwrap_or(BASE);
+        if !from.eq_ignore_ascii_case(to) {
+            let precedence = |name: &str| self.layers.iter().find(|layer| layer.name.eq_ignore_ascii_case(name)).map(|layer| layer.precedence);
+            said += &format!(" Changes go to the layer {to}");
+            said += &match (precedence(from), precedence(to)) {
+                (Some(winning), Some(chosen)) if chosen < winning => format!(", beneath {from}, so they won't show while {from}'s entry is there."),
+                _ => ".".to_string(),
+            };
+        }
+        format!("<p class=\"note\">{}</p>", escape(&said))
+    }
+
+    /// Why a change may not be made: the layer chosen, if that is why, or
+    /// else `own`, the key's own reason.
+    fn because(&self, own: &str) -> String {
+        self.layer_refused.clone().unwrap_or_else(|| own.to_string())
+    }
+
+    /// Export, import, back up and restore, as far as each may be done.
+    fn file_buttons(&self) -> String {
+        if !self.readable() {
+            return String::new();
+        }
+        let busy = |allowed: bool, why: &str| {
+            if self.choosing {
+                " disabled title=\"A file is being chosen already.\"".to_string()
+            } else {
+                disabled(allowed, why)
+            }
+        };
+        let imports = self.layer_refused.as_deref().unwrap_or("");
+        format!(
+            "<section class=\"files\"><h3>Files</h3><p class=\"actions\">\
+             <button type=\"button\" fx-click=\"export\"{export}>Export…</button>\
+             <button type=\"button\" fx-click=\"import\"{import}>Import…</button>\
+             <button type=\"button\" fx-click=\"backup\"{backup}>Back up…</button>\
+             <button type=\"button\" fx-click=\"restore\"{restore}>Restore…</button></p></section>",
+            export = busy(true, ""),
+            import = busy(self.layer_refused.is_none(), imports),
+            backup = busy(self.held.backup, "Backing up needs the privilege to back up files and keys (SeBackupPrivilege), which you don't hold."),
+            restore = busy(self.held.restore && keys::parent(&self.key).is_some(), if self.held.restore {
+                "A root can't be restored."
+            } else {
+                "Restoring needs the privilege to restore files and keys (SeRestorePrivilege), which you don't hold."
+            }),
+        )
+    }
+
+    /// Opens the file dialog for `purpose`, for the key shown; what comes
+    /// back is `chosen`'s.
+    fn choose(&mut self, purpose: Purpose) {
+        if self.choosing {
+            return;
+        }
+        let request = files::request(purpose, &self.key);
+        let window = self.window.clone();
+        let key = self.key.clone();
+        let opened = gxwi_file_dialog::choose(&request, move |file| {
+            if let Some(window) = window.upgrade() {
+                window.update(|editor, _| {
+                    editor.choosing = false;
+                    // A file chosen for a key no longer shown is let go.
+                    if let Some(file) = file
+                        && keys::same(&editor.key, &key)
+                    {
+                        editor.chosen(purpose, file);
+                    }
+                });
+            }
+        });
+        match opened {
+            Ok(()) => self.choosing = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.said = Said::bad("The file dialog is not installed."),
+            Err(e) => self.said = Said::bad(format!("The file dialog could not be started: {e}.")),
+        }
+    }
+
+    /// Does `purpose` with the file chosen, or asks first where it writes
+    /// into the registry.
+    fn chosen(&mut self, purpose: Purpose, file: PathBuf) {
+        let name = file.display().to_string();
+        match purpose {
+            Purpose::Export => {
+                self.said = match files::export(&self.key, &file) {
+                    Ok(keys) => Said::good(format!("Exported {} to {name}.", words::count(keys, "key"))),
+                    Err(why) => Said::bad(why),
+                };
+            }
+            Purpose::Import => match files::read(&file) {
+                Ok(doc) => self.doing = Doing::Importing { doc, file },
+                Err(why) => self.said = Said::bad(why),
+            },
+            Purpose::Backup => {
+                self.said = match files::backup(&self.key, &file) {
+                    Ok(()) => Said::good(format!("Backed up to {name}.")),
+                    Err(why) => Said::bad(why),
+                };
+            }
+            Purpose::Restore => self.doing = Doing::Restoring(file),
+        }
+    }
+
+    /// Asking before a document is written into the registry.
+    fn asking_import(&self, doc: &Document, file: &std::path::Path) -> String {
+        let into = self.layer.as_deref().map(|layer| format!(", into the layer {layer}")).unwrap_or_default();
+        format!(
+            "<aside class=\"details\" aria-label=\"Import\"><h2>Import</h2><p class=\"id\">{file}</p>\
+             <div class=\"asking\" role=\"alertdialog\" aria-label=\"Import\"><p>Write <strong>{reach}</strong>{into}, with their values? \
+             Values already there are replaced. All of it is written, or none.</p>\
+             <button type=\"button\" class=\"primary\" fx-click=\"import-yes\" fx-autofocus>Import</button><button type=\"button\" fx-click=\"cancel\">Cancel</button></div></aside>",
+            file = escape(&file.display().to_string()),
+            reach = escape(&files::reach(doc)),
+        )
+    }
+
+    /// Asking before the key shown is replaced from a backup.
+    fn asking_restore(&self, file: &std::path::Path) -> String {
+        format!(
+            "<aside class=\"details\" aria-label=\"Restore\"><h2>Restore</h2><p class=\"id\">{file}</p>\
+             <div class=\"asking\" role=\"alertdialog\" aria-label=\"Restore\"><p>Replace <strong>{key}</strong> and everything under it with what the backup holds? \
+             What is there now goes. This can't be undone.</p>\
+             <button type=\"button\" class=\"danger\" fx-click=\"restore-yes\" fx-autofocus>Restore</button><button type=\"button\" fx-click=\"cancel\">Cancel</button></div></aside>",
+            file = escape(&file.display().to_string()),
+            key = escape(&self.key),
+        )
+    }
+
+    /// What the person may not change of the key shown, in words, if any.
+    fn may_words(&self) -> Option<String> {
+        if !self.readable() {
+            return None;
+        }
+        if let Some(why) = &self.layer_refused {
+            return Some(format!("{why} Choose another layer to change this key."));
+        }
+        let root = keys::parent(&self.key).is_none();
+        let May { set_values, create_keys, delete, .. } = self.may;
+        if !set_values && !create_keys && (root || !delete) {
+            return Some("You may read this key but not change it.".into());
+        }
+        let mut not = Vec::new();
+        if !set_values {
+            not.push("change its values");
+        }
+        if !create_keys {
+            not.push("create keys under it");
+        }
+        if !root && !delete {
+            not.push("delete it");
+        }
+        match not.as_slice() {
+            [] => None,
+            [one] => Some(format!("You may not {one}.")),
+            [first, second] => Some(format!("You may not {first} or {second}.")),
+            _ => None,
+        }
+    }
+
+    /// A value being edited, or a new one.
+    fn value_form(&self, name: Option<&str>, ty: ValueType, misfit: bool, base: Base, documented: bool) -> String {
+        let head = match name {
+            Some(name) => format!(
+                "<h2>{}</h2><p class=\"id\">{} ({})</p>",
+                escape(words::value_name(name)),
+                escape(&words::kind(ty)),
+                escape(&words::type_name(ty)),
+            ),
+            None => {
+                let types: String = edit::NEW_TYPES
+                    .iter()
+                    .map(|new| format!("<option value=\"{}\">{} ({})</option>", new.0, escape(&words::kind(*new)), escape(&words::type_name(*new))))
+                    .collect();
+                format!(
+                    "<h2>New value</h2>\
+                     <label>Name<input name=\"value-name\" autocomplete=\"off\" spellcheck=\"false\"{focus} placeholder=\"Empty for the key's default value\"></label>\
+                     <label>Type<select name=\"value-type\">{types}</select></label>",
+                    focus = if documented { "" } else { " fx-autofocus" },
+                )
+            }
+        };
+        let focus = if name.is_some() || documented { " fx-autofocus" } else { "" };
+        let field = match edit::form(ty, misfit) {
+            Form::Line => format!("<label>Data<input name=\"value-data\" autocomplete=\"off\" spellcheck=\"false\"{focus}></label>"),
+            Form::Lines => format!(
+                "<label>Data<textarea name=\"value-data\" rows=\"6\" spellcheck=\"false\"{focus}></textarea></label><p class=\"hint\">One item to a line. Empty lines are left out.</p>"
+            ),
+            Form::Number { bits } => format!(
+                "<label>Data<input name=\"value-data\" inputmode=\"numeric\" autocomplete=\"off\" spellcheck=\"false\"{focus}></label>\
+                 <label>As<select name=\"value-base\"><option value=\"decimal\">Decimal</option><option value=\"hex\">Hexadecimal</option></select></label>\
+                 <p class=\"hint\">A whole number from 0 to {}.</p>",
+                match (bits, base) {
+                    (32, Base::Decimal) => u64::from(u32::MAX).to_string(),
+                    (32, Base::Hex) => format!("{:#x}", u32::MAX),
+                    (_, Base::Decimal) => u64::MAX.to_string(),
+                    (_, Base::Hex) => format!("{:#x}", u64::MAX),
+                },
+            ),
+            Form::Bytes => format!(
+                "<label>Data<textarea name=\"value-data\" class=\"mono\" rows=\"6\" spellcheck=\"false\"{focus}></textarea></label>\
+                 <p class=\"hint\">Two hexadecimal digits to a byte. Spaces and new lines are ignored.</p>{}",
+                if misfit { format!("<p class=\"note bad\">Its data doesn't fit its type, {}, so it is edited as bytes.</p>", escape(&words::type_name(ty))) } else { String::new() },
+            ),
+            Form::Nothing => "<p class=\"more\">A value of no type holds no data.</p>".into(),
+        };
+        format!(
+            "<aside class=\"details\" aria-label=\"{label}\"><form class=\"edit\" fx-submit=\"save\">{head}{field}\
+             <p class=\"actions\"><button type=\"submit\" class=\"primary\">Save</button><button type=\"button\" fx-click=\"cancel\">Cancel</button></p>\
+             </form></aside>",
+            label = if name.is_some() { "Edit the value" } else { "A new value" },
+        )
+    }
+
+    /// A new key under the one shown.
+    fn key_form(&self) -> String {
+        format!(
+            "<aside class=\"details\" aria-label=\"A new key\"><form class=\"edit\" fx-submit=\"save\"><h2>New key</h2>\
+             <p class=\"id\">Under {}</p>\
+             <label>Name<input name=\"key-name\" autocomplete=\"off\" spellcheck=\"false\" fx-autofocus></label>\
+             <p class=\"actions\"><button type=\"submit\" class=\"primary\">Create</button><button type=\"button\" fx-click=\"cancel\">Cancel</button></p>\
+             </form></aside>",
+            escape(&self.key),
+        )
+    }
+
+    /// Asking before the key shown, and what is under it, is deleted.
+    fn asking_key(&self) -> String {
+        let name = keys::names(&self.key).last().unwrap_or_default();
+        let under = match self.shown() {
+            Some(Ok(Read { subkeys: Ok(subkeys), .. })) => match subkeys.len() {
+                0 => ", with its values".to_string(),
+                1 => ", the key under it and everything under that, with all their values".to_string(),
+                n => format!(", the {n} keys under it and everything under those, with all their values"),
+            },
+            _ => " and everything under it, with all their values".into(),
+        };
+        format!(
+            "<aside class=\"details\" aria-label=\"Delete the key\"><h2>{name}</h2><p class=\"id\">{path}</p>\
+             <div class=\"asking\" role=\"alertdialog\" aria-label=\"Delete the key\"><p>Delete <strong>{name}</strong>{under}? This can't be undone.</p>\
+             <button type=\"button\" class=\"danger\" fx-click=\"delete-key-yes\" fx-autofocus>Delete</button><button type=\"button\" fx-click=\"cancel\">Cancel</button></div></aside>",
+            name = escape(name),
+            path = escape(&self.key),
+            under = escape(&under),
+        )
+    }
+
+    /// Saves what the open form holds.
+    fn save(&mut self, fields: &mut Fields) {
+        match self.doing.clone() {
+            Doing::Editing { name, ty, misfit, base, sequence, .. } => {
+                let data = match edit::parse(ty, misfit, fields.get("value-data"), base) {
+                    Ok(data) => data,
+                    Err(why) => return self.said = Said::bad(why),
+                };
+                // The sequence number is of the entry that won, in the layer
+                // it came from: a write into another layer has no entry of
+                // its own to compare it with.
+                let into = self.layer.as_deref().unwrap_or(BASE);
+                let same_layer = self.origin.as_ref().is_some_and(|origin| origin.layer.eq_ignore_ascii_case(into));
+                let (name, expected) = match name {
+                    Some(name) => (name, sequence.filter(|_| same_layer)),
+                    None => {
+                        let name = fields.get("value-name").to_string();
+                        if self.values().is_some_and(|values| values.iter().any(|value| value.name == name)) {
+                            return self.said = Said::bad(format!("There is a value called {} already. Edit it instead.", words::value_name(&name)));
+                        }
+                        (name, None)
+                    }
+                };
+                match keys::set(&self.key, &name, &data, expected, self.layer.as_deref()) {
+                    Ok(()) => {
+                        self.said = Said::good(format!("Saved {}.", words::value_name(&name)));
+                        self.doing = Doing::Looking;
+                        self.read(&self.key.clone());
+                        self.pick(Some(name));
+                    }
+                    // What they changed it to is shown in the list, and what
+                    // the person typed is kept: saving again replaces theirs,
+                    // knowingly, unless it changes again first.
+                    Err(keys::Unset::Changed) => {
+                        self.read(&self.key.clone());
+                        self.pick(Some(name.clone()));
+                        if let Doing::Editing { sequence, .. } = &mut self.doing {
+                            *sequence = self.origin.as_ref().map(|origin| origin.sequence);
+                        }
+                        self.said = Said::bad(format!(
+                            "Someone else changed {} while you were editing it. The list shows it as it is now. Save again to replace it with yours.",
+                            words::value_name(&name)
+                        ));
+                    }
+                    Err(keys::Unset::Refused(why)) => self.said = Said::bad(why),
+                }
+            }
+            Doing::NewKey => match keys::create(&self.key, fields.get("key-name").trim(), self.layer.as_deref()) {
+                Ok(path) => {
+                    let name = keys::names(&path).last().unwrap_or_default().to_string();
+                    self.open.insert(self.key.to_lowercase());
+                    self.read(&self.key.clone());
+                    self.go(&path);
+                    fields.set("path", &self.key);
+                    self.said = Said::good(format!("Created {name}."));
+                }
+                Err(why) => self.said = Said::bad(why),
+            },
+            _ => {}
+        }
+    }
+
+    /// Opens the permissions editor on the key shown, or on the descriptor
+    /// its value `value` holds.
+    fn permissions(&mut self, value: Option<String>) {
+        let what = match &value {
+            Some(name) => format!("{}\0{name}", self.key.to_lowercase()),
+            None => self.key.to_lowercase(),
+        };
+        let called = match &value {
+            Some(name) => format!("the value {}", words::value_name(name)),
+            None => keys::names(&self.key).last().unwrap_or_default().to_string(),
+        };
+        if self.editing.contains(&what) {
+            self.said = Said::good(format!("The permissions of {called} are open already."));
+            return;
+        }
+        let opened = match &value {
+            Some(name) => permissions::value(&self.key, name, self.may.set_values, self.layer.clone()),
+            None => permissions::key(&self.key),
+        };
+        let (mut request, mut apply) = match opened {
+            Ok(opened) => opened,
+            Err(why) => return self.said = Said::bad(format!("The permissions of {called} could not be opened: {why}.")),
+        };
+        // A key's own can be pushed into the keys under it.
+        request.can.propagate = value.is_none();
+        // What the person may do may change with what was applied, and a
+        // value's new bytes are shown.
+        let looking = self.window.clone();
+        let applied = move |sd: &[u8], parts: &[gxwi_sd_editor::Part]| {
+            apply(sd, parts)?;
+            if let Some(window) = looking.upgrade() {
+                window.update(|editor, _| editor.refresh());
+            }
+            Ok(())
+        };
+        let window = self.window.clone();
+        let closed = what.clone();
+        let done = move || {
+            if let Some(window) = window.upgrade() {
+                window.update(|editor, _| {
+                    editor.editing.remove(&closed);
+                });
+            }
+        };
+        self.said = None;
+        let started = if value.is_none() {
+            gxwi_sd_editor::edit_tree(&request, applied, gxwi_sd_editor::registry::Keys, self.key.clone(), done)
+        } else {
+            gxwi_sd_editor::edit(&request, applied, done)
+        };
+        match started {
+            Ok(()) => {
+                self.editing.insert(what);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.said = Said::bad("The permissions editor is not installed."),
+            Err(e) => self.said = Said::bad(format!("The permissions editor could not be started: {e}.")),
+        }
+    }
+
+    /// Starts editing the value `name`, or a new one.
+    fn edit(&mut self, name: Option<String>, fields: &mut Fields) {
+        self.said = None;
+        if !self.may.set_values {
+            return;
+        }
+        fields.set("value-base", Base::Decimal.name());
+        match name {
+            Some(name) => {
+                self.pick(Some(name.clone()));
+                let Some(value) = self.picked() else { return };
+                let misfit = words::misfit(&value.data).is_some();
+                fields.set("value-data", &edit::text(&value.data));
+                let ty = value.data.ty();
+                let sequence = self.origin.as_ref().map(|origin| origin.sequence);
+                self.doing = Doing::Editing { name: Some(name), ty, misfit, base: Base::Decimal, sequence, documented: false };
+            }
+            None => {
+                fields.set("value-name", "");
+                fields.set("value-type", &ValueType::SZ.0.to_string());
+                fields.set("value-data", "");
+                self.doing = Doing::Editing { name: None, ty: ValueType::SZ, misfit: false, base: Base::Decimal, sequence: None, documented: false };
+            }
+        }
+    }
+
+    fn footer(&self) -> String {
+        let counted = match self.shown() {
+            Some(Ok(read)) => {
+                let mut said = Vec::new();
+                if let Ok(subkeys) = &read.subkeys {
+                    said.push(words::count(subkeys.len(), "subkey"));
+                }
+                if let Ok(values) = &read.values {
+                    said.push(words::count(values.len(), "value"));
+                }
+                said.join(" · ")
+            }
+            _ => String::new(),
+        };
+        format!("<footer class=\"status\"><span class=\"path\">{}</span><span>{}</span></footer>", escape(&self.key), escape(&counted))
+    }
+}
+
+/// The attributes of a button the person may not use, with why; nothing for
+/// one they may.
+fn disabled(allowed: bool, why: &str) -> String {
+    if allowed { String::new() } else { format!(" disabled title=\"{}\"", escape(why)) }
+}
+
+/// A value's data in full.
+fn data(data: &Data) -> String {
+    match data {
+        Data::Sz(text) | Data::ExpandSz(text) | Data::Link(text) => format!("<pre class=\"text\">{}</pre>", escape(text)),
+        Data::MultiSz(list) if list.is_empty() => "<p class=\"more\">An empty list.</p>".into(),
+        Data::MultiSz(list) => format!("<ol class=\"list\">{}</ol>", list.iter().map(|item| format!("<li>{}</li>", escape(item))).collect::<String>()),
+        Data::Dword(n) | Data::DwordBigEndian(n) => format!("<p class=\"number\">{n}</p><p class=\"id\">{n:#010x}</p>"),
+        Data::Qword(n) => format!("<p class=\"number\">{n}</p><p class=\"id\">{n:#018x}</p>"),
+        Data::Binary(bytes) | Data::Raw(_, bytes) if bytes.is_empty() => "<p class=\"more\">No bytes.</p>".into(),
+        Data::Binary(bytes) | Data::Raw(_, bytes) => format!(
+            "<pre class=\"dump\">{}</pre>",
+            words::dump(bytes).into_iter().map(|(at, row)| format!("<span class=\"at\">{at}</span>  {row}\n")).collect::<String>()
+        ),
+        Data::None => "<p class=\"more\">No data.</p>".into(),
+    }
+}
+
+impl Live for Editor {
+    fn render(&self, _: &Facts) -> String {
+        let tree: String = keys::ROOTS.iter().map(|root| self.node(root, root, false)).collect();
+        let said = self
+            .said
+            .as_ref()
+            .map(|said| format!("<p class=\"said{}\" role=\"status\">{}</p>", if said.bad { " bad" } else { "" }, escape(&said.text)))
+            .unwrap_or_default();
+        let values = self.may.set_values;
+        let root = keys::parent(&self.key).is_none();
+        // One menu for every value, whose name comes from the row; and one
+        // for the key shown.
+        let menus = format!(
+            "<menu id=\"value-menu\" hidden><li><button type=\"button\" fx-click=\"edit\"{off}>Edit…</button></li>\
+             <li><button type=\"button\" fx-click=\"delete-value\"{off}>Delete…</button></li></menu>\
+             <menu id=\"key-menu\" hidden><li><button type=\"button\" fx-click=\"new-key\"{keys}>New key…</button></li>\
+             <li><button type=\"button\" fx-click=\"new-value\"{off}>New value…</button></li>{delete}<hr>\
+             <li><button type=\"button\" fx-click=\"permissions\"{read}>Permissions…</button></li>\
+             <li><button type=\"button\" fx-copy=\"path\">Copy path</button></li></menu>",
+            read = if self.may.read_permissions { "" } else { " disabled" },
+            off = if values { "" } else { " disabled" },
+            keys = if self.may.create_keys { "" } else { " disabled" },
+            delete = if root {
+                String::new()
+            } else {
+                format!("<li><button type=\"button\" fx-click=\"delete-key\"{}>Delete…</button></li>", if self.may.delete { "" } else { " disabled" })
+            },
+        );
+        let escape_key = if self.doing == Doing::Looking {
+            String::new()
+        } else {
+            "<div hidden><button type=\"button\" fx-key=\"Escape\" fx-click=\"cancel\"></button></div>".into()
+        };
+        format!(
+            "{escape_key}<form class=\"bar\" fx-submit=\"go\">\
+             <input name=\"path\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"A key's path, such as Machine\\System\" aria-label=\"The key's path\">\
+             <button type=\"submit\">Go</button>\
+             <button type=\"button\" class=\"refresh\" fx-click=\"refresh\" fx-key=\"F5\" title=\"Read again (F5)\">Refresh</button>\
+             <label class=\"layer\">Writes go to<select name=\"layer\">{layers}</select></label>\
+             <button type=\"button\" fx-click=\"layers\">Layers…</button>\
+             </form>{said}\
+             <div class=\"body\">\
+             <nav class=\"tree\" aria-label=\"Keys\"><ul role=\"tree\">{tree}</ul></nav>\
+             <div class=\"values\" id=\"values\" fx-columns=\"minmax(0, 1fr) 140px minmax(0, 2fr)\">\
+             <div class=\"head\"><span>Name</span><span>Type</span><span>Data</span></div>{listing}\
+             </div>{details}\
+             </div>{footer}{menus}",
+            listing = self.listing(),
+            details = self.details(),
+            footer = self.footer(),
+            layers = self.layer_options(),
+        )
+    }
+
+    fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
+        let path = value["path"].as_str().filter(|path| !path.is_empty());
+        match name {
+            // A key that may not be read is gone to all the same, to say
+            // why; one that isn't there is not.
+            "go" => match keys::tidy(fields.get("path")) {
+                Some(typed) if keys::missing(&typed) => self.said = Said::bad(format!("{typed}: There is no key at this path.")),
+                Some(typed) => {
+                    self.said = None;
+                    self.go(&typed);
+                    fields.set("path", &self.key);
+                }
+                None => self.said = Said::bad("Type the path of a key, such as Machine\\System."),
+            },
+            "show" => {
+                if let Some(path) = path {
+                    self.said = None;
+                    self.go(path);
+                    fields.set("path", &self.key);
+                }
+            }
+            "toggle" => {
+                if let Some(path) = path {
+                    self.toggle(path);
+                }
+            }
+            "value" => {
+                let name = value["name"].as_str().unwrap_or_default().to_string();
+                if self.value.as_deref() != Some(&name) {
+                    self.doing = Doing::Looking;
+                }
+                self.pick(Some(name));
+            }
+            "refresh" => self.refresh(),
+            "layers" => self.open_layers(),
+            "export" => self.choose(Purpose::Export),
+            "import" if self.layer_refused.is_none() => self.choose(Purpose::Import),
+            "backup" if self.held.backup => self.choose(Purpose::Backup),
+            "restore" if self.held.restore => self.choose(Purpose::Restore),
+            "import-yes" => {
+                if let Doing::Importing { doc, file } = std::mem::replace(&mut self.doing, Doing::Looking) {
+                    match files::import(&doc, self.layer.as_deref()) {
+                        Ok(keys) => {
+                            self.said = Said::good(format!("Imported {} from {}.", words::count(keys, "key"), file.display()));
+                            self.refresh();
+                        }
+                        Err(why) => self.said = Said::bad(why),
+                    }
+                }
+            }
+            "restore-yes" => {
+                if let Doing::Restoring(file) = std::mem::replace(&mut self.doing, Doing::Looking) {
+                    match files::restore(&self.key, &file) {
+                        Ok(()) => {
+                            self.said = Said::good(format!("Restored {} from {}.", self.key, file.display()));
+                            self.refresh();
+                        }
+                        Err(why) => self.said = Said::bad(why),
+                    }
+                }
+            }
+            "edit" => {
+                let name = value["name"].as_str().map(str::to_string).or_else(|| self.value.clone());
+                if name.is_some() {
+                    self.edit(name, fields);
+                }
+            }
+            "new-value" => self.edit(None, fields),
+            // A documented value not set here: a new value, named and typed
+            // as the manual says, starting from its default if that is one
+            // that could be typed.
+            "set-documented" => {
+                if let Some(name) = value["name"].as_str()
+                    && self.may.set_values
+                {
+                    let record = self.docs.value(name).cloned();
+                    let record = record.as_ref();
+                    let ty = record.and_then(docs::ty).filter(|ty| edit::NEW_TYPES.contains(ty));
+                    self.edit(None, fields);
+                    self.pick(Some(name.to_string()));
+                    fields.set("value-name", name);
+                    if let Doing::Editing { ty: editing, documented, .. } = &mut self.doing {
+                        *documented = true;
+                        if let Some(ty) = ty {
+                            *editing = ty;
+                            fields.set("value-type", &ty.0.to_string());
+                        }
+                    }
+                    let ty = ty.unwrap_or(ValueType::SZ);
+                    if let Some(literal) = record.and_then(docs::literal).filter(|literal| edit::parse(ty, false, literal, Base::Decimal).is_ok()) {
+                        fields.set("value-data", literal);
+                    }
+                }
+            }
+            // A value's descriptor, from the value's button; otherwise the key's.
+            "permissions" => match value["name"].as_str() {
+                Some(name) if self.values().is_some_and(|values| values.iter().any(|value| value.name == name && value.sddl.is_some())) => {
+                    self.permissions(Some(name.to_string()))
+                }
+                Some(_) => {}
+                None => self.permissions(None),
+            },
+            "new-key" if self.may.create_keys => {
+                self.said = None;
+                fields.set("key-name", "");
+                self.doing = Doing::NewKey;
+            }
+            "save" => self.save(fields),
+            "delete-value" if self.may.set_values => {
+                if let Some(name) = value["name"].as_str().map(str::to_string).or_else(|| self.value.clone()) {
+                    self.said = None;
+                    self.pick(Some(name.clone()));
+                    self.doing = Doing::DeletingValue(name);
+                }
+            }
+            "delete-value-yes" => {
+                if let Doing::DeletingValue(name) = self.doing.clone() {
+                    self.doing = Doing::Looking;
+                    self.said = match (keys::delete_value(&self.key, &name, self.layer.as_deref()), &self.layer) {
+                        (Ok(()), None) => Said::good(format!("Deleted {}.", words::value_name(&name))),
+                        // Only that layer's entry goes: one beneath may show.
+                        (Ok(()), Some(layer)) => Said::good(format!("Deleted the layer {layer}'s entry for {}.", words::value_name(&name))),
+                        (Err(why), _) => Said::bad(why),
+                    };
+                    self.read(&self.key.clone());
+                    self.pick(None);
+                }
+            }
+            "delete-key" if self.may.delete => {
+                self.said = None;
+                self.doing = Doing::DeletingKey;
+            }
+            "delete-key-yes" if self.doing == Doing::DeletingKey => {
+                self.doing = Doing::Looking;
+                let name = keys::names(&self.key).last().unwrap_or_default().to_string();
+                match keys::delete_tree(&self.key, self.layer.as_deref()) {
+                    Ok(deleted) => {
+                        let parent = keys::parent(&self.key).unwrap_or(keys::ROOTS[0]).to_string();
+                        self.open.retain(|open| !open.starts_with(&format!("{}\\", self.key.to_lowercase())) && *open != self.key.to_lowercase());
+                        self.read(&parent);
+                        self.go(&parent);
+                        fields.set("path", &self.key);
+                        self.said = Said::good(match deleted {
+                            1 => format!("Deleted {name}."),
+                            n => format!("Deleted {name} and the {} under it.", words::count(n as usize - 1, "key")),
+                        });
+                    }
+                    Err(why) => self.said = Said::bad(why),
+                }
+            }
+            "cancel" => {
+                self.doing = Doing::Looking;
+                self.said = None;
+            }
+            _ => {}
+        }
+        if let Some(window) = self.window.upgrade() {
+            window.retitle(&title(&self.key));
+        }
+    }
+
+    fn input(&mut self, name: &str, fields: &mut Fields) {
+        // The layer writes go to, from the bar.
+        if name == "layer" {
+            let chosen = fields.get("layer");
+            self.layer = self.layers.iter().find(|layer| layer.name != BASE && layer.name == chosen).map(|layer| layer.name.clone());
+            self.look_at_may();
+            return;
+        }
+        let Doing::Editing { name: editing, ty, misfit, base, .. } = &mut self.doing else { return };
+        match name {
+            // A new value's type, picked from the list.
+            "value-type" if editing.is_none() => {
+                if let Some(picked) = fields.get("value-type").parse().ok().map(ValueType).filter(|picked| edit::NEW_TYPES.contains(picked)) {
+                    *ty = picked;
+                    *misfit = false;
+                }
+            }
+            // A number said in the other base, if it was one.
+            "value-base" => {
+                let to = Base::named(fields.get("value-base"));
+                if to != *base {
+                    if let Ok(data) = edit::parse(*ty, *misfit, fields.get("value-data"), *base) {
+                        let n = match data {
+                            Data::Dword(n) | Data::DwordBigEndian(n) => u64::from(n),
+                            Data::Qword(n) => n,
+                            _ => return,
+                        };
+                        fields.set("value-data", &if to == Base::Hex { format!("{n:#x}") } else { n.to_string() });
+                    }
+                    *base = to;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The window's title, which names the key shown.
+pub fn title(key: &str) -> String {
+    format!("Registry Editor: {}", keys::names(key).last().unwrap_or(key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use peios::registry::ValueType;
+
+    /// The window as it would be with these keys read, showing `key`, with
+    /// `open` open: nothing asks the registry.
+    fn seen(key: &str, open: &[&str], reads: Vec<(&str, Result<Read, String>)>) -> Editor {
+        let mut names = Names::offline();
+        for (_, read) in &reads {
+            if let Ok(Read { subkeys: Ok(subkeys), .. }) = read {
+                for sid in subkeys.iter().filter_map(|name| name.parse::<Sid>().ok()) {
+                    names.learn(&sid);
+                }
+            }
+        }
+        Editor {
+            window: Weak::new(),
+            reads: reads.into_iter().map(|(path, read)| (path.to_lowercase(), read)).collect(),
+            open: open.iter().map(|path| path.to_lowercase()).collect(),
+            key: key.into(),
+            may: May { set_values: true, create_keys: true, delete: true, read_permissions: true },
+            editing: HashSet::new(),
+            docs: Docs::default(),
+            layers: Vec::new(),
+            layer: None,
+            layer_refused: None,
+            held: Held { backup: true, restore: true },
+            choosing: false,
+            value: None,
+            origin: None,
+            doing: Doing::Looking,
+            said: None,
+            names,
+            zone: TimeZone::UTC,
+        }
+    }
+
+    fn value(name: &str, data: Data) -> keys::Value {
+        keys::Value { name: name.into(), size: data.encode().len(), sddl: keys::descriptor(&data), data }
+    }
+
+    fn listing(subkeys: &[&str]) -> Result<Read, String> {
+        Ok(Read { facts: None, subkeys: Ok(subkeys.iter().map(|name| name.to_string()).collect()), values: Ok(Vec::new()) })
+    }
+
+    fn tree(editor: &Editor) -> String {
+        keys::ROOTS.iter().map(|root| editor.node(root, root, false)).collect()
+    }
+
+    #[test]
+    fn a_key_reached_by_its_path_is_shown_under_a_parent_that_may_not_be_listed() {
+        let reads = || {
+            let closed = Ok(Read { facts: None, subkeys: Err("You may not list this key's subkeys.".into()), values: Ok(Vec::new()) });
+            vec![("Machine", listing(&["Closed"])), (r"Machine\Closed", closed), (r"Machine\Closed\Open", listing(&[]))]
+        };
+        let drawn = tree(&seen(r"Machine\Closed\Open", &["Machine", r"Machine\Closed"], reads()));
+        assert!(drawn.contains(r#"<li class="why">You may not list this key's subkeys.</li>"#));
+        assert!(drawn.contains(r#"class="name reached" fx-click="show" fx-menu="key-menu" fx-value-path="Machine\Closed\Open" aria-selected="true""#));
+        // Shown somewhere else, the key on the way to it is not shown there.
+        let elsewhere = tree(&seen("Machine", &["Machine", r"Machine\Closed"], reads()));
+        assert!(!elsewhere.contains(r#"fx-value-path="Machine\Closed\Open""#));
+    }
+
+    #[test]
+    fn a_key_with_no_subkeys_has_no_arrow_and_the_others_open_and_close() {
+        let editor = seen("Machine", &["Machine"], vec![("Machine", listing(&["Empty", "Full"])), (r"Machine\Empty", listing(&[]))]);
+        let tree = tree(&editor);
+        assert!(tree.contains(r#"<li role="treeitem"><div class="row"><span class="twist"></span><button type="button" class="name" fx-click="show" fx-value-path="Machine\Empty""#));
+        assert!(tree.contains(r#"fx-value-path="Machine\Full" aria-label="Open Full">▸"#));
+        assert!(tree.contains(r#"fx-value-path="Machine" aria-label="Close Machine">▾"#));
+    }
+
+    #[test]
+    fn a_key_under_users_says_whose_it_is() {
+        let editor = seen("Users", &["Users"], vec![("Users", listing(&["S-1-5-18", "Not-a-SID"]))]);
+        let tree = tree(&editor);
+        assert!(tree.contains(r#"Local System <span class="sid">S-1-5-18</span>"#));
+        assert!(tree.contains(r#"fx-value-path="Users\Not-a-SID" aria-selected="false">Not-a-SID</button>"#));
+    }
+
+    #[test]
+    fn the_default_value_comes_first_and_bytes_that_do_not_fit_are_marked() {
+        let values = vec![
+            value("", Data::Sz("first".into())),
+            value("Broken", Data::Raw(ValueType::DWORD, vec![1, 2, 3])),
+        ];
+        let mut editor = seen("Machine", &[], vec![("Machine", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(values) }))]);
+        let listing = editor.listing();
+        assert!(listing.find("(Default)").unwrap() < listing.find("Broken").unwrap());
+        assert!(listing.contains(r#"<span class="data misfit">01 02 03</span>"#));
+        editor.value = Some("Broken".into());
+        let details = editor.details();
+        assert!(details.contains("Number (REG_DWORD)"));
+        assert!(details.contains("which is 4 bytes, but it holds 3 bytes"));
+        assert!(details.contains(r#"<span class="at">0000</span>  01 02 03"#));
+    }
+
+    #[test]
+    fn what_may_not_be_changed_is_offered_disabled_and_said_in_words() {
+        let one = || vec![value("Theme", Data::Sz("dark".into()))];
+        let read = || Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(one()) });
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", read())]);
+        editor.may = May { set_values: false, create_keys: false, delete: false, read_permissions: true };
+        let details = editor.details();
+        assert!(details.contains(r#"fx-click="new-key" disabled title="You may not create keys under this key.""#));
+        assert!(details.contains(r#"fx-click="delete-key" disabled"#));
+        assert!(details.contains(r#"<p class="may">You may read this key but not change it.</p>"#));
+        // Nothing to edit with: no double-click on the rows.
+        assert!(!editor.listing().contains("fx-dblclick"));
+        editor.may.create_keys = true;
+        assert!(editor.details().contains("You may not change its values or delete it."));
+        editor.value = Some("Theme".into());
+        assert!(editor.details().contains(r#"fx-click="edit" fx-value-name="Theme" disabled"#));
+        // A root may never be deleted, so it isn't offered.
+        let root = seen("Machine", &[], vec![("Machine", read())]);
+        assert!(!root.details().contains("delete-key"));
+    }
+
+    #[test]
+    fn a_value_is_edited_in_the_form_for_its_type() {
+        let values = vec![
+            value("Count", Data::Dword(7)),
+            value("Broken", Data::Raw(ValueType::SZ, vec![0xff])),
+        ];
+        let mut editor = seen("Machine", &[], vec![("Machine", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(values) }))]);
+        let mut fields = Fields::default();
+        editor.edit(Some("Count".into()), &mut fields);
+        assert_eq!(fields.get("value-data"), "7");
+        let form = editor.details();
+        assert!(form.contains(r#"name="value-base""#) && form.contains("from 0 to 4294967295"));
+        // Said in hex, the number is written again in hex.
+        fields.set("value-base", "hex");
+        editor.input("value-base", &mut fields);
+        assert_eq!(fields.get("value-data"), "0x7");
+        assert!(editor.details().contains("from 0 to 0xffffffff"));
+        editor.edit(Some("Broken".into()), &mut fields);
+        assert_eq!(fields.get("value-data"), "ff");
+        assert!(editor.details().contains("so it is edited as bytes"));
+        // A new value's form changes with the type picked.
+        editor.edit(None, &mut fields);
+        assert!(editor.details().contains(r#"name="value-name""#));
+        fields.set("value-type", &ValueType::MULTI_SZ.0.to_string());
+        editor.input("value-type", &mut fields);
+        assert!(editor.details().contains("One item to a line."));
+        // One of the types not offered for a new value is not taken.
+        fields.set("value-type", &ValueType::LINK.0.to_string());
+        editor.input("value-type", &mut fields);
+        assert!(editor.details().contains("One item to a line."));
+    }
+
+    #[test]
+    fn a_new_value_may_not_take_a_name_already_used() {
+        let values = vec![value("Theme", Data::Sz("dark".into()))];
+        let mut editor = seen("Machine", &[], vec![("Machine", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(values) }))]);
+        let mut fields = Fields::default();
+        editor.edit(None, &mut fields);
+        fields.set("value-name", "Theme");
+        fields.set("value-data", "light");
+        editor.save(&mut fields);
+        assert_eq!(editor.said, Said::bad("There is a value called Theme already. Edit it instead."));
+        assert!(matches!(editor.doing, Doing::Editing { .. }));
+    }
+
+    #[test]
+    fn a_value_holding_a_descriptor_is_shown_as_one_and_opens_in_the_editor() {
+        let sd = peios::security::sddl::parse("O:BAG:BAD:(A;;GA;;;SY)(A;;GR;;;WD)").unwrap();
+        let values = vec![value("Guard", Data::Binary(sd.as_bytes().to_vec())), value("Plain", Data::Binary(vec![1, 0, 0, 0x80]))];
+        let mut editor = seen("Machine", &[], vec![("Machine", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(values) }))]);
+        let listing = editor.listing();
+        assert!(listing.contains(r#"<span class="type">Security descriptor</span><span class="data">O:BAG:BAD:"#));
+        // Bytes that start as one does but don't parse are only bytes.
+        assert!(listing.contains(r#"<span class="type">Bytes</span><span class="data">01 00 00 80</span>"#));
+        editor.value = Some("Guard".into());
+        let details = editor.details();
+        assert!(details.contains(r#"fx-click="permissions" fx-value-name="Guard""#));
+        assert!(details.contains("<h3>Security descriptor</h3>"));
+        // Who it lets in may be looked at by someone who can't change it.
+        editor.may.set_values = false;
+        assert!(editor.details().contains(r#"fx-click="permissions" fx-value-name="Guard">"#));
+        editor.value = Some("Plain".into());
+        assert!(!editor.details().contains(r#"fx-click="permissions""#));
+    }
+
+    #[test]
+    fn what_the_manual_says_is_shown_and_a_documented_value_can_be_set_from_it() {
+        let (records, _) = libregman::fragment::parse(
+            "--- machine\\app\ncanonical: Machine\\App\n\nThe app's **settings**.\n\n\
+             --- machine\\app theme\ncanonical: Machine\\App Theme\ntype: REG_SZ\ndefault: dark\napplies: live\n\nIts colours.\n\n\
+             --- machine\\app size\ncanonical: Machine\\App Size\ntype: REG_DWORD\ndefault: 12\n\nIts size.\n",
+        );
+        let values = vec![value("Theme", Data::Dword(1))];
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(values) }))]);
+        editor.docs = Docs {
+            key: Some(records[0].clone()),
+            values: vec![("Size".into(), records[2].clone()), ("Theme".into(), records[1].clone())],
+        };
+        let key = editor.details();
+        assert!(key.contains("<h3>About this key</h3><div class=\"prose\"><p>The app's <strong>settings</strong>.</p></div>"));
+        // Theme is set; Size isn't, and is listed after it, greyed, saying
+        // so, and set by double-clicking it.
+        let listing = editor.listing();
+        assert!(listing.find(">Theme<").unwrap() < listing.find(">Size<").unwrap());
+        assert!(listing.contains(r#"<li class="unset"><button type="button" fx-click="value" fx-dblclick="set-documented" fx-value-name="Size" aria-selected="false""#));
+        assert!(listing.contains(r#"<span class="type">Number</span><span class="data">Not set · default 12</span>"#));
+        assert!(!listing.contains(r#"class="unset"><button type="button" fx-click="value" fx-dblclick="set-documented" fx-value-name="Theme""#));
+        // It isn't a value: not counted, and not in the key's pane.
+        assert!(editor.footer().contains("1 value<"));
+        assert!(!key.contains("Size"));
+        editor.value = Some("Theme".into());
+        let theme = editor.details();
+        assert!(theme.contains("<dt>A change applies</dt><dd>At once</dd>"));
+        assert!(theme.contains("The manual says it should be REG_SZ, but it is REG_DWORD"));
+        // Picked, it shows what the manual says, and can be set.
+        editor.pick(Some("Size".into()));
+        let unset = editor.details();
+        assert!(unset.contains("It isn't set here, so whatever reads it uses its default."));
+        assert!(unset.contains(r#"<button type="button" fx-click="set-documented" fx-value-name="Size">Set…</button>"#));
+        assert!(unset.contains("<dt>Default</dt><dd>12</dd>") && !unset.contains("but it is"));
+        let mut fields = Fields::default();
+        editor.event("set-documented", &serde_json::json!({ "name": "Size" }), &mut fields);
+        assert_eq!(fields.get("value-name"), "Size");
+        assert_eq!(fields.get("value-type"), ValueType::DWORD.0.to_string());
+        assert_eq!(fields.get("value-data"), "12");
+        assert!(matches!(editor.doing, Doing::Editing { name: None, ty: ValueType::DWORD, documented: true, .. }));
+        // Its name is given, so its data is what is typed first.
+        let form = editor.details();
+        assert!(form.contains(r#"<input name="value-name" autocomplete="off" spellcheck="false" placeholder"#));
+        assert!(form.contains(r#"<input name="value-data" inputmode="numeric" autocomplete="off" spellcheck="false" fx-autofocus>"#));
+        // Once it is set, it is a value like the others.
+        editor.reads.insert(r"machine\app".into(), Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(vec![value("Size", Data::Dword(12)), value("Theme", Data::Dword(1))]) }));
+        assert!(!editor.listing().contains("class=\"unset\""));
+        // Without the right to change values, it can't be set from here.
+        editor.reads.insert(r"machine\app".into(), Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(Vec::new()) }));
+        editor.may.set_values = false;
+        editor.doing = Doing::Looking;
+        assert!(!editor.listing().contains("fx-dblclick"));
+        editor.pick(Some("Size".into()));
+        assert!(editor.details().contains(r#"fx-click="set-documented" fx-value-name="Size" disabled title="You may not change this key's values.""#));
+    }
+
+    #[test]
+    fn a_key_with_only_documented_values_lists_them_and_one_with_none_says_so() {
+        let (records, _) = libregman::fragment::parse("--- machine\\app mode\ncanonical: Machine\\App Mode\ntype: REG_SZ\ndefault: (none)\n\nIts mode.\n");
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", listing(&[]))]);
+        assert_eq!(editor.listing(), r#"<p class="more">This key has no values.</p>"#);
+        editor.docs = Docs { key: None, values: vec![("Mode".into(), records[0].clone())] };
+        assert!(editor.listing().contains(r#"<span class="type">Text</span><span class="data">Not set</span>"#));
+        assert!(editor.details().contains("The registry manual documents values of this key, but not the key itself."));
+        // A default that is only a remark isn't typed in.
+        let mut fields = Fields::default();
+        editor.event("set-documented", &serde_json::json!({ "name": "Mode" }), &mut fields);
+        assert_eq!(fields.get("value-data"), "");
+    }
+
+    #[test]
+    fn a_layer_that_may_not_be_written_makes_the_key_read_only_and_says_why() {
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(vec![value("Theme", Data::Sz("dark".into()))]) }))]);
+        editor.layer_refused = Some("You may not write into the layer policy.".into());
+        editor.may.set_values = false;
+        let details = editor.details();
+        assert!(details.contains(r#"fx-click="new-value" disabled title="You may not write into the layer policy.""#));
+        assert!(details.contains("You may not write into the layer policy. Choose another layer to change this key."));
+    }
+
+    #[test]
+    fn with_layers_the_value_says_only_the_winner_is_shown_and_where_changes_go() {
+        let layer = |name: &str, precedence: u32| Layer { name: name.into(), precedence, enabled: true, owner: None, malformed: false };
+        let mut editor = seen("Machine", &[], vec![("Machine", Ok(Read { facts: None, subkeys: Ok(Vec::new()), values: Ok(vec![value("Theme", Data::Sz("dark".into()))]) }))]);
+        editor.value = Some("Theme".into());
+        editor.origin = Some(Origin { layer: "policy".into(), sequence: 7 });
+        assert_eq!(editor.layer_note(), "");
+        editor.layers = vec![layer("policy", 100), layer(BASE, 0)];
+        let note = editor.layer_note();
+        assert!(note.contains("Only the entry that wins is shown."));
+        assert!(note.contains("Changes go to the layer base, beneath policy, so they won't show while policy's entry is there."));
+        let mut fields = Fields::default();
+        fields.set("layer", "policy");
+        editor.input("layer", &mut fields);
+        assert_eq!(editor.layer.as_deref(), Some("policy"));
+        assert!(!editor.layer_note().contains("Changes go to"));
+        assert!(editor.layer_options().contains(r#"<option value="policy">policy</option>"#));
+    }
+
+    #[test]
+    fn files_are_offered_as_far_as_the_privileges_and_the_layer_allow() {
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", listing(&[]))]);
+        let buttons = editor.file_buttons();
+        assert!(buttons.contains(r#"fx-click="export">Export…"#) && buttons.contains(r#"fx-click="restore">Restore…"#));
+        editor.held = Held { backup: false, restore: false };
+        let buttons = editor.file_buttons();
+        assert!(buttons.contains(r#"fx-click="backup" disabled title="Backing up needs the privilege to back up files and keys (SeBackupPrivilege)"#));
+        assert!(buttons.contains(r#"fx-click="restore" disabled title="Restoring needs the privilege"#));
+        editor.layer_refused = Some("You may not write into the layer policy.".into());
+        assert!(editor.file_buttons().contains(r#"fx-click="import" disabled title="You may not write into the layer policy.""#));
+        editor.choosing = true;
+        assert!(editor.file_buttons().contains(r#"fx-click="export" disabled title="A file is being chosen already.""#));
+    }
+
+    #[test]
+    fn an_import_says_where_it_writes_before_it_does() {
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", listing(&[]))]);
+        let doc: Document = serde_json::from_str(r#"{"keys":[{"path":"Machine\\App"},{"path":"Machine\\App\\Sub"}]}"#).unwrap();
+        editor.doing = Doing::Importing { doc, file: "/home/dana/App.json".into() };
+        let asked = editor.details();
+        assert!(asked.contains(r"Write <strong>Machine\App and 1 more key</strong>, with their values?"));
+        editor.layer = Some("policy".into());
+        assert!(editor.details().contains(", into the layer policy"));
+        editor.doing = Doing::Restoring("/home/dana/App.regbackup".into());
+        assert!(editor.details().contains(r"Replace <strong>Machine\App</strong> and everything under it with what the backup holds?"));
+    }
+
+    #[test]
+    fn the_key_s_permissions_are_offered_where_they_may_be_read() {
+        let mut editor = seen("Machine", &[], vec![("Machine", listing(&[]))]);
+        assert!(editor.details().contains(r#"<button type="button" fx-click="permissions">Permissions…</button>"#));
+        editor.may.read_permissions = false;
+        assert!(editor.details().contains(r#"fx-click="permissions" disabled title="You may not read who may use this key.""#));
+    }
+
+    #[test]
+    fn deleting_asks_first() {
+        let values = vec![value("Theme", Data::Sz("dark".into()))];
+        let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", Ok(Read { facts: None, subkeys: Ok(vec!["A".into(), "B".into()]), values: Ok(values) }))]);
+        let mut fields = Fields::default();
+        editor.event("delete-value", &serde_json::json!({ "name": "Theme" }), &mut fields);
+        assert!(editor.details().contains("Delete the value <strong>Theme</strong>? This can't be undone."));
+        editor.event("cancel", &serde_json::json!({}), &mut fields);
+        assert_eq!(editor.doing, Doing::Looking);
+        editor.value = None;
+        editor.event("delete-key", &serde_json::json!({}), &mut fields);
+        assert!(editor.details().contains("Delete <strong>App</strong>, the 2 keys under it and everything under those, with all their values? This can't be undone."));
+    }
+
+    #[test]
+    fn a_key_that_may_not_be_read_says_so_where_its_values_would_be() {
+        let editor = seen("Machine", &[], vec![("Machine", Err("You may not read this key.".into()))]);
+        assert_eq!(editor.listing(), r#"<p class="trouble">You may not read this key.</p>"#);
+        assert!(editor.details().contains(r#"<p class="note bad">You may not read this key.</p>"#));
+    }
+}
