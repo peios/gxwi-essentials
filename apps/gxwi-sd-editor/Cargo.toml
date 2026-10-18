@@ -1,0 +1,49 @@
+[package]
+name = "gxwi-sd-editor"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# The library is what a program that opens the editor needs: the protocol and
+# a way to start it. It has nothing of GXWI's in it, so a program depending
+# on it with `default-features = false` gets nothing of the editor's.
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "gxwi-sd-editor"
+path = "src/main.rs"
+required-features = ["program"]
+
+[features]
+default = ["program"]
+program = ["names", "dep:libgxwi", "dep:libc", "dep:sha1"]
+# Who a SID is, as the editor says it, for a program that shows who a
+# descriptor grants before the editor is opened.
+names = ["dep:peios", "dep:libauthd", "dep:libauthd-client"]
+# What applying the parts of a descriptor the person changed comes to,
+# for a program that keeps a descriptor whole, as a registry value.
+splice = ["dep:peios"]
+# A registry key's rights in words, and the editor opened on a key's own
+# descriptor, for a program that shows registry keys.
+registry = ["dep:peios"]
+# Pushing what a container passes down into what is inside it, for a
+# program that holds a tree of things with descriptors.
+propagate = ["dep:peios"]
+
+[dependencies]
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# libgxwi as of the gxwi release dev.peios.gxwi-sdk stages, which a package
+# build takes it from (gxwi's dev/pins.toml).
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76", optional = true }
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "f8c84930f2b71763bcf0550df0b1420a0f63b21e", package = "peios", optional = true }
+# Who a SID is, asked of authd's identity socket through the client every
+# program asking it shares.
+libauthd = { git = "https://github.com/peios/authd.git", rev = "1a421053deb0cf9703ee1e109db3792f7e1bb95d", package = "libauthd", optional = true }
+libauthd-client = { git = "https://github.com/peios/authd.git", rev = "1a421053deb0cf9703ee1e109db3792f7e1bb95d", package = "libauthd-client", optional = true }
+libc = { version = "0.2", optional = true }
+# UUID v5, for a part the person names (PSPU §8.2, `object.naming`).
+sha1 = { version = "0.10", optional = true }
