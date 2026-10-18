@@ -618,39 +618,23 @@ fn run(
     let editor = Editor {
         input: Arc::clone(&input),
     };
-    let stop = Arc::new(AtomicBool::new(false));
-    let (tell, asked) = std::sync::mpsc::channel::<(Vec<u8>, Vec<Part>, bool)>();
-    let heard = Arc::clone(&stop);
-    std::thread::spawn(move || {
-        for said in BufReader::new(output).lines() {
-            let Ok(said) = said else { break };
-            // A line this does not know is not answered: a newer editor may
-            // say more than this knows of.
-            match serde_json::from_str(&said) {
-                Ok(FromEditor::Apply {
-                    sd,
-                    parts,
-                    propagate,
-                }) => {
-                    if tell.send((sd, parts, propagate)).is_err() {
-                        break;
-                    }
-                }
-                Ok(FromEditor::Stop) => heard.store(true, Ordering::Relaxed),
-                Err(_) => {}
-            }
-        }
-        // The editor has gone: nobody is there to see a walk go on.
-        heard.store(true, Ordering::Relaxed);
-    });
+    let (tell, asked) = std::sync::mpsc::channel::<Applying>();
+    std::thread::spawn(move || read_requests(BufReader::new(output), tell));
     std::thread::spawn(move || {
         let say = |message: &ToEditor| say_to(&input, message);
-        for (sd, parts, propagate) in asked {
+        for Applying {
+            sd,
+            parts,
+            propagate,
+            stop,
+        } in asked
+        {
             let answer = match apply(&sd, &parts) {
                 Err(why) => ToEditor::Failed { why },
                 Ok(()) => match (&mut walk, propagate) {
                     (Some(walk), true) => {
-                        stop.store(false, Ordering::Relaxed);
+                        // Cancellation belongs to this request. A Stop or EOF
+                        // heard during apply must still stop its propagation.
                         // The first item is told at once, so the walk is seen
                         // to start, and then no more often than PROGRESS_EVERY.
                         let mut last = std::time::Instant::now()
@@ -690,6 +674,54 @@ fn run(
         done();
     });
     Ok(editor)
+}
+
+/// One Apply and its cancellation lifetime, established before it is queued.
+struct Applying {
+    sd: Vec<u8>,
+    parts: Vec<Part>,
+    propagate: bool,
+    stop: Arc<AtomicBool>,
+}
+
+/// Read ahead while applying, retaining cancellation for every outstanding Apply.
+fn read_requests(reader: impl BufRead, tell: std::sync::mpsc::Sender<Applying>) {
+    let mut pending: Vec<std::sync::Weak<AtomicBool>> = Vec::new();
+    let cancel = |pending: &[std::sync::Weak<AtomicBool>]| {
+        for stop in pending.iter().filter_map(std::sync::Weak::upgrade) {
+            stop.store(true, Ordering::Relaxed);
+        }
+    };
+    for said in reader.lines() {
+        let Ok(said) = said else { break };
+        match serde_json::from_str(&said) {
+            Ok(FromEditor::Apply {
+                sd,
+                parts,
+                propagate,
+            }) => {
+                pending.retain(|stop| stop.strong_count() > 0);
+                let stop = Arc::new(AtomicBool::new(false));
+                pending.push(Arc::downgrade(&stop));
+                if tell
+                    .send(Applying {
+                        sd,
+                        parts,
+                        propagate,
+                        stop,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            Ok(FromEditor::Stop) => cancel(&pending),
+            // Unknown lines remain forward compatible with newer editors.
+            Err(_) => {}
+        }
+    }
+    // Closing the dialog cancels queued and active propagation alike.
+    cancel(&pending);
 }
 
 /// Bytes as base64 text, which is how a descriptor crosses in JSON.

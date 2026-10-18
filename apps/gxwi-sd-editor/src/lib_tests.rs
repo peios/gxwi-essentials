@@ -404,3 +404,50 @@ fn a_stop_is_heard_while_the_walk_goes_on() {
     assert!(heard.contains("\"type\":\"progress\""), "{heard}");
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn stop_during_apply_remains_set_and_next_apply_has_its_own_token() {
+    use std::os::unix::net::UnixStream;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let (mut editor, caller) = UnixStream::pair().unwrap();
+    let (tell, asked) = mpsc::channel();
+    let reader = std::thread::spawn(move || read_requests(BufReader::new(caller), tell));
+    let apply = line(&FromEditor::Apply {
+        sd: Vec::new(),
+        parts: vec![Part::Dacl],
+        propagate: true,
+    });
+    editor.write_all(apply.as_bytes()).unwrap();
+    let first = asked.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(!first.stop.load(Ordering::Relaxed));
+    // The first request remains owned by the caller while apply runs. A
+    // following request proves the reader processed Stop before we inspect it.
+    editor
+        .write_all(line(&FromEditor::Stop).as_bytes())
+        .unwrap();
+    editor.write_all(apply.as_bytes()).unwrap();
+    let second = asked.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(first.stop.load(Ordering::Relaxed));
+    assert!(!second.stop.load(Ordering::Relaxed));
+    drop(editor);
+    reader.join().unwrap();
+    assert!(first.stop.load(Ordering::Relaxed));
+    assert!(second.stop.load(Ordering::Relaxed));
+}
+
+#[test]
+fn closing_the_editor_cancels_an_apply_that_has_not_started_walking() {
+    use std::sync::mpsc;
+
+    let apply = line(&FromEditor::Apply {
+        sd: Vec::new(),
+        parts: vec![Part::Dacl],
+        propagate: true,
+    });
+    let (tell, asked) = mpsc::channel();
+    read_requests(std::io::Cursor::new(apply), tell);
+    let request = asked.recv().unwrap();
+    assert!(request.stop.load(Ordering::Relaxed));
+}
