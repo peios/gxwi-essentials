@@ -16,11 +16,15 @@
 //!                    { type: "size", rows, cols }     it is now this big
 //!                    { type: "ended" }                what was running has
 //!                                                     ended
+//!                    { type: "typed", bytes }         complete input chunk written
+//!                    { type: "input-error", why }     input stopped; delivery may be partial
 //!                    bytes                            printed
 //!   page → process   { type: "size", rows, cols }     what the page has
 //!                                                     room for
 //!                    bytes                            typed
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use axum::Router;
@@ -32,6 +36,7 @@ use axum::routing::{any, get};
 use serde_json::{Value, json};
 use tokio::sync::broadcast::error::RecvError;
 
+use crate::input::MAX_INPUT_BYTES;
 use crate::pty::Size;
 use crate::terminal::{Said, Terminal};
 
@@ -40,7 +45,7 @@ pub const PATH: &str = "/term/";
 
 /// The most a page may send at once: more than anything typed, and a great
 /// deal pasted.
-const MOST_TYPED: usize = 1024 * 1024;
+const MAX_MESSAGE_BYTES: usize = MAX_INPUT_BYTES;
 
 /// What the page may do. Its scripts and styles are the app's own and
 /// nothing else's, it speaks to nothing but the app, and the emulator sets
@@ -60,6 +65,10 @@ pub fn routes(terminal: Arc<Terminal>) -> Router {
         .route(
             "/term/term.js",
             file("text/javascript", include_str!("../page/term.js")),
+        )
+        .route(
+            "/term/input.mjs",
+            file("text/javascript", include_str!("../page/input.mjs")),
         )
         .route(
             "/term/term.css",
@@ -85,7 +94,8 @@ pub fn routes(terminal: Arc<Terminal>) -> Router {
             any(
                 |State(terminal): State<Arc<Terminal>>, upgrade: WebSocketUpgrade| async move {
                     upgrade
-                        .max_message_size(MOST_TYPED)
+                        .max_message_size(MAX_MESSAGE_BYTES)
+                        .max_frame_size(MAX_MESSAGE_BYTES)
                         .on_upgrade(|socket| show(terminal, socket))
                 },
             ),
@@ -114,6 +124,8 @@ fn file<S: Clone + Send + Sync + 'static>(
 /// Shows one page the terminal, until the page goes.
 async fn show(terminal: Arc<Terminal>, mut socket: WebSocket) {
     let text = |said: Value| Message::Text(said.to_string().into());
+    type Writing = Pin<Box<dyn Future<Output = std::io::Result<usize>> + Send>>;
+    let mut writing: Option<Writing> = None;
     'afresh: loop {
         let (size, stands, ended, mut said) = terminal.join();
         let first = [
@@ -145,8 +157,26 @@ async fn show(terminal: Arc<Terminal>, mut socket: WebSocket) {
                         return;
                     }
                 }
-                heard = socket.recv() => match heard {
-                    Some(Ok(Message::Binary(typed))) => terminal.type_in(typed.to_vec()),
+                completed = async { writing.as_mut().expect("guarded pending input").await }, if writing.is_some() => {
+                    writing = None;
+                    let message = match completed {
+                        Ok(bytes) => text(json!({ "type": "typed", "bytes": bytes })),
+                        Err(error) => {
+                            let _ = socket.send(text(json!({ "type": "input-error", "why": error.to_string() }))).await;
+                            return;
+                        }
+                    };
+                    if socket.send(message).await.is_err() { return; }
+                }
+                heard = socket.recv(), if writing.is_none() => match heard {
+                    Some(Ok(Message::Binary(typed))) => {
+                        let terminal = Arc::clone(&terminal);
+                        writing = Some(Box::pin(async move {
+                            let bytes = typed.len();
+                            terminal.type_in(typed).await?;
+                            Ok(bytes)
+                        }));
+                    },
                     Some(Ok(Message::Text(text))) => {
                         if let Some(size) = asked(text.as_str()) {
                             terminal.resize(size);

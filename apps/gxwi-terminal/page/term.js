@@ -18,6 +18,7 @@
 
 import { Terminal } from "./vendor/xterm.mjs";
 import { FitAddon } from "./vendor/addon-fit.mjs";
+import { InputQueue } from "./input.mjs";
 
 const room = document.getElementById("room");
 const said = document.getElementById("said");
@@ -91,7 +92,20 @@ let ended = false;
 /** Whether what comes next prints the terminal as it stands. */
 let afresh = false;
 
-const encoder = new TextEncoder();
+const input = new InputQueue((state) => {
+    term.options.disableStdin = !state.connected || state.ended || state.paused;
+    say(
+        state.warning ||
+            (state.ended
+                ? "Ended"
+                : state.paused
+                  ? "Input paused: waiting for the program to read."
+                  : !state.connected
+                    ? "Not reaching the terminal. Trying again."
+                    : ""),
+    );
+});
+term.options.disableStdin = true;
 const send = (what) => socket?.readyState === WebSocket.OPEN && socket.send(what);
 
 function connect() {
@@ -100,7 +114,7 @@ function connect() {
     const made = new WebSocket(address);
     made.binaryType = "arraybuffer";
     socket = made;
-    made.onopen = () => say(null);
+    made.onopen = () => input.open((bytes) => made.send(bytes));
     made.onmessage = (message) => {
         if (typeof message.data !== "string") {
             term.write(new Uint8Array(message.data), afresh ? ask : undefined);
@@ -117,22 +131,29 @@ function connect() {
             case "size":
                 term.resize(heard.cols, heard.rows);
                 break;
+            case "typed":
+                if (!ended && !input.acknowledge(heard.bytes)) made.close();
+                break;
+            case "input-error":
+                input.disconnect(`Input interrupted: ${heard.why}. Queued input was not replayed.`);
+                made.close();
+                break;
             case "ended":
                 ended = true;
-                say("Ended");
+                input.finish();
                 break;
         }
     };
     made.onclose = () => {
         if (socket !== made || ended) return;
-        say("Not reaching the terminal. Trying again.");
+        input.disconnect();
         setTimeout(connect, RECONNECT_DELAY_MS);
     };
 }
 
-term.onData((typed) => send(encoder.encode(typed)));
+term.onData((typed) => input.text(typed));
 // What is not text: a mouse's reports, in the older way of making them.
-term.onBinary((typed) => send(Uint8Array.from(typed, (c) => c.charCodeAt(0))));
+term.onBinary((typed) => input.text(typed, { binary: true }));
 
 // ---- the size
 

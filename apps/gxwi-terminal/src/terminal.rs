@@ -10,13 +10,13 @@
 //! every page draws it that big.
 
 use std::fs::File;
-use std::io::{Read, Write};
-use std::sync::mpsc;
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 
 use axum::body::Bytes;
 use tokio::sync::broadcast;
 
+use crate::input::Input;
 use crate::pty::{Pty, Size};
 use crate::screen::Screen;
 
@@ -54,7 +54,7 @@ pub struct Terminal {
     /// between that and what it is told next.
     stands: Mutex<Stands>,
     said: broadcast::Sender<Said>,
-    typed: Mutex<mpsc::Sender<Vec<u8>>>,
+    typed: Input,
     pty: Pty,
 }
 
@@ -62,17 +62,7 @@ impl Terminal {
     /// The terminal on the near side of `pty`. Typing is begun here; what is
     /// printed is followed by whoever calls [`Terminal::follow`].
     pub fn new(pty: Pty, size: Size) -> std::io::Result<Arc<Terminal>> {
-        let (typed, to_type) = mpsc::channel::<Vec<u8>>();
-        let mut to = pty.file()?;
-        // Writing waits while what is running is not reading, which is not
-        // for a page's connection to wait on.
-        std::thread::spawn(move || {
-            for typed in to_type {
-                if to.write_all(&typed).is_err() {
-                    break;
-                }
-            }
-        });
+        let typed = Input::new(pty.file()?);
         Ok(Arc::new(Terminal {
             stands: Mutex::new(Stands {
                 screen: Screen::new(size),
@@ -80,7 +70,7 @@ impl Terminal {
                 came_to_the_whole: false,
             }),
             said: broadcast::channel(PENDING_OUTPUT_CHUNKS).0,
-            typed: Mutex::new(typed),
+            typed,
             pty,
         }))
     }
@@ -128,6 +118,7 @@ impl Terminal {
     }
 
     fn ended(&self) {
+        self.typed.close();
         let mut stands = self.stands.lock().unwrap_or_else(|e| e.into_inner());
         stands.ended = true;
         let _ = self.said.send(Said::Ended);
@@ -149,12 +140,13 @@ impl Terminal {
 
     /// What a person typed, or pasted, or what a page's emulator answered
     /// for the terminal.
-    pub fn type_in(&self, typed: Vec<u8>) {
-        let _ = self
-            .typed
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .send(typed);
+    pub async fn type_in(&self, typed: Bytes) -> std::io::Result<()> {
+        self.typed.send(typed).await
+    }
+
+    #[cfg(test)]
+    pub fn pending_input_bytes(&self) -> usize {
+        self.typed.pending_bytes()
     }
 
     /// Makes the terminal the size a page has room for.
@@ -193,8 +185,8 @@ mod tests {
         (String::from_utf8_lossy(&text).into_owned(), sizes, ended)
     }
 
-    #[test]
-    fn what_is_typed_is_run_and_a_page_that_comes_after_is_shown_what_came_of_it() {
+    #[tokio::test]
+    async fn what_is_typed_is_run_and_a_page_that_comes_after_is_shown_what_came_of_it() {
         let size = Size { rows: 10, cols: 40 };
         let (pty, mut child) = Pty::start(
             Path::new("/bin/sh"),
@@ -210,7 +202,10 @@ mod tests {
         assert!(!ended);
 
         terminal.resize(Size { rows: 12, cols: 50 });
-        terminal.type_in(b"stty size; echo done-$((6*7)); exit\n".to_vec());
+        terminal
+            .type_in(Bytes::from_static(b"stty size; echo done-$((6*7)); exit\n"))
+            .await
+            .unwrap();
         terminal.follow(|_| {});
         child.wait().unwrap();
 

@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use libgxwi::App;
 
+mod input;
 mod page;
 mod pty;
 mod screen;
