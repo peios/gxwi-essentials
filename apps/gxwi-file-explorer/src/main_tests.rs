@@ -614,3 +614,51 @@ fn deleting_asks_first_and_deletes_only_what_was_asked_about() {
     assert!(dir.join("apps/dev.peios.gxwi-file-explorer.toml").exists());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn native_names_with_the_same_display_label_keep_distinct_actions() {
+    use std::os::unix::ffi::OsStringExt;
+    let (mut explorer, root) = explorer("native-names");
+    let native = std::ffi::OsString::from_vec(b"raw-\xff".to_vec());
+    let label = native.to_string_lossy().into_owned();
+    std::fs::write(explorer.at.join(&native), "native").unwrap();
+    std::fs::write(explorer.at.join(&label), "utf8").unwrap();
+    explorer.reread();
+    let id = gxwi_fs::entry_id(&native);
+    assert_ne!(explorer.named(&id), explorer.named(&label));
+    assert!(shown(&explorer).contains("This path cannot be copied as UTF-8 text."));
+    explorer.rename(&id, "renamed-native");
+    assert_eq!(
+        std::fs::read_to_string(explorer.at.join("renamed-native")).unwrap(),
+        "native"
+    );
+    assert_eq!(
+        std::fs::read_to_string(explorer.at.join(&label)).unwrap(),
+        "utf8"
+    );
+    std::fs::write(explorer.at.join(&native), "native again").unwrap();
+    explorer.reread();
+    explorer.delete(&id);
+    assert!(!explorer.at.join(native).exists());
+    assert_eq!(
+        std::fs::read_to_string(explorer.at.join(label)).unwrap(),
+        "utf8"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unchanged_lossy_address_keeps_the_open_native_directory() {
+    use std::os::unix::ffi::OsStringExt;
+    let (mut explorer, root) = explorer("native-address");
+    let native = std::ffi::OsString::from_vec(b"dir-\xff".to_vec());
+    let label = native.to_string_lossy().into_owned();
+    let path = explorer.at.join(&native);
+    std::fs::create_dir(&path).unwrap();
+    std::fs::create_dir(explorer.at.join(label)).unwrap();
+    let mut fields = Fields::default();
+    explorer.go(path.clone(), &mut fields);
+    explorer.event("go", &Value::Null, &mut fields);
+    assert_eq!(explorer.at, path);
+    std::fs::remove_dir_all(root).unwrap();
+}

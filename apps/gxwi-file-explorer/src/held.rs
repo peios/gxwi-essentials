@@ -9,6 +9,9 @@
 //! Where there is no such directory, as when File Explorer is run by hand, it is
 //! kept by the window and goes no further.
 
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
 /// The name of the file, in the session's runtime directory.
@@ -75,28 +78,72 @@ impl Holding {
             return Ok(());
         };
         match held {
-            // A path with a line break in it would read back as another.
-            Some(held) if held.path.to_string_lossy().contains('\n') => {
-                Err(std::io::Error::other("its name has a line break in it"))
-            }
             Some(held) => {
-                // Written whole under another name, so that a window
-                // reading it never finds half of it.
-                let new = file.with_extension(format!("{}.new", std::process::id()));
-                std::fs::write(
-                    &new,
-                    format!(
-                        "{}\n{}\n",
-                        if held.cut { "cut" } else { "copy" },
-                        held.path.to_string_lossy()
-                    ),
+                let path = held.path.to_str().ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "its name is not UTF-8")
+                })?;
+                if path.contains('\n') {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "its name has a line break in it",
+                    ));
+                }
+                let (mut output, mut temporary) = Temporary::beside(file)?;
+                writeln!(output, "{}\n{path}", if held.cut { "cut" } else { "copy" })?;
+                std::fs::rename(
+                    temporary.path.as_ref().expect("pending temporary file"),
+                    file,
                 )?;
-                std::fs::rename(&new, file)
+                // The name now belongs to the clipboard; never remove a later
+                // file another process might create at the temporary name.
+                temporary.path = None;
+                Ok(())
             }
             None => match std::fs::remove_file(file) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
                 _ => Ok(()),
             },
+        }
+    }
+}
+
+/// Owns only the temporary directory entry exclusively created for this write.
+struct Temporary {
+    path: Option<PathBuf>,
+}
+
+impl Temporary {
+    fn beside(file: &Path) -> io::Result<(File, Self)> {
+        let mut attempt = 0u64;
+        loop {
+            let suffix = if attempt == 0 {
+                format!("{}.new", std::process::id())
+            } else {
+                format!("{}.{attempt}.new", std::process::id())
+            };
+            let path = file.with_extension(suffix);
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&path)
+            {
+                Ok(output) => return Ok((output, Self { path: Some(path) })),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    attempt = attempt.checked_add(1).ok_or(error)?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+impl Drop for Temporary {
+    fn drop(&mut self) {
+        if let Some(path) = &self.path {
+            // Cleanup is best effort after a failed write; its original error
+            // remains the useful diagnosis and no existing entry was replaced.
+            let _ = std::fs::remove_file(path);
         }
     }
 }
@@ -166,5 +213,76 @@ mod tests {
         one.set(Some(held.clone())).unwrap();
         assert_eq!(one.get(), Some(held));
         assert_eq!(Holding::at(None).get(), None);
+    }
+    #[test]
+    fn clipboard_writes_preserve_colliding_files_and_symlinks() {
+        let dir =
+            std::env::temp_dir().join(format!("gxwi-clipboard-collision-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let file = dir.join(NAME);
+        let victim = dir.join("victim");
+        std::fs::write(&victim, "untouched").unwrap();
+        let collision = file.with_extension(format!("{}.new", std::process::id()));
+        std::os::unix::fs::symlink(&victim, &collision).unwrap();
+        let second = file.with_extension(format!("{}.1.new", std::process::id()));
+        std::fs::write(&second, "also untouched").unwrap();
+        let mut holding = Holding::at(Some(&file));
+        let held = Held {
+            path: "/tmp/chosen".into(),
+            cut: false,
+        };
+        holding.set(Some(held.clone())).unwrap();
+        assert_eq!(holding.get(), Some(held));
+        assert_eq!(std::fs::read_to_string(&victim).unwrap(), "untouched");
+        assert_eq!(std::fs::read_to_string(&second).unwrap(), "also untouched");
+        assert!(collision.is_symlink());
+        assert!(!file.is_symlink());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unrepresentable_paths_preserve_the_existing_clipboard() {
+        use std::os::unix::ffi::OsStringExt;
+        let dir =
+            std::env::temp_dir().join(format!("gxwi-clipboard-encoding-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let file = dir.join(NAME);
+        let mut holding = Holding::at(Some(&file));
+        let original = Held {
+            path: "/tmp/original".into(),
+            cut: true,
+        };
+        holding.set(Some(original.clone())).unwrap();
+        let path = std::ffi::OsString::from_vec(b"/tmp/not-utf8-\xff".to_vec()).into();
+        assert_eq!(
+            holding
+                .set(Some(Held { path, cut: false }))
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(holding.get(), Some(original));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn failed_clipboard_rename_removes_only_its_temporary_file() {
+        let dir =
+            std::env::temp_dir().join(format!("gxwi-clipboard-cleanup-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let file = dir.join(NAME);
+        std::fs::create_dir(&file).unwrap();
+        let mut holding = Holding::at(Some(&file));
+        assert!(
+            holding
+                .set(Some(Held {
+                    path: "/tmp/chosen".into(),
+                    cut: false
+                }))
+                .is_err()
+        );
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        assert!(file.is_dir());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

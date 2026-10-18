@@ -25,6 +25,8 @@ const ENOTDIR: i32 = 20;
 /// One thing in a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
+    pub id: String,
+    pub native_name: std::ffi::OsString,
     pub name: String,
     /// A folder, or a link to one.
     pub folder: bool,
@@ -44,7 +46,9 @@ pub fn list(path: &Path, hidden: bool) -> Result<Vec<Entry>, String> {
     let mut entries: Vec<Entry> = read
         .filter_map(Result::ok)
         .filter_map(|entry| {
-            let name = entry.file_name().to_string_lossy().into_owned();
+            let native_name = entry.file_name();
+            let id = gxwi_fs::entry_id(&native_name);
+            let name = native_name.to_string_lossy().into_owned();
             if !hidden && name.starts_with('.') {
                 return None;
             }
@@ -53,6 +57,8 @@ pub fn list(path: &Path, hidden: bool) -> Result<Vec<Entry>, String> {
                 .or_else(|_| entry.metadata())
                 .ok();
             Some(Entry {
+                id,
+                native_name,
                 name,
                 folder: metadata.as_ref().is_some_and(std::fs::Metadata::is_dir),
                 size: metadata.as_ref().map_or(0, std::fs::Metadata::len),
@@ -137,12 +143,13 @@ pub fn make_folder(folder: &Path, name: &str) -> Result<PathBuf, String> {
 }
 
 /// Renames `from` in `folder` to `to`, never over something already there.
-pub fn rename(folder: &Path, from: &str, to: &str) -> Result<(), String> {
+pub fn rename(folder: &Path, from: impl AsRef<std::ffi::OsStr>, to: &str) -> Result<(), String> {
     let target = folder.join(to);
     if std::fs::symlink_metadata(&target).is_ok() {
         return Err(format!("There is something called {to} here already."));
     }
-    std::fs::rename(folder.join(from), target).map_err(|e| refused(&e, "rename it"))
+    gxwi_fs::rename_noreplace(&folder.join(from.as_ref()), &target)
+        .map_err(|e| refused(&e, "rename it"))
 }
 
 /// Deletes what is at `path`, and, for a folder, everything in it.

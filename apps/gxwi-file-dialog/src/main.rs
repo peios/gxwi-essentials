@@ -117,12 +117,18 @@ impl Chooser {
             .as_ref()
             .ok()?
             .iter()
-            .find(|entry| entry.name == name)
+            .find(|entry| entry.id == name)
     }
 
     /// Tells the program what was chosen, once, and goes.
     fn answer(&mut self, answer: Answer) {
         if self.answered {
+            return;
+        }
+        if let Answer::Chosen { path } = &answer
+            && path.to_str().is_none()
+        {
+            self.said = Some(("This path cannot be returned through the UTF-8 file dialog protocol. Rename it or choose another path.".into(), true));
             return;
         }
         self.answered = true;
@@ -141,12 +147,17 @@ impl Chooser {
         let Some(entry) = self.entry(name).cloned() else {
             return;
         };
-        let path = self.folder.join(&entry.name);
+        let path = self.folder.join(&entry.native_name);
         if entry.folder {
             fields.set("path", &path.to_string_lossy());
             self.go(&path);
         } else if self.request.mode == Mode::Open {
             self.answer(Answer::Chosen { path });
+        } else if entry.native_name.to_str().is_none() {
+            self.said = Some((
+                "This filename cannot be selected through the UTF-8 file dialog protocol.".into(),
+                true,
+            ));
         } else {
             fields.set("name", &entry.name);
             self.save(fields);
@@ -207,8 +218,13 @@ impl Chooser {
         let done = match self.doing.clone() {
             Doing::NewFolder => folder::make_folder(&self.folder, &typed)
                 .map(|_| format!("Made the folder {typed}.")),
-            Doing::Renaming(was) => folder::rename(&self.folder, &was, &typed)
-                .map(|()| format!("Renamed {was} to {typed}.")),
+            Doing::Renaming(was) => {
+                let Some(entry) = self.entry(&was) else {
+                    return;
+                };
+                folder::rename(&self.folder, &entry.native_name, &typed)
+                    .map(|()| format!("Renamed {} to {typed}.", entry.name))
+            }
             _ => return,
         };
         match done {
@@ -233,12 +249,13 @@ impl Chooser {
             })
             .unwrap_or_default();
         format!(
-            "<li><button type=\"button\" class=\"{kind}\" fx-click=\"pick\" fx-dblclick=\"open\" fx-value-name=\"{name}\" aria-selected=\"{picked}\">\
+            "<li><button type=\"button\" class=\"{kind}\" fx-click=\"pick\" fx-dblclick=\"open\" fx-value-name=\"{id}\" aria-selected=\"{picked}\">\
              <span class=\"icon\" aria-hidden=\"true\"></span><span class=\"name\">{name}</span>\
              <span class=\"size\">{size}</span><span class=\"changed\">{changed}</span></button></li>",
             kind = if entry.folder { "folder" } else { "file" },
             name = escape(&entry.name),
-            picked = self.picked.as_deref() == Some(entry.name.as_str()),
+            id = escape(&entry.id),
+            picked = self.picked.as_deref() == Some(entry.id.as_str()),
             size = if entry.folder {
                 String::new()
             } else {
@@ -258,12 +275,10 @@ impl Chooser {
                 format!(" disabled title=\"{}\"", escape(why))
             }
         };
-        let picked = self
-            .picked
-            .as_deref()
-            .filter(|name| self.entry(name).is_some());
-        let may_delete =
-            picked.is_some_and(|name| folder::may_delete(&self.folder.join(name), self.may));
+        let picked = self.picked.as_deref().and_then(|name| self.entry(name));
+        let may_delete = picked.is_some_and(|entry| {
+            folder::may_delete(&self.folder.join(&entry.native_name), self.may)
+        });
         let pick_first = |allowed: bool, why: &str| {
             if picked.is_none() {
                 " disabled title=\"Pick something first.\"".to_string()
@@ -322,7 +337,11 @@ impl Chooser {
                 format!(
                     "<div class=\"strip asking\"><p>Delete {what} <strong>{name}</strong>{under}? This can't be undone.</p>\
                      <button type=\"button\" class=\"danger\" fx-click=\"delete-yes\" fx-autofocus>Delete</button><button type=\"button\" fx-click=\"back\">Cancel</button></div>",
-                    name = escape(name),
+                    name = escape(
+                        self.entry(name)
+                            .map(|entry| entry.name.as_str())
+                            .unwrap_or_default()
+                    ),
                 )
             }
             Doing::Overwriting(path) => format!(
@@ -424,6 +443,10 @@ impl Live for Chooser {
         match name {
             "go" => {
                 let typed = fields.get("path").trim().to_string();
+                // The displayed label is not a reversible encoding of a native path.
+                if self.folder.to_str().is_none() && typed == self.folder.to_string_lossy() {
+                    return;
+                }
                 let path = if typed.starts_with('/') {
                     PathBuf::from(typed)
                 } else {
@@ -440,9 +463,15 @@ impl Live for Chooser {
             "pick" => {
                 if let Some(picked) = named {
                     if self.request.mode == Mode::Save
-                        && self.entry(&picked).is_some_and(|entry| !entry.folder)
+                        && let Some(entry) = self.entry(&picked)
+                        && !entry.folder
                     {
-                        fields.set("name", &picked);
+                        if let Some(name) = entry.native_name.to_str() {
+                            fields.set("name", name);
+                        } else {
+                            fields.set("name", "");
+                            self.said = Some(("This filename cannot be selected through the UTF-8 file dialog protocol.".into(), true));
+                        }
                     }
                     self.picked = Some(picked);
                 }
@@ -464,7 +493,10 @@ impl Live for Chooser {
             }
             "rename" => {
                 if let Some(picked) = self.picked.clone() {
-                    fields.set("new-name", &picked);
+                    let Some(entry) = self.entry(&picked) else {
+                        return;
+                    };
+                    fields.set("new-name", &entry.name);
                     self.doing = Doing::Renaming(picked);
                 }
             }
@@ -476,10 +508,16 @@ impl Live for Chooser {
             }
             "delete-yes" => {
                 if let Doing::Deleting(picked) = self.doing.clone() {
-                    self.said = Some(match folder::delete(&self.folder.join(&picked)) {
-                        Ok(()) => (format!("Deleted {picked}."), false),
-                        Err(why) => (why, true),
-                    });
+                    let Some(entry) = self.entry(&picked) else {
+                        return;
+                    };
+                    let label = entry.name.clone();
+                    self.said = Some(
+                        match folder::delete(&self.folder.join(&entry.native_name)) {
+                            Ok(()) => (format!("Deleted {label}."), false),
+                            Err(why) => (why, true),
+                        },
+                    );
                     self.doing = Doing::Looking;
                     self.picked = None;
                     self.read();
@@ -713,6 +751,61 @@ mod tests {
             shown(&chooser)
                 .contains("fx-click=\"delete\" disabled title=\"Pick something first.\"")
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn native_names_keep_local_identity_and_refuse_unrepresentable_answers() {
+        use std::os::unix::ffi::OsStringExt;
+        let dir = scratch("native-names");
+        let native = std::ffi::OsString::from_vec(b"raw-\xff".to_vec());
+        let label = native.to_string_lossy().into_owned();
+        std::fs::write(dir.join(&native), "native").unwrap();
+        std::fs::write(dir.join(&label), "utf8").unwrap();
+        let mut chooser = chooser(Mode::Open, &dir);
+        chooser.filter = None;
+        let id = gxwi_fs::entry_id(&native);
+        assert_ne!(
+            chooser.entry(&id).unwrap().native_name,
+            chooser.entry(&label).unwrap().native_name
+        );
+        let mut fields = Fields::default();
+        chooser.open(&id, &mut fields);
+        assert!(!chooser.answered);
+        assert!(chooser.said.as_ref().unwrap().0.contains("UTF-8"));
+        chooser.doing = Doing::Renaming(id.clone());
+        fields.set("new-name", "renamed-native");
+        chooser.named(&mut fields);
+        assert_eq!(
+            std::fs::read_to_string(dir.join("renamed-native")).unwrap(),
+            "native"
+        );
+        assert_eq!(std::fs::read_to_string(dir.join(&label)).unwrap(), "utf8");
+        std::fs::write(dir.join(&native), "again").unwrap();
+        chooser.read();
+        chooser.doing = Doing::Deleting(id);
+        chooser.event("delete-yes", &Value::Null, &mut fields);
+        assert!(!dir.join(native).exists());
+        assert_eq!(std::fs::read_to_string(dir.join(label)).unwrap(), "utf8");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn unchanged_lossy_address_keeps_the_open_native_directory() {
+        use std::os::unix::ffi::OsStringExt;
+        let dir = scratch("native-address");
+        let native = std::ffi::OsString::from_vec(b"dir-\xff".to_vec());
+        let path = dir.join(&native);
+        std::fs::create_dir(&path).unwrap();
+        std::fs::create_dir(dir.join(native.to_string_lossy().as_ref())).unwrap();
+        let mut chooser = chooser(Mode::Open, &dir);
+        let mut fields = Fields::default();
+        chooser.open(&gxwi_fs::entry_id(&native), &mut fields);
+        chooser.event("go", &Value::Null, &mut fields);
+        assert_eq!(chooser.folder, path);
+        chooser.answer(Answer::Chosen {
+            path: path.join("file.txt"),
+        });
+        assert!(!chooser.answered);
+        assert!(chooser.said.as_ref().unwrap().0.contains("UTF-8"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

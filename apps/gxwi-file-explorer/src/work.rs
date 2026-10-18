@@ -63,7 +63,15 @@ pub fn copy(from: &Path, to: &Path) -> io::Result<()> {
                 "there is already something there",
             ));
         }
-        std::fs::copy(from, to).map(|_| ())
+        let mut input = std::fs::File::open(from)?;
+        // The destination is claimed in the same operation that opens it:
+        // another process winning the name cannot have its contents truncated.
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(to)?;
+        io::copy(&mut input, &mut output)?;
+        output.set_permissions(metadata.permissions())
     } else {
         Err(io::Error::other(format!(
             "{} is not a file, a directory or a link",
@@ -81,7 +89,7 @@ pub fn move_to(from: &Path, to: &Path) -> io::Result<()> {
             "there is already something there",
         ));
     }
-    match std::fs::rename(from, to) {
+    match gxwi_fs::rename_noreplace(from, to) {
         Err(e) if e.raw_os_error() == Some(libc::EXDEV) => {
             copy(from, to)?;
             delete(from)
@@ -103,8 +111,19 @@ pub fn delete(path: &Path) -> io::Result<()> {
 /// UTF-8 with no NUL in it. One with nothing in it does.
 pub fn reads_as_text(path: &Path) -> bool {
     use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
     let mut beginning = vec![0u8; 4096];
-    let Ok(read) = std::fs::File::open(path).and_then(|mut file| file.read(&mut beginning)) else {
+    let Ok(mut file) = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(path)
+    else {
+        return false;
+    };
+    if !file.metadata().is_ok_and(|metadata| metadata.is_file()) {
+        return false;
+    }
+    let Ok(read) = file.read(&mut beginning) else {
         return false;
     };
     let beginning = &beginning[..read];
@@ -233,9 +252,56 @@ mod tests {
         assert!(!reads(&[0xff, 0xfe, b'a', b'b']));
         // Long enough that a character is cut where the reading stops.
         let long = "é".repeat(4000);
-        assert!(reads(&long.as_bytes()[1..]) == false);
+        assert!(!reads(&long.as_bytes()[1..]));
         assert!(reads(format!("a{long}").as_bytes()));
         assert!(!reads_as_text(&dir.join("nothing")));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn text_probe_rejects_a_fifo_without_waiting_for_a_writer() {
+        use std::os::unix::ffi::OsStrExt;
+        let dir = dir("probe-fifo");
+        let path = dir.join("pipe");
+        let cpath = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: cpath is a live NUL-terminated filename, and mkfifo retains no pointer.
+        assert_eq!(unsafe { libc::mkfifo(cpath.as_ptr(), 0o600) }, 0);
+        assert!(!reads_as_text(&path));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn concurrent_copies_never_replace_the_winners_contents() {
+        let dir = dir("copy-race");
+        let to = dir.join("winner");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let workers: Vec<_> = ["one", "two"]
+            .into_iter()
+            .map(|name| {
+                let from = dir.join(name);
+                std::fs::write(&from, name).unwrap();
+                let to = to.clone();
+                let barrier = std::sync::Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    (name, copy(&from, &to))
+                })
+            })
+            .collect();
+        barrier.wait();
+        let results: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect();
+        assert_eq!(
+            results.iter().filter(|(_, result)| result.is_ok()).count(),
+            1
+        );
+        for (name, result) in results {
+            match result {
+                Ok(()) => assert_eq!(std::fs::read_to_string(&to).unwrap(), name),
+                Err(error) => assert_eq!(error.kind(), io::ErrorKind::AlreadyExists),
+            }
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

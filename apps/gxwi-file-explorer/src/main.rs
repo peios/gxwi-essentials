@@ -84,6 +84,8 @@ libgxwi::icon!(b"dev.peios.gxwi-file-explorer");
 const MOST: usize = 2000;
 
 struct Entry {
+    id: String,
+    native_name: std::ffi::OsString,
     name: String,
     directory: bool,
     /// Whether opening it starts it: a regular file this process may run.
@@ -302,14 +304,18 @@ impl Explorer {
         let mut failed = None;
         let entries: Vec<Entry> = listing
             .filter_map(|entry| entry.map_err(|e| failed = Some(e)).ok())
-            .filter_map(|entry| {
-                let name = entry.file_name().into_string().ok()?;
+            .map(|entry| {
+                let native_name = entry.file_name();
+                let id = gxwi_fs::entry_id(&native_name);
+                let name = native_name.to_string_lossy().into_owned();
                 let path = entry.path();
                 // Through a link, as the thing opened would be.
                 let metadata = std::fs::metadata(&path).ok();
                 let directory = metadata.as_ref().is_some_and(|m| m.is_dir());
                 let program = metadata.as_ref().is_some_and(|m| m.is_file()) && may_run(&path);
-                Some(Entry {
+                Entry {
+                    id,
+                    native_name,
                     icon: icons::identify(&path, &self.themes),
                     media: metadata
                         .as_ref()
@@ -321,7 +327,7 @@ impl Explorer {
                     name,
                     directory,
                     program,
-                })
+                }
             })
             .collect();
         self.unshown = entries.len().saturating_sub(MOST);
@@ -351,7 +357,7 @@ impl Explorer {
         self.asking = self.asking.take().filter(|asking| {
             asking
                 .about()
-                .is_none_or(|name| self.entries.iter().any(|entry| entry.name == name))
+                .is_none_or(|name| self.entries.iter().any(|entry| entry.id == name))
         });
         true
     }
@@ -379,7 +385,7 @@ impl Explorer {
 
     /// Which entry is called `name`.
     fn named(&self, name: &str) -> Option<usize> {
-        self.entries.iter().position(|entry| entry.name == name)
+        self.entries.iter().position(|entry| entry.id == name)
     }
 
     /// Directories first, then by what was asked, then by name without
@@ -437,7 +443,7 @@ impl Explorer {
         let Some(entry) = self.entries.get(index) else {
             return;
         };
-        let path = self.at.join(&entry.name);
+        let path = self.at.join(&entry.native_name);
         if entry.directory {
             self.go(path, fields);
         } else if entry.program {
@@ -510,7 +516,7 @@ impl Explorer {
             self.trouble = Some(format!("{} cannot be opened with that.", entry.name));
             return;
         };
-        let (program, arguments) = application.command(Some(&self.at.join(&entry.name)));
+        let (program, arguments) = application.command(Some(&self.at.join(&entry.native_name)));
         if let Err(e) = start(&program, &arguments) {
             self.trouble = Some(format!("{} could not be started: {e}.", application.title));
         }
@@ -519,6 +525,11 @@ impl Explorer {
     /// Gives the entry called `was` the name `typed`, if that is a name and
     /// nothing has it.
     fn rename(&mut self, was: &str, typed: &str) {
+        let Some(index) = self.named(was) else {
+            return;
+        };
+        let source = self.at.join(&self.entries[index].native_name);
+        let label = self.entries[index].name.clone();
         let to = typed.trim();
         if to == was {
             return;
@@ -534,22 +545,27 @@ impl Explorer {
             self.trouble = Some(format!("There is already something called {to} here."));
             return;
         }
-        match std::fs::rename(self.at.join(was), &target) {
+        match gxwi_fs::rename_noreplace(&source, &target) {
             Ok(()) => {
                 self.reread();
                 self.picked = self.named(to);
             }
-            Err(e) => self.trouble = Some(format!("{was} could not be renamed: {}.", why(&e))),
+            Err(e) => self.trouble = Some(format!("{label} could not be renamed: {}.", why(&e))),
         }
     }
 
     /// Deletes the entry called `name`: a directory with everything in it,
     /// and a link as the link it is.
     fn delete(&mut self, name: &str) {
-        let removed = work::delete(&self.at.join(name));
+        let Some(index) = self.named(name) else {
+            return;
+        };
+        let entry = &self.entries[index];
+        let label = entry.name.clone();
+        let removed = work::delete(&self.at.join(&entry.native_name));
         self.reread();
         if let Err(e) = removed {
-            self.trouble = Some(format!("{name} could not be deleted: {}.", why(&e)));
+            self.trouble = Some(format!("{label} could not be deleted: {}.", why(&e)));
         }
     }
 
@@ -586,8 +602,12 @@ impl Explorer {
     /// Holds the entry called `name`, to be copied or moved to wherever it
     /// is pasted.
     fn hold(&mut self, name: &str, cut: bool) {
+        let Some(index) = self.named(name) else {
+            return;
+        };
+        let entry = &self.entries[index];
         if let Err(e) = self.holding.set(Some(Held {
-            path: self.at.join(name),
+            path: self.at.join(&entry.native_name),
             cut,
         })) {
             self.trouble = Some(format!(
@@ -607,11 +627,16 @@ impl Explorer {
             self.trouble = Some("Nothing has been cut or copied.".into());
             return;
         };
-        let name = held
+        let Some(name) = held
             .path
             .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .and_then(|name| name.to_str())
+            .map(str::to_owned)
+        else {
+            self.trouble =
+                Some("This filename cannot be represented in the UTF-8 clipboard.".into());
+            return;
+        };
         let Ok(metadata) = std::fs::symlink_metadata(&held.path) else {
             self.trouble = Some(format!("{name} is no longer where it was."));
             let _ = self.holding.set(None);
@@ -680,7 +705,7 @@ impl Explorer {
         if to.parent() == Some(self.at.as_path()) {
             self.picked = to
                 .file_name()
-                .and_then(|name| self.named(&name.to_string_lossy()))
+                .and_then(|name| self.named(&gxwi_fs::entry_id(name)))
                 .or(self.picked);
         }
         if let Err(why) = said {
@@ -693,7 +718,7 @@ impl Explorer {
         let Some(entry) = self.entries.get(index) else {
             return;
         };
-        let path = self.at.join(&entry.name);
+        let path = self.at.join(&entry.native_name);
         // Open already: that dialog comes to the front. One whose editor
         // has gone without its going being heard yet is opened afresh.
         if let Some(editor) = self.editing.get(&path) {
@@ -1246,23 +1271,24 @@ impl Live for Explorer {
             .map(|held| held.path);
         // One menu serves every entry the same applications open, which is
         // most of a directory: the entry's own values come with the choice.
-        let mut menus: Vec<Vec<&Application>> = Vec::new();
+        let mut menus: Vec<(Vec<&Application>, bool)> = Vec::new();
         let entries: String = self
             .entries
             .iter()
             .enumerate()
             .map(|(index, entry)| {
                 let candidates = self.candidates(entry);
-                let menu = menus.iter().position(|menu| menu == &candidates).unwrap_or_else(|| {
-                    menus.push(candidates);
+                let copy_path = self.at.join(&entry.native_name).to_str().is_some();
+                let menu = menus.iter().position(|(menu, copy)| menu == &candidates && *copy == copy_path).unwrap_or_else(|| {
+                    menus.push((candidates, copy_path));
                     menus.len() - 1
                 });
                 let about = format!(
                     "fx-value-index=\"{index}\" fx-value-name=\"{name}\" fx-value-path=\"{path}\"",
-                    name = escape(&entry.name),
-                    path = escape(&self.at.join(&entry.name).to_string_lossy()),
+                    name = escape(&entry.id),
+                    path = escape(self.at.join(&entry.native_name).to_str().unwrap_or_default()),
                 );
-                let class = match (entry.directory, cut.as_deref() == Some(self.at.join(&entry.name).as_path())) {
+                let class = match (entry.directory, cut.as_deref() == Some(self.at.join(&entry.native_name).as_path())) {
                     (true, false) => "directory",
                     (true, true) => "directory cut",
                     (false, false) => "file",
@@ -1276,7 +1302,7 @@ impl Live for Explorer {
                 );
                 let icon = escape(&icons::href(&entry.icon));
                 // Being renamed, its name is a field to type the new one in.
-                if self.asking == Some(Asking::Rename(entry.name.clone())) {
+                if self.asking == Some(Asking::Rename(entry.id.clone())) {
                     return format!(
                         "<li><form id=\"renaming-{index}\" class=\"{class} renaming\" fx-submit=\"renamed\" {about}>\
                          <img src=\"{icon}\" alt=\"\"><input name=\"name\" fx-autofocus autocomplete=\"off\" spellcheck=\"false\" aria-label=\"New name for {name}\">\
@@ -1297,7 +1323,7 @@ impl Live for Explorer {
         let menus: String = menus
             .iter()
             .enumerate()
-            .map(|(at, candidates)| {
+            .map(|(at, (candidates, copy_path))| {
                 let with: String = candidates
                     .iter()
                     .map(|application| {
@@ -1314,10 +1340,11 @@ impl Live for Explorer {
                      <li><button type=\"button\" fx-click=\"cut\">Cut</button></li>\
                      <li><button type=\"button\" fx-click=\"copy\">Copy</button></li>\
                      <li><button type=\"button\" fx-click=\"rename\">Rename</button></li>\
-                     <li><button type=\"button\" fx-copy=\"path\">Copy path</button></li>\
+                     <li><button type=\"button\" fx-copy=\"path\"{copy_disabled}>Copy path</button></li>\
                      <li><button type=\"button\" fx-click=\"permissions\">Permissions…</button></li><hr>\
                      <li><button type=\"button\" fx-click=\"delete\">Delete</button></li>\
-                     </menu>"
+                     </menu>",
+                    copy_disabled = if *copy_path { "" } else { " disabled title=\"This path cannot be copied as UTF-8 text.\"" },
                 )
             })
             .collect();
@@ -1368,11 +1395,16 @@ impl Live for Explorer {
                     .is_some_and(|index| self.entries[index].directory);
                 format!(
                     "<div id=\"asking\" class=\"asking\" role=\"alertdialog\" aria-label=\"Delete\">\
-                     <p>Delete {name}{all}? There is nowhere to get it back from.</p>\
+                     <p>Delete {label}{all}? There is nowhere to get it back from.</p>\
                      <button type=\"button\" class=\"danger\" fx-click=\"deleted\" fx-value-name=\"{name}\">Delete</button>\
                      <button type=\"button\" fx-click=\"keep\" fx-key=\"Escape\" fx-autofocus>Keep</button>\
                      </div>",
                     name = escape(name),
+                    label = escape(
+                        self.named(name)
+                            .map(|index| self.entries[index].name.as_str())
+                            .unwrap_or_default()
+                    ),
                     all = if directory {
                         " and everything in it"
                     } else {
@@ -1518,7 +1550,7 @@ impl Live for Explorer {
                 if let Some(index) = index {
                     self.picked = Some(index);
                     fields.set("name", &self.entries[index].name);
-                    self.asking = Some(Asking::Rename(self.entries[index].name.clone()));
+                    self.asking = Some(Asking::Rename(self.entries[index].id.clone()));
                 }
             }
             "renamed" => {
@@ -1530,15 +1562,15 @@ impl Live for Explorer {
             "delete" => {
                 if let Some(index) = index {
                     self.picked = Some(index);
-                    self.asking = Some(Asking::Delete(self.entries[index].name.clone()));
+                    self.asking = Some(Asking::Delete(self.entries[index].id.clone()));
                 }
             }
             // Only what was asked about is deleted, and only once.
             "deleted" => {
-                if let Some(Asking::Delete(name)) = self.asking.take() {
-                    if value["name"].as_str() == Some(name.as_str()) {
-                        self.delete(&name);
-                    }
+                if let Some(Asking::Delete(name)) = self.asking.take()
+                    && value["name"].as_str() == Some(name.as_str())
+                {
+                    self.delete(&name);
                 }
             }
             "keep" => self.asking = None,
@@ -1563,7 +1595,7 @@ impl Live for Explorer {
             "cut" | "copy" => {
                 if let Some(index) = index {
                     self.picked = Some(index);
-                    let held = self.entries[index].name.clone();
+                    let held = self.entries[index].id.clone();
                     self.hold(&held, name == "cut");
                 }
             }
@@ -1593,11 +1625,11 @@ impl Live for Explorer {
                     let was = self
                         .picked
                         .and_then(|picked| self.entries.get(picked))
-                        .map(|entry| entry.name.clone());
+                        .map(|entry| entry.id.clone());
                     self.sort();
                     // The same entry stays picked, wherever it went.
-                    self.picked = was
-                        .and_then(|name| self.entries.iter().position(|entry| entry.name == name));
+                    self.picked =
+                        was.and_then(|name| self.entries.iter().position(|entry| entry.id == name));
                 }
             }
             "up" => {
@@ -1612,6 +1644,10 @@ impl Live for Explorer {
             }
             "go" => {
                 let typed = fields.get("path").trim();
+                // The displayed label is not a reversible encoding of a native path.
+                if self.at.to_str().is_none() && typed == self.at.to_string_lossy() {
+                    return;
+                }
                 let to = if typed.starts_with('/') {
                     PathBuf::from(typed)
                 } else {

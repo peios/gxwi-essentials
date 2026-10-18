@@ -11,7 +11,8 @@
 //! file in its place would have none of them.
 
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, Read as _, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -113,14 +114,21 @@ pub fn read(path: &Path) -> Result<Read, Refused> {
         io::ErrorKind::PermissionDenied => Refused::Denied,
         _ => Refused::Other(e.to_string()),
     };
-    let metadata = std::fs::metadata(path).map_err(refused)?;
+    // Open without waiting for a FIFO writer, then inspect this descriptor:
+    // checking the pathname first would allow replacement before the read.
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(path)
+        .map_err(refused)?;
+    let metadata = file.metadata().map_err(refused)?;
     if !metadata.is_file() {
         return Err(Refused::NotAFile);
     }
     if metadata.len() > MOST as u64 {
         return Err(Refused::TooLarge(metadata.len()));
     }
-    let bytes = std::fs::read(path).map_err(refused)?;
+    let bytes = read_bounded(file).map_err(refused)?;
     // It may have grown since it was measured.
     if bytes.len() > MOST {
         return Err(Refused::TooLarge(bytes.len() as u64));
@@ -139,6 +147,14 @@ pub fn read(path: &Path) -> Result<Read, Refused> {
         endings,
         seen,
     })
+}
+
+/// Read one byte beyond the accepted limit to detect growth without allocating
+/// an unbounded buffer, even when a file reports a smaller initial length.
+fn read_bounded(reader: impl io::Read) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader.take(MOST as u64 + 1).read_to_end(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Writes `text` to the file at `path`, its lines ending as `endings` says.
@@ -271,5 +287,21 @@ mod tests {
         assert_eq!(std::fs::metadata(&path).unwrap().ino(), was);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "after");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn a_growing_input_is_read_only_one_byte_beyond_the_limit() {
+        let bytes = read_bounded(io::repeat(b'a')).unwrap();
+        assert_eq!(bytes.len(), MOST + 1);
+    }
+
+    #[test]
+    fn a_fifo_is_rejected_without_waiting_for_a_writer() {
+        let directory = dir("fifo");
+        let path = directory.join("pipe");
+        let cpath = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).unwrap();
+        // SAFETY: cpath is a live NUL-terminated filename and mode is valid.
+        assert_eq!(unsafe { libc::mkfifo(cpath.as_ptr(), 0o600) }, 0);
+        assert_eq!(read(&path).unwrap_err(), Refused::NotAFile);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }
