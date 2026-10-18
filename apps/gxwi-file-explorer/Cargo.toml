@@ -1,0 +1,17 @@
+[package]
+name = "gexora"
+version = "0.0.3"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "5629140add3de075511b3379fd690fdabd06dcaf" }
+libc = "0.2"
+# Times, in the machine's time zone.
+jiff = "0.2.29"
+# A file's descriptor, read and applied for the permissions editor.
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "f8c84930f2b71763bcf0550df0b1420a0f63b21e", package = "peios" }
+# The permissions editor's protocol, and nothing of the editor's own, and
+# pushing a folder's permissions into what is inside it.
+gxwi-sd-editor = { git = "https://github.com/peios/gxwi-sd-editor.git", rev = "27239eb3411ab82d711262bfd59e537c66c29e9e", default-features = false, features = ["propagate"] }
