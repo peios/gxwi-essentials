@@ -1,0 +1,285 @@
+/* Made from the theme's tokens, which the desktop's page for a live surface
+   brings with it. */
+html, body { height: 100%; }
+
+body {
+    margin: 0;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    font: 500 13px/1.4 var(--font-text);
+    color-scheme: light dark;
+    overflow: hidden;
+}
+
+#fx-root { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
+#fx-root[data-connected="false"] { opacity: 0.5; }
+
+button { font: inherit; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
+
+/* The bar: which list, finding in it, and reading again. */
+.bar {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-2);
+    border-bottom: 1px solid var(--border-default);
+    background: var(--surface-2);
+}
+.bar input {
+    flex: 1;
+    min-width: 10em;
+    height: var(--control-sm);
+    padding: 0 var(--space-2);
+    font: inherit;
+    color: inherit;
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.bar button, .details .actions button {
+    height: var(--control-sm);
+    padding: 0 var(--space-3);
+    color: var(--text-primary);
+    background: var(--surface-1);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.bar button:hover, .details .actions button:hover { border-color: var(--border-strong); }
+.details .actions button { font-size: 12px; background: var(--surface-2); }
+.tabs { display: flex; }
+.tabs .tab { border-radius: 0; }
+.tabs .tab:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.tabs .tab:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-left: -1px; }
+.tabs .tab[aria-pressed="true"] { color: var(--accent-on); background: var(--accent-solid); border-color: var(--accent-solid); }
+
+.body { display: flex; flex: 1; min-height: 0; }
+
+/* The list, one grid for the head and every row so the columns line up. */
+.list { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.head, .entries button {
+    display: grid;
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+}
+.users .head, .users .entries button { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 80px 80px; }
+.groups .head, .groups .entries button { grid-template-columns: minmax(0, 1.4fr) 80px 90px minmax(0, 2fr); }
+.records .head, .records .entries button { grid-template-columns: minmax(0, 1.4fr) 100px 80px minmax(0, 1.2fr); }
+.entries .about, .entries .also { font-size: 12px; color: var(--text-muted); }
+.entries .privs, .entries .level { font-size: 12px; }
+.head {
+    flex: none;
+    border-bottom: 1px solid var(--border-default);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.entries {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: var(--space-1) 0;
+    list-style: none;
+    overflow-y: auto;
+}
+.entries button {
+    width: 100%;
+    text-align: left;
+    color: var(--text-secondary);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: default;
+    user-select: none;
+}
+.entries button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.entries .name { color: var(--text-primary); }
+.entries .kind, .entries .state, .entries .members { font-size: 12px; }
+.entries button.off .name, .entries button.off .state { color: var(--text-muted); }
+.entries button:hover { background: var(--surface-2); }
+.entries button[aria-selected="true"] { background: var(--surface-2); border-color: var(--accent-solid); }
+
+/* The one picked, in full. */
+.details {
+    flex: none;
+    width: 320px;
+    padding: var(--space-4) var(--space-3);
+    overflow-y: auto;
+    border-left: 1px solid var(--border-default);
+}
+.details h2 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.details h3 { margin: var(--space-4) 0 var(--space-2); font-size: 12px; font-weight: 600; }
+.details .id { margin: var(--space-1) 0 0; font: 500 12px/1.4 var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
+.details dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3); margin: var(--space-4) 0 0; font-size: 12px; }
+.details dt { color: var(--text-muted); }
+.details dd { margin: 0; overflow-wrap: anywhere; }
+.details code { font: 500 12px/1.4 var(--font-mono); }
+.details .note { margin: var(--space-3) 0 0; font-size: 12px; color: var(--text-secondary); }
+.details .note.bad { color: var(--danger-text); }
+.details .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; }
+.details .actions button:disabled { color: var(--text-muted); cursor: default; opacity: 0.6; }
+.details .may { margin: var(--space-3) 0 0; font-size: 12px; color: var(--text-secondary); }
+.details .more { margin: 0; font-size: 12px; color: var(--text-muted); }
+.details .plain { margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.details .plain li { padding: 2px 0; }
+.details .link {
+    padding: 0;
+    font: inherit;
+    color: var(--accent-text, var(--accent-solid));
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.details .link:hover { text-decoration: underline; }
+.details .about { margin: var(--space-2) 0 0; font-size: 12px; color: var(--text-secondary); }
+/* Remove, beside a group or a member. Always there, since a touch has no
+   hover to reveal it, and quiet until pointed at. */
+.details .plain li { display: flex; align-items: center; gap: var(--space-2); }
+.details button.small {
+    margin-left: auto;
+    padding: 0 var(--space-2);
+    height: 20px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.details button.small:hover { color: var(--danger-text); border-color: var(--danger-text); }
+.details .claims { margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.details .claims li { display: grid; gap: 2px; padding: var(--space-2) 0; border-bottom: 1px solid var(--border-default); }
+.details .claims li:last-child { border-bottom: 0; }
+.details .claims .type { color: var(--text-muted); }
+.details .claims .values { overflow-wrap: anywhere; }
+.details .claims .top { display: flex; align-items: center; gap: var(--space-2); }
+/* Edit and Remove together, at the end of the line. */
+.details .tools { display: flex; gap: var(--space-1); margin-left: auto; }
+.details .tools button.small { margin-left: 0; }
+/* A heading with Add beside it. */
+.details .section { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0 var(--space-2); }
+.details .section h3 { margin: 0; }
+.details button.small.go:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.details .keys .key { display: grid; gap: 2px; min-width: 0; }
+.details .keys code { font-size: 11px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.details .keys .added { color: var(--text-muted); }
+/* Privileges: each with what it lets its holder do. */
+.details .privileges { margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.details .privileges li { display: grid; gap: 1px; padding: var(--space-1) 0; }
+.details dl + .privileges { margin-top: var(--space-3); }
+.details .privileges .what, .details label.privilege small { color: var(--text-muted); font-size: 12px; }
+.details .denied { color: var(--danger-text); font-size: 11px; }
+.details .unsaid { color: var(--text-muted); }
+.details .edit label.privilege { align-items: flex-start; }
+.details .edit label.privilege input { margin-top: 2px; }
+.details .edit label.privilege span { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.details label.inline { display: flex; align-items: center; gap: var(--space-2); font-size: 12px; color: var(--text-secondary); }
+.details label.inline select {
+    min-height: var(--control-sm);
+    padding: 2px var(--space-2);
+    font: inherit;
+    color: var(--text-primary);
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.details .edit textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 3px var(--space-2);
+    font: 500 12px/1.4 var(--font-mono);
+    color: var(--text-primary);
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    resize: vertical;
+}
+
+.details button.primary { color: var(--accent-on); background: var(--accent-solid); border-color: var(--accent-solid); }
+.details button.danger { color: var(--danger-text); border-color: var(--danger-text); }
+
+/* A user being made or changed, in the pane. */
+.details .edit { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; }
+.details .edit h2 + .id { margin-top: calc(-1 * var(--space-2)); }
+.details .edit label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.details .edit label.check { flex-direction: row; align-items: center; gap: var(--space-2); font-weight: 500; color: var(--text-primary); }
+.details .edit input:not([type="checkbox"]):not([type="radio"]), .details .edit select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: var(--control-sm);
+    padding: 3px var(--space-2);
+    font: 500 13px/1.4 var(--font-text);
+    color: var(--text-primary);
+    background: var(--bg-sunken);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+}
+.details .edit input[type="checkbox"], .details .edit input[type="radio"] { margin: 0; accent-color: var(--accent-solid); }
+.details .edit label.check:has(input:disabled) { color: var(--text-muted); }
+.details .edit .hint { margin: calc(-1 * var(--space-2)) 0 0; font-size: 12px; color: var(--text-muted); }
+.details .edit .hint code { font: 500 11px/1.4 var(--font-mono); }
+.details .edit .note { margin: 0; }
+.details .edit .actions { margin: 0; }
+.details .choice { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; border: 0; }
+.details .choice legend { margin-bottom: var(--space-2); padding: 0; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.details .choice .hint { margin: 0 0 0 calc(13px + var(--space-2)); }
+.details .types { display: flex; flex-direction: column; gap: var(--space-2); margin-left: calc(13px + var(--space-2)); }
+
+/* Asking before a user is deleted. */
+.details .asking { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; }
+.details .asking p { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--text-secondary); }
+.details .asking button {
+    height: var(--control-sm);
+    padding: 0 var(--space-3);
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--surface-2);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.details .asking button.danger { color: var(--danger-text); border-color: var(--danger-text); }
+
+.status {
+    display: flex;
+    flex: none;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-3);
+    border-top: 1px solid var(--border-default);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.status .bad { color: var(--danger-text); }
+
+.trouble, .more, .said { margin: var(--space-2) var(--space-3); font-size: 12px; color: var(--text-muted); }
+.trouble, .said.bad { color: var(--danger-text); }
+.said { flex: none; }
+.said:not(.bad) { color: var(--text-secondary); }
+
+/* Narrow, as half a screen is: the columns go before the pane does, since
+   the pane is where a principal is seen in full. */
+@media (max-width: 860px) {
+    .users .head, .users .entries button { grid-template-columns: minmax(0, 1fr) 80px; }
+    .users .head span:nth-child(2), .users .entries .full, .users .head span:nth-child(3), .users .entries .kind { display: none; }
+    .groups .head, .groups .entries button { grid-template-columns: minmax(0, 2fr) 80px minmax(0, 1fr); }
+    .groups .head span:nth-child(4), .groups .entries .about { display: none; }
+    .records .head, .records .entries button { grid-template-columns: minmax(0, 1fr) 90px 70px; }
+    .records .head span:nth-child(4), .records .entries .also { display: none; }
+    .details { width: 260px; }
+}
+@media (max-width: 560px) {
+    .details { width: 50%; }
+    .groups .head, .groups .entries button { grid-template-columns: minmax(0, 1fr) 70px; }
+    .groups .head span:nth-child(2), .groups .entries .kind { display: none; }
+    .records .head, .records .entries button { grid-template-columns: minmax(0, 1fr) 70px; }
+    .records .head span:nth-child(2), .records .entries .privs { display: none; }
+}
