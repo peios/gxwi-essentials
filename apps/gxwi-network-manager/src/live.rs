@@ -48,12 +48,17 @@ pub struct Live {
 }
 
 /// Services a socket's owner is recognised as, by its service SID.
-const SERVICES: &[&str] = &["sshd", "gxwid", "resolvd", "pnpd", "netd", "timed", "peipkg", "atriumd", "authd", "eventd"];
+const SERVICES: &[&str] = &[
+    "sshd", "gxwid", "resolvd", "pnpd", "netd", "timed", "peipkg", "atriumd", "authd", "eventd",
+];
 
 /// The service a program endpoint runs as, by name.
 pub fn service(endpoint: &Endpoint) -> Option<&'static str> {
     let sid = endpoint.service.as_deref()?;
-    SERVICES.iter().copied().find(|name| pnp_core::Sid::service(name).as_bytes() == sid)
+    SERVICES
+        .iter()
+        .copied()
+        .find(|name| pnp_core::Sid::service(name).as_bytes() == sid)
 }
 
 fn owner(service: Option<&str>, comm: &str, pid: i32) -> Endpoint {
@@ -64,10 +69,23 @@ fn owner(service: Option<&str>, comm: &str, pid: i32) -> Endpoint {
             pid,
             guid: [0; 16],
             comm: comm.into(),
-            user: Some(pnp_core::Sid::well_known("LocalService").unwrap_or_default().as_bytes().to_vec()),
+            user: Some(
+                pnp_core::Sid::well_known("LocalService")
+                    .unwrap_or_default()
+                    .as_bytes()
+                    .to_vec(),
+            ),
             service: Some(pnp_core::Sid::service(name).as_bytes().to_vec()),
         },
-        None => Endpoint { kind: EndpointKind::None, unresolved: false, pid: 0, guid: [0; 16], comm: String::new(), user: None, service: None },
+        None => Endpoint {
+            kind: EndpointKind::None,
+            unresolved: false,
+            pid: 0,
+            guid: [0; 16],
+            comm: String::new(),
+            user: None,
+            service: None,
+        },
     }
 }
 
@@ -116,10 +134,22 @@ pub fn conn(flow: &Flow, config: &Config, state: &State) -> Conn {
     let interface = if flow.loopback {
         "lo".to_string()
     } else {
-        state.interfaces.iter().find(|i| Some(i.status.index as i32) == flow.ifindex).map(|i| i.status.name.clone()).unwrap_or_else(|| "eth0".into())
+        state
+            .interfaces
+            .iter()
+            .find(|i| Some(i.status.index as i32) == flow.ifindex)
+            .map(|i| i.status.name.clone())
+            .unwrap_or_else(|| "eth0".into())
     };
-    let network = state.interface(&interface).map(|i| i.subject(config).network).unwrap_or_default();
-    let (local, remote, local_port, remote_port) = if inbound { (flow.dst, flow.src, flow.dst_port, flow.src_port) } else { (flow.src, flow.dst, flow.src_port, flow.dst_port) };
+    let network = state
+        .interface(&interface)
+        .map(|i| i.subject(config).network)
+        .unwrap_or_default();
+    let (local, remote, local_port, remote_port) = if inbound {
+        (flow.dst, flow.src, flow.dst_port, flow.src_port)
+    } else {
+        (flow.src, flow.dst, flow.src_port, flow.dst_port)
+    };
     let owner = flow.owner();
     Conn {
         inbound,
@@ -143,12 +173,24 @@ pub fn count(counters: &[Counter], view: &pnp_core::CounterView, conn: &Conn) ->
         dst_addr: view.keyspec & pnp_core::keyspec::DST_ADDR != 0,
         interface: view.keyspec & pnp_core::keyspec::INTERFACE != 0,
     };
-    let (src, dst): (Option<IpAddr>, Option<IpAddr>) = if conn.inbound { (conn.remote.parse().ok(), conn.local.parse().ok()) } else { (conn.local.parse().ok(), conn.remote.parse().ok()) };
-    let cell = counters.iter().find(|c| c.name == view.name.as_str() && c.keyspec == want && (!want.src_addr || c.src == src) && (!want.dst_addr || c.dst == dst))?;
+    let (src, dst): (Option<IpAddr>, Option<IpAddr>) = if conn.inbound {
+        (conn.remote.parse().ok(), conn.local.parse().ok())
+    } else {
+        (conn.local.parse().ok(), conn.remote.parse().ok())
+    };
+    let cell = counters.iter().find(|c| {
+        c.name == view.name.as_str()
+            && c.keyspec == want
+            && (!want.src_addr || c.src == src)
+            && (!want.dst_addr || c.dst == dst)
+    })?;
     if view.window_secs == 0 {
         return Some(cell.total);
     }
-    cell.windows.iter().find(|(w, _)| *w == view.window_secs).map(|(_, v)| *v)
+    cell.windows
+        .iter()
+        .find(|(w, _)| *w == view.window_secs)
+        .map(|(_, v)| *v)
 }
 
 /// A small, steady pseudo-random number for `seed`: the example changes
@@ -173,24 +215,38 @@ fn v4(text: &str) -> Option<Ipv4Addr> {
 
 /// The firewall's live state. Example data: see the module's comment.
 pub fn read(config: &Config, state: &State, generation: u64) -> Live {
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let minute = now / 60;
     let iface = state.online().or(state.interfaces.first());
     let ifindex = iface.map(|i| i.status.index as i32).unwrap_or(2);
-    let here = iface.and_then(|i| i.status.addresses.iter().find_map(|a| v4(a))).unwrap_or(Ipv4Addr::new(192, 168, 1, 40));
-    let gateway = iface.and_then(|i| i.status.gateway.as_deref()).and_then(v4).unwrap_or(neighbour(here, 1));
-    let dns = iface.and_then(|i| i.status.dns.first()).and_then(|d| v4(d)).unwrap_or(gateway);
+    let here = iface
+        .and_then(|i| i.status.addresses.iter().find_map(|a| v4(a)))
+        .unwrap_or(Ipv4Addr::new(192, 168, 1, 40));
+    let gateway = iface
+        .and_then(|i| i.status.gateway.as_deref())
+        .and_then(v4)
+        .unwrap_or(neighbour(here, 1));
+    let dns = iface
+        .and_then(|i| i.status.dns.first())
+        .and_then(|d| v4(d))
+        .unwrap_or(gateway);
 
-    let listener = |service: &str, comm: &str, protocol: u8, port: u16, addr: Option<IpAddr>, pid: i32| Listener {
-        protocol,
-        port,
-        addr,
-        ifindex: None,
-        reuseport: false,
-        connected: false,
-        v6only: false,
-        owner: owner(Some(service), comm, pid),
-    };
+    let listener =
+        |service: &str, comm: &str, protocol: u8, port: u16, addr: Option<IpAddr>, pid: i32| {
+            Listener {
+                protocol,
+                port,
+                addr,
+                ifindex: None,
+                reuseport: false,
+                connected: false,
+                v6only: false,
+                owner: owner(Some(service), comm, pid),
+            }
+        };
     let stub = Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 53)));
     let listeners = vec![
         listener("sshd", "sshd", 6, 22, None, 412),
@@ -206,17 +262,74 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
     let flood = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 50));
     let peer = IpAddr::V4(neighbour(here, 31));
     let mut shapes: Vec<Shape> = vec![
-        (true, 6, peer, 40122, 22, Some("sshd"), 360, [98_000, 114_000]),
+        (
+            true,
+            6,
+            peer,
+            40122,
+            22,
+            Some("sshd"),
+            360,
+            [98_000, 114_000],
+        ),
         (true, 6, flood, 58210, 22, Some("sshd"), 2, [180, 0]),
-        (true, 6, IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7)), 49311, 3389, None, 8, [60, 0]),
-        (false, 17, IpAddr::V4(dns), 53, 41877, Some("resolvd"), 1, [82, 82]),
-        (false, 6, IpAddr::V4(Ipv4Addr::new(151, 101, 2, 132)), 443, 52210, Some("peipkg"), 12, [600_000, 41_000_000]),
-        (false, 17, IpAddr::V4(Ipv4Addr::new(162, 159, 200, 1)), 123, 38001, Some("timed"), 180, [90, 90]),
+        (
+            true,
+            6,
+            IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7)),
+            49311,
+            3389,
+            None,
+            8,
+            [60, 0],
+        ),
+        (
+            false,
+            17,
+            IpAddr::V4(dns),
+            53,
+            41877,
+            Some("resolvd"),
+            1,
+            [82, 82],
+        ),
+        (
+            false,
+            6,
+            IpAddr::V4(Ipv4Addr::new(151, 101, 2, 132)),
+            443,
+            52210,
+            Some("peipkg"),
+            12,
+            [600_000, 41_000_000],
+        ),
+        (
+            false,
+            17,
+            IpAddr::V4(Ipv4Addr::new(162, 159, 200, 1)),
+            123,
+            38001,
+            Some("timed"),
+            180,
+            [90, 90],
+        ),
     ];
     // The desktop's own connections are real.
     for s in &state.sessions {
         if let Ok(remote) = s.remote.parse() {
-            shapes.insert(0, (true, 6, remote, s.remote_port, s.local_port, Some("gxwid"), 2460, [2_100_000, 18_400_000]));
+            shapes.insert(
+                0,
+                (
+                    true,
+                    6,
+                    remote,
+                    s.remote_port,
+                    s.local_port,
+                    Some("gxwid"),
+                    2460,
+                    [2_100_000, 18_400_000],
+                ),
+            );
         }
     }
 
@@ -264,25 +377,48 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
                 dst: None,
                 total: 380 + rate * 9 + wobble(n as u64, 40),
                 last_secs: now - 1,
-                windows: windows.iter().map(|w| (*w, rate * u64::from(*w) / 60)).collect(),
+                windows: windows
+                    .iter()
+                    .map(|w| (*w, rate * u64::from(*w) / 60))
+                    .collect(),
             }
         };
         counters.push(cell(None, KeySpec::default()));
         for remote in [flood, peer] {
-            counters.push(cell(Some(remote), KeySpec { src_addr: true, ..KeySpec::default() }));
+            counters.push(cell(
+                Some(remote),
+                KeySpec {
+                    src_addr: true,
+                    ..KeySpec::default()
+                },
+            ));
         }
     }
 
     let judge = Judge::new(&config.policy).ok();
-    let judged = |c: &Conn| judge.as_ref().and_then(|j| j.result(c, &|v, c| count(&counters, v, c)).ok());
+    let judged = |c: &Conn| {
+        judge
+            .as_ref()
+            .and_then(|j| j.result(c, &|v, c| count(&counters, v, c)).ok())
+    };
     let mut flows = Vec::new();
-    for (i, (inbound, protocol, remote, rport, lport, service, age, bytes)) in shapes.iter().enumerate() {
+    for (i, (inbound, protocol, remote, rport, lport, service, age, bytes)) in
+        shapes.iter().enumerate()
+    {
         let local = IpAddr::V4(here);
-        let (src, dst, sport, dport) = if *inbound { (*remote, local, *rport, *lport) } else { (local, *remote, *lport, *rport) };
+        let (src, dst, sport, dport) = if *inbound {
+            (*remote, local, *rport, *lport)
+        } else {
+            (local, *remote, *lport, *rport)
+        };
         let mut flow = Flow {
             id: 0x4000 + i as u32,
             protocol: *protocol,
-            direction: Some(if *inbound { Direction::In } else { Direction::Out }),
+            direction: Some(if *inbound {
+                Direction::In
+            } else {
+                Direction::Out
+            }),
             loopback: false,
             seen_reply: bytes[1] > 0,
             assured: bytes[1] > 0,
@@ -299,7 +435,13 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
             start_secs: now - age,
             packets: [bytes[0] / 900 + 1, bytes[1] / 900],
             bytes: *bytes,
-            slots: [Slot { sentence: None, owner: Some(owner(*service, service.unwrap_or_default(), 300 + i as i32)) }, Slot::default()],
+            slots: [
+                Slot {
+                    sentence: None,
+                    owner: Some(owner(*service, service.unwrap_or_default(), 300 + i as i32)),
+                },
+                Slot::default(),
+            ],
             tags: Vec::new(),
             n_tags: 0,
         };
@@ -308,10 +450,19 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
         if let Some(decision) = judged(&c) {
             let verdict = match decision.verdict {
                 Verdict::Allow => ntfe::Verdict::Pass,
-                Verdict::Reject { prohibited } => ntfe::Verdict::Reject(if prohibited { ntfe::RejectKind::Prohibited } else { ntfe::RejectKind::Refused }),
+                Verdict::Reject { prohibited } => ntfe::Verdict::Reject(if prohibited {
+                    ntfe::RejectKind::Prohibited
+                } else {
+                    ntfe::RejectKind::Refused
+                }),
                 _ => ntfe::Verdict::Drop,
             };
-            flow.slots[0].sentence = Some(Sentence { generation, expires_at: None, rule_hash: ntfe::rule_hash(decision.by.as_deref().unwrap_or("backstop")), verdict: Some(verdict) });
+            flow.slots[0].sentence = Some(Sentence {
+                generation,
+                expires_at: None,
+                rule_hash: ntfe::rule_hash(decision.by.as_deref().unwrap_or("backstop")),
+                verdict: Some(verdict),
+            });
         }
         flows.push(flow);
     }
@@ -323,11 +474,20 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
     let mut seq = 1_000_000 + minute * 1000;
     let template = |c: &Conn, t: u64| -> Option<Event> {
         let decision = judged(c)?;
-        let reports = decision.by.as_deref().and_then(|p| rules::find(config.policy.forest(decision.layer), p)).and_then(rules::Rule::report).is_some();
+        let reports = decision
+            .by
+            .as_deref()
+            .and_then(|p| rules::find(config.policy.forest(decision.layer), p))
+            .and_then(rules::Rule::report)
+            .is_some();
         Some(Event {
             seq: 0,
             time_ns: t * 1_000_000_000,
-            seat: if c.inbound { ntfe::Seat::LocalIn } else { ntfe::Seat::LocalOut },
+            seat: if c.inbound {
+                ntfe::Seat::LocalIn
+            } else {
+                ntfe::Seat::LocalOut
+            },
             layer: Some(match decision.layer {
                 rules::Layer::Packet => ntfe::Layer::Packet,
                 rules::Layer::RawPacket => ntfe::Layer::RawPacket,
@@ -335,10 +495,18 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
             }),
             verdict: Some(match decision.verdict {
                 Verdict::Allow => ntfe::Verdict::Pass,
-                Verdict::Reject { prohibited } => ntfe::Verdict::Reject(if prohibited { ntfe::RejectKind::Prohibited } else { ntfe::RejectKind::Refused }),
+                Verdict::Reject { prohibited } => ntfe::Verdict::Reject(if prohibited {
+                    ntfe::RejectKind::Prohibited
+                } else {
+                    ntfe::RejectKind::Refused
+                }),
                 _ => ntfe::Verdict::Drop,
             }),
-            direction: if c.inbound { Direction::In } else { Direction::Out },
+            direction: if c.inbound {
+                Direction::In
+            } else {
+                Direction::Out
+            },
             backstop: decision.by.is_none(),
             fail_closed: false,
             reject_degraded: false,
@@ -349,20 +517,67 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
             ifindex: ifindex as u32,
             src: (if c.inbound { &c.remote } else { &c.local }).parse().ok(),
             dst: (if c.inbound { &c.local } else { &c.remote }).parse().ok(),
-            src_port: if c.inbound { c.remote_port } else { c.local_port },
-            dst_port: if c.inbound { c.local_port } else { c.remote_port },
+            src_port: if c.inbound {
+                c.remote_port
+            } else {
+                c.local_port
+            },
+            dst_port: if c.inbound {
+                c.local_port
+            } else {
+                c.remote_port
+            },
             ether_type: 0x0800,
             length: 60,
-            effects: ntfe::Effects { reports: u8::from(reports), ..ntfe::Effects::default() },
+            effects: ntfe::Effects {
+                reports: u8::from(reports),
+                ..ntfe::Effects::default()
+            },
             attributed: decision.by.unwrap_or_else(|| "backstop".into()),
-            local: owner(c.service.as_deref(), c.service.as_deref().unwrap_or_default(), 300),
-            remote: Endpoint { kind: EndpointKind::Absent, unresolved: false, pid: 0, guid: [0; 16], comm: String::new(), user: None, service: None },
+            local: owner(
+                c.service.as_deref(),
+                c.service.as_deref().unwrap_or_default(),
+                300,
+            ),
+            remote: Endpoint {
+                kind: EndpointKind::Absent,
+                unresolved: false,
+                pid: 0,
+                guid: [0; 16],
+                comm: String::new(),
+                user: None,
+                service: None,
+            },
         })
     };
-    let outbound = Conn { inbound: false, remote: "151.101.2.132".into(), remote_port: 443, local: here.to_string(), local_port: 52210, service: Some("peipkg".into()), ..Conn::default() };
-    let ssh = |remote: &str| Conn { remote: remote.into(), local: here.to_string(), local_port: 22, service: Some("sshd".into()), ..Conn::default() };
-    let stray = Conn { remote: "198.51.100.7".into(), local: here.to_string(), local_port: 3389, ..Conn::default() };
-    let samples = [template(&outbound, 0), template(&ssh(&flood.to_string()), 0), template(&stray, 0), template(&ssh(&peer.to_string()), 0)];
+    let outbound = Conn {
+        inbound: false,
+        remote: "151.101.2.132".into(),
+        remote_port: 443,
+        local: here.to_string(),
+        local_port: 52210,
+        service: Some("peipkg".into()),
+        ..Conn::default()
+    };
+    let ssh = |remote: &str| Conn {
+        remote: remote.into(),
+        local: here.to_string(),
+        local_port: 22,
+        service: Some("sshd".into()),
+        ..Conn::default()
+    };
+    let stray = Conn {
+        remote: "198.51.100.7".into(),
+        local: here.to_string(),
+        local_port: 3389,
+        ..Conn::default()
+    };
+    let samples = [
+        template(&outbound, 0),
+        template(&ssh(&flood.to_string()), 0),
+        template(&stray, 0),
+        template(&ssh(&peer.to_string()), 0),
+    ];
     for back in (0..15u64).rev() {
         let start = (minute - back) * 60;
         let flood_now = match back {
@@ -370,9 +585,16 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
             8 | 2 => 1 + wobble(start, 2),
             _ => 0,
         };
-        let plan = [(0usize, 38 + wobble(start, 22)), (1, flood_now), (2, 2 + wobble(start + 1, 4)), (3, wobble(start + 2, 2))];
+        let plan = [
+            (0usize, 38 + wobble(start, 22)),
+            (1, flood_now),
+            (2, 2 + wobble(start + 1, 4)),
+            (3, wobble(start + 2, 2)),
+        ];
         for (sample, n) in plan {
-            let Some(event) = &samples[sample] else { continue };
+            let Some(event) = &samples[sample] else {
+                continue;
+            };
             for k in 0..n {
                 let mut e = event.clone();
                 seq += 1;
@@ -384,13 +606,29 @@ pub fn read(config: &Config, state: &State, generation: u64) -> Live {
     }
     events.sort_by_key(|e| e.time_ns);
 
-    Live { engine: Engine { generation, pending: false, refusal: None }, listeners, flows, counters, events, example: true }
+    Live {
+        engine: Engine {
+            generation,
+            pending: false,
+            refusal: None,
+        },
+        listeners,
+        flows,
+        counters,
+        events,
+        example: true,
+    }
 }
 
 /// The flows' deciding rules, by the hash a sentence names them by: every
 /// rule path of every firewall layer.
 pub fn rule_by_hash(config: &Config, hash: u64) -> Option<(rules::Layer, String)> {
-    rules::Layer::FIREWALL.into_iter().find_map(|layer| rules::walk(config.policy.forest(layer)).into_iter().find(|(p, _, _)| ntfe::rule_hash(p) == hash).map(|(p, _, _)| (layer, p)))
+    rules::Layer::FIREWALL.into_iter().find_map(|layer| {
+        rules::walk(config.policy.forest(layer))
+            .into_iter()
+            .find(|(p, _, _)| ntfe::rule_hash(p) == hash)
+            .map(|(p, _, _)| (layer, p))
+    })
 }
 
 /// What the engine decided for `conn` with the counters `live` holds.

@@ -17,11 +17,14 @@
 use std::collections::BTreeMap;
 
 use eventd_client::access::{
-    self, ADMIN_KEY, EVENTD_ADMINISTER, EVENTD_PUBLISH, EVENTD_READ, GENERIC_ALL, GENERIC_EXECUTE, GENERIC_READ, GENERIC_WRITE, Namespace, SECURITY_ROOT,
+    self, ADMIN_KEY, EVENTD_ADMINISTER, EVENTD_PUBLISH, EVENTD_READ, GENERIC_ALL, GENERIC_EXECUTE,
+    GENERIC_READ, GENERIC_WRITE, Namespace, SECURITY_ROOT,
 };
 use eventd_client::text;
 use gxwi_sd_editor::names::Names;
-use gxwi_sd_editor::{Can, Children, Generic, Naming, Object, ObjectPart, Part, PartKind, Request, Right, splice};
+use gxwi_sd_editor::{
+    Can, Children, Generic, Naming, Object, ObjectPart, Part, PartKind, Request, Right, splice,
+};
 use peios::registry::{CreateFlags, Key, KeyAccess, OpenFlags, ValueType};
 use peios::security::{AceType, SecurityDescriptor};
 
@@ -37,8 +40,20 @@ const FIELD_NAMESPACE: &str = "e7d3a1b0-5c2f-4e8a-9b1d-0a6f3c8e2d4b";
 fn guid_text(g: &[u8; 16]) -> String {
     format!(
         "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{}",
-        g[3], g[2], g[1], g[0], g[5], g[4], g[7], g[6], g[8], g[9],
-        g[10..].iter().map(|b| format!("{b:02x}")).collect::<String>()
+        g[3],
+        g[2],
+        g[1],
+        g[0],
+        g[5],
+        g[4],
+        g[7],
+        g[6],
+        g[8],
+        g[9],
+        g[10..]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
     )
 }
 
@@ -82,7 +97,10 @@ impl Space {
     }
 
     fn path(self, pattern: &str) -> String {
-        self.namespace().map_or_else(|| ADMIN_KEY.to_string(), |namespace| access::descriptor_path(namespace, pattern))
+        self.namespace().map_or_else(
+            || ADMIN_KEY.to_string(),
+            |namespace| access::descriptor_path(namespace, pattern),
+        )
     }
 
     pub fn heading(self) -> &'static str {
@@ -109,7 +127,11 @@ impl Space {
 
     /// Its rights, as the editor offers them.
     fn rights(self) -> Vec<Right> {
-        let right = |name: &str, mask: u32| Right { name: name.into(), mask, general: true };
+        let right = |name: &str, mask: u32| Right {
+            name: name.into(),
+            mask,
+            general: true,
+        };
         match self {
             Space::Events | Space::Logs => vec![right("Read", EVENTD_READ)],
             Space::Metrics => vec![right("Read", EVENTD_READ), right("Publish", EVENTD_PUBLISH)],
@@ -162,7 +184,11 @@ pub fn read() -> Policy {
                     patterns
                 }
                 Err(error) => {
-                    policy.trouble.push(format!("{} patterns could not be read: {}.", space.heading(), unreadable(&error)));
+                    policy.trouble.push(format!(
+                        "{} patterns could not be read: {}.",
+                        space.heading(),
+                        unreadable(&error)
+                    ));
                     continue;
                 }
             },
@@ -172,7 +198,9 @@ pub fn read() -> Policy {
             match entry(space, &pattern, &mut names) {
                 Ok(Some(entry)) => policy.entries.push(entry),
                 Ok(None) => {}
-                Err(why) => policy.trouble.push(format!("{}: {why}.", space.covers(&pattern))),
+                Err(why) => policy
+                    .trouble
+                    .push(format!("{}: {why}.", space.covers(&pattern))),
             }
         }
         if let Some(namespace) = space.namespace() {
@@ -187,14 +215,27 @@ pub fn read() -> Policy {
 
 fn entry(space: Space, pattern: &str, names: &mut Names) -> Result<Option<Entry>, String> {
     let path = space.path(pattern);
-    let Some(descriptor) = load(&path)? else { return Ok(None) };
+    let Some(descriptor) = load(&path)? else {
+        return Ok(None);
+    };
     let unchangeable = match Key::open(None, &path, KeyAccess::SET_VALUE, OpenFlags::empty()) {
         Ok(_) => None,
-        Err(error) if error.raw_os_error() == Some(EACCES) => Some("You may not change this. On this machine, administrators may.".to_string()),
-        Err(error) => Some(format!("Whether you may change this could not be found out: {error}.")),
+        Err(error) if error.raw_os_error() == Some(EACCES) => {
+            Some("You may not change this. On this machine, administrators may.".to_string())
+        }
+        Err(error) => Some(format!(
+            "Whether you may change this could not be found out: {error}."
+        )),
     };
-    let removable = space.removable(pattern) && Key::open(None, &path, KeyAccess::DELETE, OpenFlags::empty()).is_ok();
-    Ok(Some(Entry { space, pattern: pattern.into(), grants: grants(&descriptor, space, names), unchangeable, removable }))
+    let removable = space.removable(pattern)
+        && Key::open(None, &path, KeyAccess::DELETE, OpenFlags::empty()).is_ok();
+    Ok(Some(Entry {
+        space,
+        pattern: pattern.into(),
+        grants: grants(&descriptor, space, names),
+        unchangeable,
+        removable,
+    }))
 }
 
 fn load(path: &str) -> Result<Option<SecurityDescriptor>, String> {
@@ -211,14 +252,24 @@ fn load(path: &str) -> Result<Option<SecurityDescriptor>, String> {
     if value.ty != ValueType::BINARY {
         return Err("it is not a security descriptor".into());
     }
-    SecurityDescriptor::from_validated_bytes(value.data).map(Some).map_err(|error| format!("it is not a security descriptor ({error})"))
+    SecurityDescriptor::from_validated_bytes(value.data)
+        .map(Some)
+        .map_err(|error| format!("it is not a security descriptor ({error})"))
 }
 
 /// What a descriptor grants and denies, principal by principal, in its
 /// access list's order.
-fn grants(descriptor: &SecurityDescriptor, space: Space, names: &mut Names) -> Vec<(String, String)> {
-    let Ok(view) = descriptor.view() else { return vec![("Nobody".into(), "its access list could not be read".into())] };
-    let Some(dacl) = view.dacl() else { return vec![("Everyone".into(), "anything: it has no access list".into())] };
+fn grants(
+    descriptor: &SecurityDescriptor,
+    space: Space,
+    names: &mut Names,
+) -> Vec<(String, String)> {
+    let Ok(view) = descriptor.view() else {
+        return vec![("Nobody".into(), "its access list could not be read".into())];
+    };
+    let Some(dacl) = view.dacl() else {
+        return vec![("Everyone".into(), "anything: it has no access list".into())];
+    };
     let fields = known_fields();
     let mut said: Vec<(String, Vec<String>)> = Vec::new();
     for ace in dacl.iter() {
@@ -255,7 +306,16 @@ fn grants(descriptor: &SecurityDescriptor, space: Space, names: &mut Names) -> V
                 || "a field".to_string(),
                 // Its name can't be told from its GUID: what else it is
                 // is a field the records' emitters chose, or a label.
-                |guid| fields.get(guid).cloned().unwrap_or_else(|| if space == Space::Metrics { "a label" } else { "a payload field" }.into()),
+                |guid| {
+                    fields.get(guid).cloned().unwrap_or_else(|| {
+                        if space == Space::Metrics {
+                            "a label"
+                        } else {
+                            "a payload field"
+                        }
+                        .into()
+                    })
+                },
             )
         };
         let what = match ace.ace_type() {
@@ -275,7 +335,9 @@ fn grants(descriptor: &SecurityDescriptor, space: Space, names: &mut Names) -> V
     if said.is_empty() {
         return vec![("Nobody".into(), "may read these".into())];
     }
-    said.into_iter().map(|(who, whats)| (who, whats.join("; "))).collect()
+    said.into_iter()
+        .map(|(who, whats)| (who, whats.join("; ")))
+        .collect()
 }
 
 /// The fields eventd always has, by their GUIDs, so that a grant of one
@@ -285,19 +347,48 @@ fn known_fields() -> BTreeMap<[u8; 16], String> {
     crate::words::HEADERS
         .iter()
         // Logs' and metrics' own, which keep the names the header had.
-        .chain(["timestamp", "boot_id", "origin", "is_error", "message", "job_id", "name", "type", "value"].iter())
+        .chain(
+            [
+                "timestamp",
+                "boot_id",
+                "origin",
+                "is_error",
+                "message",
+                "job_id",
+                "name",
+                "type",
+                "value",
+            ]
+            .iter(),
+        )
         .map(|field| (access::field_guid(field), format!("its {field} field")))
         .collect()
 }
 
 /// Opens `pattern` in gxwi-sd-editor; `changed` is called after each
 /// change is written, and the editor goes when the person closes it.
-pub fn edit(space: Space, pattern: &str, changed: impl Fn() + Send + 'static) -> Result<(), String> {
+pub fn edit(
+    space: Space,
+    pattern: &str,
+    changed: impl Fn() + Send + 'static,
+) -> Result<(), String> {
     let path = space.path(pattern);
-    let (key, can) = match Key::open(None, &path, KeyAccess::QUERY_VALUE | KeyAccess::SET_VALUE, OpenFlags::empty()) {
-        Ok(key) => (key, Can { dacl: true, ..Can::default() }),
+    let (key, can) = match Key::open(
+        None,
+        &path,
+        KeyAccess::QUERY_VALUE | KeyAccess::SET_VALUE,
+        OpenFlags::empty(),
+    ) {
+        Ok(key) => (
+            key,
+            Can {
+                dacl: true,
+                ..Can::default()
+            },
+        ),
         Err(error) if error.raw_os_error() == Some(EACCES) => {
-            let key = Key::open(None, &path, KeyAccess::QUERY_VALUE, OpenFlags::empty()).map_err(|error| unreadable(&error))?;
+            let key = Key::open(None, &path, KeyAccess::QUERY_VALUE, OpenFlags::empty())
+                .map_err(|error| unreadable(&error))?;
             (key, Can { dacl: false, why: Some("You may not change who may read these. On this machine, administrators may.".into()), ..Can::default() })
         }
         Err(error) => return Err(unreadable(&error)),
@@ -306,11 +397,32 @@ pub fn edit(space: Space, pattern: &str, changed: impl Fn() + Send + 'static) ->
     // Reading can be granted a field at a time (eventd TRM §7.3): the
     // fields every record has, and, for events and metrics, any other by
     // its name, whose GUID eventd derives from it.
-    let field = |name: &str| ObjectPart { guid: guid_text(&access::field_guid(name)), name: name.into(), kind: PartKind::Property, set: None };
+    let field = |name: &str| ObjectPart {
+        guid: guid_text(&access::field_guid(name)),
+        name: name.into(),
+        kind: PartKind::Property,
+        set: None,
+    };
     let (fields, naming): (Vec<&str>, _) = match space {
-        Space::Events => (crate::words::HEADERS.to_vec(), Some(("field", "source.name"))),
-        Space::Logs => (vec!["timestamp", "origin", "is_error", "message", "job_id", "boot_id"], None),
-        Space::Metrics => (vec!["timestamp", "boot_id", "name", "type", "value"], Some(("label", "core"))),
+        Space::Events => (
+            crate::words::HEADERS.to_vec(),
+            Some(("field", "source.name")),
+        ),
+        Space::Logs => (
+            vec![
+                "timestamp",
+                "origin",
+                "is_error",
+                "message",
+                "job_id",
+                "boot_id",
+            ],
+            None,
+        ),
+        Space::Metrics => (
+            vec!["timestamp", "boot_id", "name", "type", "value"],
+            Some(("label", "core")),
+        ),
         Space::Admin => (vec![], None),
     };
     let request = Request {
@@ -320,34 +432,61 @@ pub fn edit(space: Space, pattern: &str, changed: impl Fn() + Send + 'static) ->
             container: false,
             children: Children::All,
             parts: fields.iter().map(|f| field(f)).collect(),
-            part_rights: if fields.is_empty() { vec![] } else { vec![Right { name: "Read".into(), mask: EVENTD_READ, general: false }] },
-            naming: naming.map(|(noun, example)| Naming { namespace: FIELD_NAMESPACE.into(), noun: noun.into(), example: Some(example.into()) }),
+            part_rights: if fields.is_empty() {
+                vec![]
+            } else {
+                vec![Right {
+                    name: "Read".into(),
+                    mask: EVENTD_READ,
+                    general: false,
+                }]
+            },
+            naming: naming.map(|(noun, example)| Naming {
+                namespace: FIELD_NAMESPACE.into(),
+                noun: noun.into(),
+                example: Some(example.into()),
+            }),
             ..Object::default()
         },
         sd: current.as_bytes().to_vec(),
         rights: space.rights(),
-        generic: Generic { read: GENERIC_READ, write: GENERIC_WRITE, execute: GENERIC_EXECUTE, all: GENERIC_ALL },
+        generic: Generic {
+            read: GENERIC_READ,
+            write: GENERIC_WRITE,
+            execute: GENERIC_EXECUTE,
+            all: GENERIC_ALL,
+        },
         can,
         ..Request::default()
     };
     let apply = move |sd: &[u8], parts: &[Part]| {
         let now = load(&path)?.ok_or("it has gone")?;
         let value = splice(now.as_bytes(), sd, parts)?;
-        key.set_value(b"", ValueType::BINARY, &value).call().map_err(|error| refused(&error))?;
+        key.set_value(b"", ValueType::BINARY, &value)
+            .call()
+            .map_err(|error| refused(&error))?;
         changed();
         Ok(())
     };
     gxwi_sd_editor::edit(&request, apply, || {}).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::NotFound { "The permissions editor, gxwi-sd-editor, is not installed.".into() } else { format!("The permissions editor could not be started: {error}.") }
+        if error.kind() == std::io::ErrorKind::NotFound {
+            "The permissions editor, gxwi-sd-editor, is not installed.".into()
+        } else {
+            format!("The permissions editor could not be started: {error}.")
+        }
     })
 }
 
 /// Adds a pattern, with the descriptor that applies to that name now.
 pub fn add(space: Space, pattern: &str) -> Result<(), String> {
     let pattern = pattern.trim();
-    let Some(namespace) = space.namespace() else { return Err("There is only one administrative descriptor.".into()) };
+    let Some(namespace) = space.namespace() else {
+        return Err("There is only one administrative descriptor.".into());
+    };
     if !text::is_identifier(pattern) {
-        return Err(format!("A pattern is a name such as sshd or kacs.access_denied: letters, digits, dots, dashes and underscores, not starting with a digit. \"{pattern}\" is not one."));
+        return Err(format!(
+            "A pattern is a name such as sshd or kacs.access_denied: letters, digits, dots, dashes and underscores, not starting with a digit. \"{pattern}\" is not one."
+        ));
     }
     let path = access::descriptor_path(namespace, pattern);
     if load(&path)?.is_some() {
@@ -359,9 +498,27 @@ pub fn add(space: Space, pattern: &str) -> Result<(), String> {
         Err(error) => return Err(unreadable(&error)),
     };
     let parent_path = format!("{SECURITY_ROOT}\\{}", namespace.registry_name());
-    let (parent, _) = Key::create(None, &parent_path, KeyAccess::CREATE_SUB_KEY, CreateFlags::empty(), None, None).map_err(|error| refused(&error))?;
-    let (key, _) = Key::create(Some(&parent), pattern, KeyAccess::SET_VALUE, CreateFlags::empty(), None, None).map_err(|error| refused(&error))?;
-    key.set_value(b"", ValueType::BINARY, now.as_bytes()).call().map_err(|error| refused(&error))
+    let (parent, _) = Key::create(
+        None,
+        &parent_path,
+        KeyAccess::CREATE_SUB_KEY,
+        CreateFlags::empty(),
+        None,
+        None,
+    )
+    .map_err(|error| refused(&error))?;
+    let (key, _) = Key::create(
+        Some(&parent),
+        pattern,
+        KeyAccess::SET_VALUE,
+        CreateFlags::empty(),
+        None,
+        None,
+    )
+    .map_err(|error| refused(&error))?;
+    key.set_value(b"", ValueType::BINARY, now.as_bytes())
+        .call()
+        .map_err(|error| refused(&error))
 }
 
 pub fn remove(space: Space, pattern: &str) -> Result<(), String> {
@@ -372,16 +529,30 @@ pub fn remove(space: Space, pattern: &str) -> Result<(), String> {
             "This one cannot be removed: eventd makes it again when it next starts.".into()
         });
     }
-    let key = Key::open(None, &space.path(pattern), KeyAccess::DELETE, OpenFlags::empty()).map_err(|error| refused(&error))?;
+    let key = Key::open(
+        None,
+        &space.path(pattern),
+        KeyAccess::DELETE,
+        OpenFlags::empty(),
+    )
+    .map_err(|error| refused(&error))?;
     key.delete_key(None, None).map_err(|error| refused(&error))
 }
 
 fn unreadable(error: &peios::Error) -> String {
-    if error.raw_os_error() == Some(EACCES) { "you may not read it".into() } else { error.to_string() }
+    if error.raw_os_error() == Some(EACCES) {
+        "you may not read it".into()
+    } else {
+        error.to_string()
+    }
 }
 
 fn refused(error: &peios::Error) -> String {
-    if error.raw_os_error() == Some(EACCES) { "you are not allowed to".into() } else { error.to_string() }
+    if error.raw_os_error() == Some(EACCES) {
+        "you are not allowed to".into()
+    } else {
+        error.to_string()
+    }
 }
 
 #[cfg(test)]
@@ -397,14 +568,20 @@ mod tests {
     fn a_field_is_sent_by_the_guid_eventd_gives_it() {
         // The editor derives a typed field's GUID from FIELD_NAMESPACE; its
         // own test gives "timestamp" this one, which eventd agrees with.
-        assert_eq!(guid_text(&access::field_guid("timestamp")), "341d2267-b9db-536b-b36c-94ab6cd47e4c");
+        assert_eq!(
+            guid_text(&access::field_guid("timestamp")),
+            "341d2267-b9db-536b-b36c-94ab6cd47e4c"
+        );
         assert_eq!(FIELD_NAMESPACE.len(), 36);
     }
 
     #[test]
     fn a_pattern_is_said_principal_by_principal() {
         assert_eq!(
-            said("O:SYG:SYD:P(A;;0x1;;;SY)(A;;0x1;;;BA)(A;;0x1;;;AU)", Space::Logs),
+            said(
+                "O:SYG:SYD:P(A;;0x1;;;SY)(A;;0x1;;;BA)(A;;0x1;;;AU)",
+                Space::Logs
+            ),
             [
                 ("Local System".to_string(), "may read".to_string()),
                 ("BUILTIN\\Administrators".into(), "may read".into()),
@@ -413,17 +590,34 @@ mod tests {
         );
         assert_eq!(
             said("O:SYG:SYD:P(A;;0x9;;;SY)(A;;0x1;;;AU)", Space::Metrics),
-            [("Local System".to_string(), "may read and publish".to_string()), ("Authenticated Users".into(), "may read".into())]
+            [
+                (
+                    "Local System".to_string(),
+                    "may read and publish".to_string()
+                ),
+                ("Authenticated Users".into(), "may read".into())
+            ]
         );
-        assert_eq!(said("O:SYG:SYD:P(A;;GA;;;BA)", Space::Admin), [("BUILTIN\\Administrators".to_string(), "may index fields".to_string())]);
-        assert_eq!(said("O:SYG:SYD:P(A;;0x4;;;SY)", Space::Logs), [("Nobody".to_string(), "may read these".to_string())]);
+        assert_eq!(
+            said("O:SYG:SYD:P(A;;GA;;;BA)", Space::Admin),
+            [(
+                "BUILTIN\\Administrators".to_string(),
+                "may index fields".to_string()
+            )]
+        );
+        assert_eq!(
+            said("O:SYG:SYD:P(A;;0x4;;;SY)", Space::Logs),
+            [("Nobody".to_string(), "may read these".to_string())]
+        );
     }
 
     #[test]
     fn a_grant_of_fields_names_them() {
         let text = format!(
             "O:SYG:SYD:P(D;;0x1;;;AN)(A;;0x1;;;SY)(OA;;0x1;{};;BA)(OA;;0x1;{};;BA)(OA;;0x1;{};;BA)",
-            "341d2267-b9db-536b-b36c-94ab6cd47e4c", "fe639b5f-4f7f-54c5-9702-f20fac24fa0e", "11111111-2222-5333-8444-555555555555"
+            "341d2267-b9db-536b-b36c-94ab6cd47e4c",
+            "fe639b5f-4f7f-54c5-9702-f20fac24fa0e",
+            "11111111-2222-5333-8444-555555555555"
         );
         assert_eq!(
             said(&text, Space::Logs),
@@ -442,8 +636,14 @@ mod tests {
         assert!(!Space::Metrics.removable("eventd"));
         assert!(Space::Metrics.removable("cpu"));
         assert!(Space::Logs.removable("sshd"));
-        assert_eq!(Space::Logs.covers("sshd"), "Logs from sshd, and from what runs under it");
+        assert_eq!(
+            Space::Logs.covers("sshd"),
+            "Logs from sshd, and from what runs under it"
+        );
         assert_eq!(Space::Admin.path("Admin"), ADMIN_KEY);
-        assert_eq!(Space::Metrics.path("eventd"), "Machine\\System\\eventd\\Security\\Metrics\\eventd");
+        assert_eq!(
+            Space::Metrics.path("eventd"),
+            "Machine\\System\\eventd\\Security\\Metrics\\eventd"
+        );
     }
 }

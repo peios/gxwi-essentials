@@ -63,8 +63,21 @@ pub fn documented(page: &str) -> Vec<Setting> {
     records
         .into_iter()
         .filter_map(|record| {
-            let name = record.canonical.strip_prefix(KEY)?.strip_prefix(' ')?.trim().to_string();
-            let about = record.body.trim().split("\n\n").next().unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(" ");
+            let name = record
+                .canonical
+                .strip_prefix(KEY)?
+                .strip_prefix(' ')?
+                .trim()
+                .to_string();
+            let about = record
+                .body
+                .trim()
+                .split("\n\n")
+                .next()
+                .unwrap_or_default()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
             let kind = match record.type_.as_deref() {
                 Some("REG_DWORD") => Kind::Dword,
                 Some("REG_QWORD") => Kind::Qword,
@@ -91,7 +104,14 @@ fn range(valid: &str) -> Option<(u64, u64)> {
 }
 
 /// The groups the tab shows values in, in order.
-pub const GROUPS: [&str; 6] = ["Keeping records", "Taking in events", "Taking in logs", "Taking in metrics", "Answering queries", "Storage"];
+pub const GROUPS: [&str; 6] = [
+    "Keeping records",
+    "Taking in events",
+    "Taking in logs",
+    "Taking in metrics",
+    "Answering queries",
+    "Storage",
+];
 
 /// Which group a value goes in, by its name.
 pub fn group(name: &str) -> &'static str {
@@ -102,7 +122,12 @@ pub fn group(name: &str) -> &'static str {
         "Storage"
     } else if starts(&["Log", "MaxLogDatagram"]) {
         "Taking in logs"
-    } else if starts(&["Metric", "MaxMetricDatagram", "AdaptiveRollup", "HealthMetric"]) {
+    } else if starts(&[
+        "Metric",
+        "MaxMetricDatagram",
+        "AdaptiveRollup",
+        "HealthMetric",
+    ]) {
         "Taking in metrics"
     } else if starts(&["MaxBatch", "Shedding", "EmergencyShedding", "AdaptiveIndex"]) {
         "Taking in events"
@@ -113,10 +138,20 @@ pub fn group(name: &str) -> &'static str {
 
 /// What a value is counted in, from the last word of its name.
 pub fn unit(name: &str) -> Option<&'static str> {
-    [("Ms", "ms"), ("Seconds", "seconds"), ("Minutes", "minutes"), ("Hours", "hours"), ("Days", "days"), ("Bytes", "bytes"), ("Percent", "%"), ("Pages", "pages"), ("Rows", "rows")]
-        .into_iter()
-        .find(|(suffix, _)| name.ends_with(suffix))
-        .map(|(_, unit)| unit)
+    [
+        ("Ms", "ms"),
+        ("Seconds", "seconds"),
+        ("Minutes", "minutes"),
+        ("Hours", "hours"),
+        ("Days", "days"),
+        ("Bytes", "bytes"),
+        ("Percent", "%"),
+        ("Pages", "pages"),
+        ("Rows", "rows"),
+    ]
+    .into_iter()
+    .find(|(suffix, _)| name.ends_with(suffix))
+    .map(|(_, unit)| unit)
 }
 
 /// What a value is set to.
@@ -145,11 +180,19 @@ pub struct Here {
 }
 
 pub fn read() -> Result<Here, String> {
-    let key = Key::open(None, KEY, KeyAccess::QUERY_VALUE, OpenFlags::empty()).map_err(|error| {
-        if error.raw_os_error() == Some(EACCES) { "You may not read eventd's settings.".to_string() } else { format!("eventd's settings could not be read: {error}.") }
-    })?;
+    let key =
+        Key::open(None, KEY, KeyAccess::QUERY_VALUE, OpenFlags::empty()).map_err(|error| {
+            if error.raw_os_error() == Some(EACCES) {
+                "You may not read eventd's settings.".to_string()
+            } else {
+                format!("eventd's settings could not be read: {error}.")
+            }
+        })?;
     let mut values = BTreeMap::new();
-    for record in key.query_values_batch(None).map_err(|error| format!("eventd's settings could not be read: {error}."))? {
+    for record in key
+        .query_values_batch(None)
+        .map_err(|error| format!("eventd's settings could not be read: {error}."))?
+    {
         let name = String::from_utf8_lossy(&record.name).into_owned();
         if name.is_empty() {
             continue;
@@ -161,23 +204,42 @@ pub fn read() -> Result<Here, String> {
         Err(error) if error.raw_os_error() == Some(EACCES) => Some("Only those allowed to change eventd's settings may change them: on this machine, administrators.".into()),
         Err(error) => Some(format!("Whether you may change them could not be found out: {error}.")),
     };
-    Ok(Here { values, unchangeable })
+    Ok(Here {
+        values,
+        unchangeable,
+    })
 }
 
 fn set(ty: ValueType, data: &[u8]) -> Set {
     match ty {
-        ValueType::DWORD if data.len() == 4 => Set::Number(u64::from(u32::from_le_bytes(data.try_into().expect("four bytes")))),
-        ValueType::QWORD if data.len() == 8 => Set::Number(u64::from_le_bytes(data.try_into().expect("eight bytes"))),
-        ValueType::SZ | ValueType::EXPAND_SZ => Set::Text(String::from_utf8_lossy(data).trim_end_matches('\0').to_string()),
+        ValueType::DWORD if data.len() == 4 => Set::Number(u64::from(u32::from_le_bytes(
+            data.try_into().expect("four bytes"),
+        ))),
+        ValueType::QWORD if data.len() == 8 => {
+            Set::Number(u64::from_le_bytes(data.try_into().expect("eight bytes")))
+        }
+        ValueType::SZ | ValueType::EXPAND_SZ => Set::Text(
+            String::from_utf8_lossy(data)
+                .trim_end_matches('\0')
+                .to_string(),
+        ),
         _ => Set::Other(format!("{} bytes of type {:#x}", data.len(), ty.0)),
     }
 }
 
 /// What `typed` comes to as `setting`'s value, or why it cannot be one.
 pub fn value(setting: &Setting, typed: &str) -> Result<u64, String> {
-    let number: u64 = typed.trim().replace([',', '_', ' '], "").parse().map_err(|_| format!("{} takes a whole number.", setting.name))?;
+    let number: u64 = typed
+        .trim()
+        .replace([',', '_', ' '], "")
+        .parse()
+        .map_err(|_| format!("{} takes a whole number.", setting.name))?;
     if setting.kind == Kind::Dword && number > u64::from(u32::MAX) {
-        return Err(format!("{} takes a number no larger than {}.", setting.name, u32::MAX));
+        return Err(format!(
+            "{} takes a number no larger than {}.",
+            setting.name,
+            u32::MAX
+        ));
     }
     if let Some((low, high)) = setting.range()
         && !(low..=high).contains(&number)
@@ -189,18 +251,28 @@ pub fn value(setting: &Setting, typed: &str) -> Result<u64, String> {
 
 /// Sets `setting` to `number`.
 pub fn write(setting: &Setting, number: u64) -> Result<(), String> {
-    let key = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty()).map_err(|error| refused(&error))?;
+    let key = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty())
+        .map_err(|error| refused(&error))?;
     let (ty, data) = match setting.kind {
-        Kind::Dword => (ValueType::DWORD, u32::try_from(number).map_err(|_| "it is too large".to_string())?.to_le_bytes().to_vec()),
+        Kind::Dword => (
+            ValueType::DWORD,
+            u32::try_from(number)
+                .map_err(|_| "it is too large".to_string())?
+                .to_le_bytes()
+                .to_vec(),
+        ),
         Kind::Qword => (ValueType::QWORD, number.to_le_bytes().to_vec()),
         Kind::Text | Kind::Other => return Err(format!("{} is not changed here.", setting.name)),
     };
-    key.set_value(setting.name.as_bytes(), ty, &data).call().map_err(|error| refused(&error))
+    key.set_value(setting.name.as_bytes(), ty, &data)
+        .call()
+        .map_err(|error| refused(&error))
 }
 
 /// Takes `name` back to its default, by taking its value away.
 pub fn unset(name: &str) -> Result<(), String> {
-    let key = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty()).map_err(|error| refused(&error))?;
+    let key = Key::open(None, KEY, KeyAccess::SET_VALUE, OpenFlags::empty())
+        .map_err(|error| refused(&error))?;
     match key.delete_value(name.as_bytes(), None, None) {
         Err(error) if error.raw_os_error() != Some(ENOENT) => Err(refused(&error)),
         _ => Ok(()),
@@ -208,7 +280,11 @@ pub fn unset(name: &str) -> Result<(), String> {
 }
 
 fn refused(error: &peios::Error) -> String {
-    if error.raw_os_error() == Some(EACCES) { "You may not change eventd's settings.".into() } else { error.to_string() }
+    if error.raw_os_error() == Some(EACCES) {
+        "You may not change eventd's settings.".into()
+    } else {
+        error.to_string()
+    }
 }
 
 #[cfg(test)]
@@ -259,14 +335,27 @@ Not eventd's.
     #[test]
     fn the_page_gives_each_value_its_meaning() {
         let settings = documented(PAGE);
-        let names: Vec<&str> = settings.iter().map(|setting| setting.name.as_str()).collect();
-        assert_eq!(names, ["EventStorePath", "MaxQueriesPerUser", "EventRetentionMaxBytes"]);
+        let names: Vec<&str> = settings
+            .iter()
+            .map(|setting| setting.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "EventStorePath",
+                "MaxQueriesPerUser",
+                "EventRetentionMaxBytes"
+            ]
+        );
         let per_user = &settings[1];
         assert_eq!(per_user.kind, Kind::Dword);
         assert_eq!(per_user.default, "16");
         assert_eq!(per_user.range(), Some((1, 4096)));
         assert!(!per_user.at_restart());
-        assert_eq!(per_user.about, "Queries, streaming or not, that one caller's user SID may have running at once. SYSTEM's are not counted.");
+        assert_eq!(
+            per_user.about,
+            "Queries, streaming or not, that one caller's user SID may have running at once. SYSTEM's are not counted."
+        );
         assert_eq!(settings[2].kind, Kind::Qword);
         assert_eq!(settings[2].range(), Some((0, u64::MAX)));
         assert!(settings[0].at_restart());
@@ -279,8 +368,14 @@ Not eventd's.
         let per_user = &settings[1];
         assert_eq!(value(per_user, " 32 "), Ok(32));
         assert_eq!(value(per_user, "1,024"), Ok(1024));
-        assert_eq!(value(per_user, "0"), Err("MaxQueriesPerUser takes 1 to 4096.".into()));
-        assert_eq!(value(per_user, "lots"), Err("MaxQueriesPerUser takes a whole number.".into()));
+        assert_eq!(
+            value(per_user, "0"),
+            Err("MaxQueriesPerUser takes 1 to 4096.".into())
+        );
+        assert_eq!(
+            value(per_user, "lots"),
+            Err("MaxQueriesPerUser takes a whole number.".into())
+        );
         assert_eq!(value(&settings[2], "268435456"), Ok(268_435_456));
     }
 
@@ -303,8 +398,17 @@ Not eventd's.
     #[test]
     fn values_are_read_as_their_types() {
         assert_eq!(set(ValueType::DWORD, &16u32.to_le_bytes()), Set::Number(16));
-        assert_eq!(set(ValueType::QWORD, &(1u64 << 40).to_le_bytes()), Set::Number(1 << 40));
-        assert_eq!(set(ValueType::SZ, b"/var/state/eventd/events/\0"), Set::Text("/var/state/eventd/events/".into()));
-        assert_eq!(set(ValueType::DWORD, &[1, 2]), Set::Other("2 bytes of type 0x4".into()));
+        assert_eq!(
+            set(ValueType::QWORD, &(1u64 << 40).to_le_bytes()),
+            Set::Number(1 << 40)
+        );
+        assert_eq!(
+            set(ValueType::SZ, b"/var/state/eventd/events/\0"),
+            Set::Text("/var/state/eventd/events/".into())
+        );
+        assert_eq!(
+            set(ValueType::DWORD, &[1, 2]),
+            Set::Other("2 bytes of type 0x4".into())
+        );
     }
 }

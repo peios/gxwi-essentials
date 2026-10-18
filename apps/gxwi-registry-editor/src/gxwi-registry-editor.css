@@ -1,6 +1,9 @@
 /* Made from the theme's tokens, which the desktop's page for a live surface
    brings with it. */
-html, body { height: 100%; }
+html,
+body {
+    height: 100%;
+}
 
 body {
     margin: 0;
@@ -11,11 +14,24 @@ body {
     overflow: hidden;
 }
 
-#fx-root { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
-#fx-root[data-connected="false"] { opacity: 0.5; }
+#fx-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+}
+#fx-root[data-connected="false"] {
+    opacity: 0.5;
+}
 
-button { font: inherit; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
+button {
+    font: inherit;
+}
+button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: 1px;
+}
 
 /* The bar: the path of the key shown, which can be typed. */
 .bar {
@@ -42,7 +58,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     border-radius: var(--radius-sm);
 }
 
-.bar button, .details .actions button {
+.bar button,
+.details .actions button {
     height: var(--control-sm);
     padding: 0 var(--space-3);
     color: var(--text-primary);
@@ -51,10 +68,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     border-radius: var(--radius-sm);
     cursor: pointer;
 }
-.bar button:hover, .details .actions button:hover { border-color: var(--border-strong); }
-.details .actions button { font-size: 12px; background: var(--surface-2); }
+.bar button:hover,
+.details .actions button:hover {
+    border-color: var(--border-strong);
+}
+.details .actions button {
+    font-size: 12px;
+    background: var(--surface-2);
+}
 
-.body { display: flex; flex: 1; min-height: 0; }
+.body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
 
 /* The tree of keys. Each level is a list inside the one above, set in. */
 .tree {
@@ -64,9 +91,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     overflow: auto;
     border-right: 1px solid var(--border-default);
 }
-.tree ul { margin: 0; padding: 0; list-style: none; }
-.tree ul ul { padding-left: 14px; }
-.tree .row { display: flex; align-items: center; min-width: max-content; padding-right: var(--space-2); }
+.tree ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.tree ul ul {
+    padding-left: 14px;
+}
+.tree .row {
+    display: flex;
+    align-items: center;
+    min-width: max-content;
+    padding-right: var(--space-2);
+}
 .tree .twist {
     flex: none;
     width: 18px;
@@ -87,16 +125,37 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     border-radius: var(--radius-sm);
     cursor: default;
 }
-.tree .name:hover { background: var(--surface-2); }
-.tree .name[aria-selected="true"] { background: var(--surface-2); border-color: var(--accent-solid); }
-.tree .name.reached { font-style: italic; }
-.tree .sid { margin-left: var(--space-1); color: var(--text-muted); font: 500 11px/1.4 var(--font-mono); }
-.tree .why { padding: 2px var(--space-2) 2px 18px; font-size: 12px; color: var(--text-muted); }
+.tree .name:hover {
+    background: var(--surface-2);
+}
+.tree .name[aria-selected="true"] {
+    background: var(--surface-2);
+    border-color: var(--accent-solid);
+}
+.tree .name.reached {
+    font-style: italic;
+}
+.tree .sid {
+    margin-left: var(--space-1);
+    color: var(--text-muted);
+    font: 500 11px/1.4 var(--font-mono);
+}
+.tree .why {
+    padding: 2px var(--space-2) 2px 18px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
 
 /* The values of the key shown, one grid for the head and every row so the
    columns line up. The widths are the page's, from fx-columns. */
-.values { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.head, .entries button {
+.values {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+.head,
+.entries button {
     display: grid;
     grid-template-columns: var(--fx-columns);
     gap: var(--space-2);
@@ -130,17 +189,44 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     cursor: default;
     user-select: none;
 }
-.entries button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.entries .name { color: var(--text-primary); }
-.entries .name.default { font-style: italic; }
-.entries .data { font: 500 12px/1.4 var(--font-mono); }
-.entries .data.misfit { color: var(--danger-text); }
-.entries button:hover { background: var(--surface-2); }
-.entries button[aria-selected="true"] { background: var(--surface-2); border-color: var(--accent-solid); }
+.entries button span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.entries .name {
+    color: var(--text-primary);
+}
+.entries .name.default {
+    font-style: italic;
+}
+.entries .data {
+    font: 500 12px/1.4 var(--font-mono);
+}
+.entries .data.misfit {
+    color: var(--danger-text);
+}
+.entries button:hover {
+    background: var(--surface-2);
+}
+.entries button[aria-selected="true"] {
+    background: var(--surface-2);
+    border-color: var(--accent-solid);
+}
 /* Values the manual documents that aren't set, after those that are. */
-.entries li:not(.unset) + .unset { margin-top: var(--space-1); padding-top: var(--space-1); border-top: 1px dashed var(--border-default); }
-.entries .unset .name, .entries .unset .type, .entries .unset .data { color: var(--text-muted); }
-.entries .unset .data { font: italic 500 12px/1.4 var(--font-text); }
+.entries li:not(.unset) + .unset {
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
+    border-top: 1px dashed var(--border-default);
+}
+.entries .unset .name,
+.entries .unset .type,
+.entries .unset .data {
+    color: var(--text-muted);
+}
+.entries .unset .data {
+    font: italic 500 12px/1.4 var(--font-text);
+}
 
 /* The value picked, or the key, in full. */
 .details {
@@ -150,23 +236,82 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     overflow-y: auto;
     border-left: 1px solid var(--border-default);
 }
-.details h2 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
-.details h3 { margin: var(--space-4) 0 var(--space-2); font-size: 12px; font-weight: 600; }
-.details .id { margin: var(--space-1) 0 0; font: 500 12px/1.4 var(--font-mono); color: var(--text-muted); overflow-wrap: anywhere; }
-.details dl { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-3); margin: var(--space-4) 0 0; font-size: 12px; }
-.details dt { color: var(--text-muted); }
-.details dd { margin: 0; overflow-wrap: anywhere; }
-.details .note { margin: var(--space-3) 0 0; font-size: 12px; color: var(--text-secondary); }
-.details .note.bad { color: var(--danger-text); }
-.details .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; }
-.details .actions button:disabled { color: var(--text-muted); cursor: default; opacity: 0.6; }
-.details .may { margin: var(--space-3) 0 0; font-size: 12px; color: var(--text-secondary); }
+.details h2 {
+    margin: 0;
+    font-size: 15px;
+    overflow-wrap: anywhere;
+}
+.details h3 {
+    margin: var(--space-4) 0 var(--space-2);
+    font-size: 12px;
+    font-weight: 600;
+}
+.details .id {
+    margin: var(--space-1) 0 0;
+    font: 500 12px/1.4 var(--font-mono);
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+.details dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-2) var(--space-3);
+    margin: var(--space-4) 0 0;
+    font-size: 12px;
+}
+.details dt {
+    color: var(--text-muted);
+}
+.details dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+.details .note {
+    margin: var(--space-3) 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.details .note.bad {
+    color: var(--danger-text);
+}
+.details .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 0;
+}
+.details .actions button:disabled {
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0.6;
+}
+.details .may {
+    margin: var(--space-3) 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
 
 /* A value being edited, a new value or a new key, in the pane. */
-.details .edit { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; }
-.details .edit h2 + .id { margin-top: calc(-1 * var(--space-2)); }
-.details .edit label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.details .edit input, .details .edit textarea, .details .edit select {
+.details .edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0;
+}
+.details .edit h2 + .id {
+    margin-top: calc(-1 * var(--space-2));
+}
+.details .edit label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.details .edit input,
+.details .edit textarea,
+.details .edit select {
     box-sizing: border-box;
     width: 100%;
     min-height: var(--control-sm);
@@ -177,33 +322,102 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
 }
-.details .edit textarea { resize: vertical; }
-.details .edit input[name="value-data"], .details .edit textarea { font: 500 12px/1.5 var(--font-mono); }
-.details .edit select:focus-visible, .details .edit textarea:focus-visible { outline: 2px solid var(--accent-solid); outline-offset: 1px; }
-.details .edit .hint { margin: calc(-1 * var(--space-2)) 0 0; font-size: 12px; color: var(--text-muted); }
-.details .edit .note { margin: 0; }
-.details .edit .actions { margin: 0; }
-.details button.primary { color: var(--accent-on); background: var(--accent-solid); border-color: var(--accent-solid); }
-.details button.danger { color: var(--danger-text); border-color: var(--danger-text); }
+.details .edit textarea {
+    resize: vertical;
+}
+.details .edit input[name="value-data"],
+.details .edit textarea {
+    font: 500 12px/1.5 var(--font-mono);
+}
+.details .edit select:focus-visible,
+.details .edit textarea:focus-visible {
+    outline: 2px solid var(--accent-solid);
+    outline-offset: 1px;
+}
+.details .edit .hint {
+    margin: calc(-1 * var(--space-2)) 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.details .edit .note {
+    margin: 0;
+}
+.details .edit .actions {
+    margin: 0;
+}
+.details button.primary {
+    color: var(--accent-on);
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+}
+.details button.danger {
+    color: var(--danger-text);
+    border-color: var(--danger-text);
+}
 
 /* The key to a file and back. */
-.details .files { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-default); }
-.details .files h3 { margin-top: 0; }
-.details .files .actions { margin-top: 0; }
+.details .files {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-default);
+}
+.details .files h3 {
+    margin-top: 0;
+}
+.details .files .actions {
+    margin-top: 0;
+}
 
 /* What the registry manual says, at the foot of the pane. */
-.details .docs { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-default); }
-.details .docs h3:first-child { margin-top: 0; }
-.details .docs dl { margin-top: 0; }
-.details .prose { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
-.details .prose p, .details .prose ul { margin: var(--space-2) 0 0; }
-.details .prose ul { padding-left: var(--space-4); }
-.details .prose h4 { margin: var(--space-3) 0 0; font-size: 12px; color: var(--text-primary); }
-.details .prose code { font: 500 11px/1.4 var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
-.details .prose pre { padding: var(--space-2); font: 500 11px/1.5 var(--font-mono); background: var(--bg-sunken); border-radius: var(--radius-sm); white-space: pre-wrap; }
+.details .docs {
+    margin-top: var(--space-4);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-default);
+}
+.details .docs h3:first-child {
+    margin-top: 0;
+}
+.details .docs dl {
+    margin-top: 0;
+}
+.details .prose {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+.details .prose p,
+.details .prose ul {
+    margin: var(--space-2) 0 0;
+}
+.details .prose ul {
+    padding-left: var(--space-4);
+}
+.details .prose h4 {
+    margin: var(--space-3) 0 0;
+    font-size: 12px;
+    color: var(--text-primary);
+}
+.details .prose code {
+    font: 500 11px/1.4 var(--font-mono);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+.details .prose pre {
+    padding: var(--space-2);
+    font: 500 11px/1.5 var(--font-mono);
+    background: var(--bg-sunken);
+    border-radius: var(--radius-sm);
+    white-space: pre-wrap;
+}
 
 /* Which layer writes go to, in the bar. */
-.bar .layer { display: flex; align-items: center; gap: var(--space-2); font-size: 12px; color: var(--text-secondary); }
+.bar .layer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 12px;
+    color: var(--text-secondary);
+}
 .bar select {
     height: var(--control-sm);
     padding: 0 var(--space-2);
@@ -215,22 +429,84 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
 }
 
 /* The layers window. */
-.layers-window { display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding: var(--space-4); box-sizing: border-box; }
-.layers-window header { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2) var(--space-3); align-items: start; }
-.layers-window h1 { margin: 0; font-size: 17px; }
-.layers-window header p { grid-column: 1; margin: 0; font-size: 12px; color: var(--text-secondary); }
-.layers-window header .refresh { grid-column: 2; grid-row: 1 / span 2; }
-.layers-window .said { margin: var(--space-3) 0 0; }
-.layers-window table { width: 100%; margin-top: var(--space-4); border-collapse: collapse; font-size: 13px; }
-.layers-window th, .layers-window td { padding: var(--space-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-default); }
-.layers-window thead th { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
-.layers-window td.note, .layers-window .note { font-size: 12px; color: var(--text-muted); }
-.layers-window .note.bad { color: var(--danger-text); }
-.layers-window td.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.layers-window td.actions p { flex-basis: 100%; margin: 0; }
-.layers-window .precedence { display: flex; gap: var(--space-1); margin: 0; }
-.layers-window .precedence input { width: 6em; }
-.layers-window input, .layers-window select {
+.layers-window {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+    padding: var(--space-4);
+    box-sizing: border-box;
+}
+.layers-window header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2) var(--space-3);
+    align-items: start;
+}
+.layers-window h1 {
+    margin: 0;
+    font-size: 17px;
+}
+.layers-window header p {
+    grid-column: 1;
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.layers-window header .refresh {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+}
+.layers-window .said {
+    margin: var(--space-3) 0 0;
+}
+.layers-window table {
+    width: 100%;
+    margin-top: var(--space-4);
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.layers-window th,
+.layers-window td {
+    padding: var(--space-2);
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-default);
+}
+.layers-window thead th {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.layers-window td.note,
+.layers-window .note {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.layers-window .note.bad {
+    color: var(--danger-text);
+}
+.layers-window td.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+.layers-window td.actions p {
+    flex-basis: 100%;
+    margin: 0;
+}
+.layers-window .precedence {
+    display: flex;
+    gap: var(--space-1);
+    margin: 0;
+}
+.layers-window .precedence input {
+    width: 6em;
+}
+.layers-window input,
+.layers-window select {
     box-sizing: border-box;
     height: var(--control-sm);
     padding: 0 var(--space-2);
@@ -250,21 +526,77 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     border-radius: var(--radius-sm);
     cursor: pointer;
 }
-.layers-window button:disabled, .layers-window input:disabled { color: var(--text-muted); cursor: default; opacity: 0.6; }
-.layers-window button.primary { color: var(--accent-on); background: var(--accent-solid); border-color: var(--accent-solid); }
-.layers-window button.danger { color: var(--danger-text); border-color: var(--danger-text); }
-.layers-window .asking { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.layers-window .asking p { flex-basis: 100%; margin: 0; font-size: 12px; }
-.layers-window .add { margin-top: var(--space-4); }
-.layers-window .add .may { font-size: 12px; color: var(--text-secondary); }
-.layers-window .new { display: grid; grid-template-columns: repeat(3, minmax(0, 12em)); gap: var(--space-2) var(--space-3); align-items: end; }
-.layers-window .new h2 { grid-column: 1 / -1; margin: 0; font-size: 14px; }
-.layers-window .new label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.layers-window .new .actions { grid-column: 1 / -1; display: flex; gap: var(--space-2); margin: 0; }
+.layers-window button:disabled,
+.layers-window input:disabled {
+    color: var(--text-muted);
+    cursor: default;
+    opacity: 0.6;
+}
+.layers-window button.primary {
+    color: var(--accent-on);
+    background: var(--accent-solid);
+    border-color: var(--accent-solid);
+}
+.layers-window button.danger {
+    color: var(--danger-text);
+    border-color: var(--danger-text);
+}
+.layers-window .asking {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+.layers-window .asking p {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 12px;
+}
+.layers-window .add {
+    margin-top: var(--space-4);
+}
+.layers-window .add .may {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.layers-window .new {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 12em));
+    gap: var(--space-2) var(--space-3);
+    align-items: end;
+}
+.layers-window .new h2 {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 14px;
+}
+.layers-window .new label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.layers-window .new .actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: var(--space-2);
+    margin: 0;
+}
 
 /* Asking before something is deleted. */
-.details .asking { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-4) 0 0; }
-.details .asking p { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--text-secondary); }
+.details .asking {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 0;
+}
+.details .asking p {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
 .details .asking button {
     height: var(--control-sm);
     padding: 0 var(--space-3);
@@ -274,9 +606,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     border-radius: var(--radius-sm);
     cursor: pointer;
 }
-.details .asking button.danger { color: var(--danger-text); border-color: var(--danger-text); }
-.said:not(.bad) { color: var(--text-secondary); }
-.details pre, .details .list, .details .number {
+.details .asking button.danger {
+    color: var(--danger-text);
+    border-color: var(--danger-text);
+}
+.said:not(.bad) {
+    color: var(--text-secondary);
+}
+.details pre,
+.details .list,
+.details .number {
     margin: 0;
     padding: var(--space-2);
     font: 500 12px/1.5 var(--font-mono);
@@ -285,10 +624,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
-.details .list { padding-left: calc(var(--space-2) + 2.5em); }
-.details .dump { white-space: pre; overflow-x: auto; }
-.details .dump .at { color: var(--text-muted); }
-.details .more { margin: 0; font-size: 12px; color: var(--text-muted); }
+.details .list {
+    padding-left: calc(var(--space-2) + 2.5em);
+}
+.details .dump {
+    white-space: pre;
+    overflow-x: auto;
+}
+.details .dump .at {
+    color: var(--text-muted);
+}
+.details .more {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
 
 .status {
     display: flex;
@@ -300,26 +650,62 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-soli
     font-size: 12px;
     color: var(--text-muted);
 }
-.status .path { font-family: var(--font-mono); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.status .path {
+    font-family: var(--font-mono);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
 
-.trouble, .more, .said { margin: var(--space-2) var(--space-3); font-size: 12px; color: var(--text-muted); }
-.trouble, .said.bad { color: var(--danger-text); }
-.said { flex: none; }
+.trouble,
+.more,
+.said {
+    margin: var(--space-2) var(--space-3);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.trouble,
+.said.bad {
+    color: var(--danger-text);
+}
+.said {
+    flex: none;
+}
 
 /* Narrow, as half a screen is: the data column goes, then the tree and the
    pane narrow and the type column goes. The pane stays, since it is where
    values are changed. */
 @media (max-width: 900px) {
-    .head, .entries button { grid-template-columns: minmax(0, 1fr) 120px; }
-    .head span:last-child, .entries .data { display: none; }
+    .head,
+    .entries button {
+        grid-template-columns: minmax(0, 1fr) 120px;
+    }
+    .head span:last-child,
+    .entries .data {
+        display: none;
+    }
 }
 @media (max-width: 760px) {
-    .tree { width: 190px; }
-    .details { width: 250px; }
-    .head, .entries button { grid-template-columns: minmax(0, 1fr); }
-    .head span:nth-child(2), .entries .type { display: none; }
+    .tree {
+        width: 190px;
+    }
+    .details {
+        width: 250px;
+    }
+    .head,
+    .entries button {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .head span:nth-child(2),
+    .entries .type {
+        display: none;
+    }
 }
 @media (max-width: 520px) {
-    .tree { width: 35%; }
-    .details { width: 45%; }
+    .tree {
+        width: 35%;
+    }
+    .details {
+        width: 45%;
+    }
 }

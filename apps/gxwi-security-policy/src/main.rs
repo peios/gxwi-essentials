@@ -29,7 +29,10 @@ libgxwi::icon!(b"dev.peios.gxwi-security-policy");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
-        eprintln!("gxwi-security-policy: usage: gxwi-security-policy (given {:?})", std::env::args().skip(1).collect::<Vec<_>>());
+        eprintln!(
+            "gxwi-security-policy: usage: gxwi-security-policy (given {:?})",
+            std::env::args().skip(1).collect::<Vec<_>>()
+        );
         std::process::exit(64);
     }
     let mut app = match App::connect() {
@@ -40,7 +43,10 @@ fn main() {
         }
     };
     libgxwi::settings::stylesheet(&mut app);
-    app.stylesheet("/gxwi-security-policy.css", include_str!("gxwi-security-policy.css"));
+    app.stylesheet(
+        "/gxwi-security-policy.css",
+        include_str!("gxwi-security-policy.css"),
+    );
     let known = Arc::new(Known::read());
     let window = app.live("Security Policy", Policy::new(known.clone()));
     let aside = Arc::downgrade(&window);

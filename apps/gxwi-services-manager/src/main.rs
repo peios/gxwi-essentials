@@ -47,7 +47,12 @@ fn watch(window: Weak<Surface<Manager>>) {
     let mut watched = system::watch_registry(changed);
     let mut registry: Option<system::Registry> = None;
     loop {
-        let Some((picked, chosen)) = window.upgrade().map(|window| window.look(|manager, _, _| (manager.picked(), manager.chosen()))) else { return };
+        let Some((picked, chosen)) = window
+            .upgrade()
+            .map(|window| window.look(|manager, _, _| (manager.picked(), manager.chosen())))
+        else {
+            return;
+        };
         let services = system::listing();
         let read = match registry.take() {
             Some(registry) if watched && registry.covers(&services, chosen.as_deref()) => registry,
@@ -59,7 +64,9 @@ fn watch(window: Weak<Surface<Manager>>) {
             let status = system::status(&picked);
             (picked, status)
         });
-        let Some(window_now) = window.upgrade() else { return };
+        let Some(window_now) = window.upgrade() else {
+            return;
+        };
         window_now.update(|manager, _| {
             manager.seen(seen);
             if let Some((picked, status)) = status {
@@ -94,15 +101,25 @@ fn main() {
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gxwi-services-manager.css", include_str!("gxwi-services-manager.css"));
+    app.stylesheet(
+        "/gxwi-services-manager.css",
+        include_str!("gxwi-services-manager.css"),
+    );
     // A definition, in a window of its own, which the list opens.
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let editor = match arguments.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+    let editor = match arguments
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
         ["--definition", service] => Some(Editor::open(service)),
         ["--new"] => Some(Editor::new_service()),
         [] => None,
         _ => {
-            eprintln!("gxwi-services-manager: usage: gxwi-services-manager [--definition SERVICE | --new]");
+            eprintln!(
+                "gxwi-services-manager: usage: gxwi-services-manager [--definition SERVICE | --new]"
+            );
             std::process::exit(64);
         }
     };

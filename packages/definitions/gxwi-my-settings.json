@@ -1,0 +1,22 @@
+{
+    "side_effects": ["man-db"],
+    "package": {
+        "name": "dev.peios.gxwi-my-settings",
+        "description": "GXWI personal settings",
+        "license": "((MIT OR Apache-2.0) AND Unicode-3.0) AND Apache-2.0 AND (Apache-2.0 OR BSD-2-Clause OR MIT) AND (Apache-2.0 OR BSL-1.0) AND (Apache-2.0 OR MIT) AND BSD-3-Clause AND ISC AND MIT AND (MIT AND BSD-3-Clause) AND (MIT OR Unlicense)",
+        "version": "0.1.0-1",
+        "architecture": "x86_64",
+        "license_class": "free",
+        "homepage": "https://github.com/peios/gxwi-essentials"
+    },
+    "dependencies": {
+        "dev.peios.libpeios": ">= 0.5.8-1",
+        "org.gnu.glibc": "*",
+        "org.gnu.gcc-libgcc": "*"
+    },
+    "files": {
+        "stage:runtime/gxwi-my-settings/usr/**": "usr",
+        "source:LICENSE": "usr/share/licenses/dev.peios.gxwi-my-settings/LICENSE"
+    },
+    "executables": ["usr/bin/gxwi-my-settings"]
+}

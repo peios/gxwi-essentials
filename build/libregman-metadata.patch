@@ -1,0 +1,25 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -2,14 +2,14 @@
+ name = "libregman"
+ description = "regman ~ (peiosutils) reading the Peios registry manual, for regman and for programs"
+ repository = "https://github.com/peios/peiosutils/tree/main/src/uu/regman/libregman"
+-version.workspace = true
+-license.workspace = true
+-homepage.workspace = true
+-keywords.workspace = true
+-categories.workspace = true
+-edition.workspace = true
+-rust-version.workspace = true
+-readme.workspace = true
++version = "0.8.17"
++license = "MIT"
++homepage = "https://github.com/peios/peiosutils"
++keywords = ["peios", "peiosutils", "coreutils", "uutils", "cli", "utility"]
++categories = ["command-line-utilities"]
++edition = "2024"
++rust-version = "1.88.0"
++readme = "README.package.md"
+ 
+ [lints]
+ workspace = true

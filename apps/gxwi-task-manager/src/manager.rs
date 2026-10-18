@@ -16,7 +16,7 @@ use peinit::client::{
     Admission, CgroupMember, Command, ControlClient, Status, SubmittedJob, Summary, admission,
 };
 use peios::security::Sid;
-use libauthd_client::logon::Logon;
+use auth_core::client::logon::Logon;
 use peios::token::LogonSessionInfo;
 
 use crate::perf::{self, Perf};
@@ -63,7 +63,11 @@ enum Doing {
     /// Asking before a session is signed out.
     AskingSignOut,
     /// Asked to end, through a handle held on it since.
-    Ending { pid: u32, pidfd: OwnedFd, since: Instant },
+    Ending {
+        pid: u32,
+        pidfd: OwnedFd,
+        since: Instant,
+    },
 }
 
 /// How long a process asked to end is given before it may be ended at once.
@@ -203,7 +207,9 @@ impl Manager {
         self.seen = seen;
         // The picked process's service may have changed state since.
         if let Some(pid) = self.picked {
-            self.status = self.service_of(pid).map(|name| (pid, name.clone(), ask_status(&name)));
+            self.status = self
+                .service_of(pid)
+                .map(|name| (pid, name.clone(), ask_status(&name)));
         }
     }
 
@@ -218,7 +224,10 @@ impl Manager {
 
     /// The picked process's service's status, if it is `pid`'s.
     fn status_for(&self, pid: u32) -> Option<&Result<Status, String>> {
-        self.status.as_ref().filter(|(at, ..)| *at == pid).map(|(_, _, status)| status)
+        self.status
+            .as_ref()
+            .filter(|(at, ..)| *at == pid)
+            .map(|(_, _, status)| status)
     }
 
     /// Whether `pid` is its service's main process, by peinit's word.
@@ -249,7 +258,10 @@ impl Manager {
             // The first process is always init, which is peinit.
             Err(_) if p.pid == 1 => "peinit".into(),
             Err(_) => match self.seen.mains.get(&p.pid) {
-                Some(service) => self.service(service).and_then(|s| s.display_name.clone()).unwrap_or_else(|| service.clone()),
+                Some(service) => self
+                    .service(service)
+                    .and_then(|s| s.display_name.clone())
+                    .unwrap_or_else(|| service.clone()),
                 None if p.psb.is_some_and(|psb| psb.is_protected()) => "Protected process".into(),
                 None => "Process you can't see".into(),
             },
@@ -259,14 +271,24 @@ impl Manager {
     /// Whose a process is, in words.
     fn runs_as(&self, p: &Proc) -> String {
         match &p.owner {
-            Ok(owner) => self.seen.names.get(&owner.user).cloned().unwrap_or_else(|| owner.user.to_string()),
+            Ok(owner) => self
+                .seen
+                .names
+                .get(&owner.user)
+                .cloned()
+                .unwrap_or_else(|| owner.user.to_string()),
             Err(Closed::Protected) => "Protected".into(),
             Err(_) => String::new(),
         }
     }
 
     fn service(&self, name: &str) -> Option<&Summary> {
-        self.seen.services.as_ref().ok()?.iter().find(|s| s.service == name)
+        self.seen
+            .services
+            .as_ref()
+            .ok()?
+            .iter()
+            .find(|s| s.service == name)
     }
 
     fn job(&self, id: &str) -> Option<&SubmittedJob> {
@@ -315,7 +337,10 @@ impl Manager {
         }
         let service = match &p.member {
             Some(CgroupMember::Service { service, .. }) => service.clone(),
-            Some(CgroupMember::Job(id)) => self.job(id).map(|j| j.description.clone()).unwrap_or_default(),
+            Some(CgroupMember::Job(id)) => self
+                .job(id)
+                .map(|j| j.description.clone())
+                .unwrap_or_default(),
             None => self.seen.mains.get(&p.pid).cloned().unwrap_or_default(),
         };
         [self.name(p), p.pid.to_string(), self.runs_as(p), service]
@@ -334,7 +359,11 @@ impl Manager {
             },
             Group::Job(id) => match self.job(id) {
                 Some(job) => {
-                    let title = if job.description.is_empty() { "A job".into() } else { job.description.clone() };
+                    let title = if job.description.is_empty() {
+                        "A job".into()
+                    } else {
+                        job.description.clone()
+                    };
                     let runs_as = job
                         .identity
                         .parse::<Sid>()
@@ -345,19 +374,35 @@ impl Manager {
                 }
                 // peinit lists a job only to whoever may query it, which by
                 // default is who submitted it and Administrators.
-                None => ("A job".into(), "peinit doesn't tell you which: only who submitted it may ask".into()),
+                None => (
+                    "A job".into(),
+                    "peinit doesn't tell you which: only who submitted it may ask".into(),
+                ),
             },
-            Group::Elsewhere => ("Not in a service".into(), "Started by peinit itself, or before it".into()),
+            Group::Elsewhere => (
+                "Not in a service".into(),
+                "Started by peinit itself, or before it".into(),
+            ),
             Group::Unknown => (
                 "Can't tell".into(),
                 "Neither the process nor peinit says what these belong to".into(),
             ),
             Group::Person(sid) => (
-                self.seen.names.get(sid).cloned().unwrap_or_else(|| sid.to_string()),
+                self.seen
+                    .names
+                    .get(sid)
+                    .cloned()
+                    .unwrap_or_else(|| sid.to_string()),
                 sid.to_string(),
             ),
-            Group::Nobody(Closed::Protected) => ("Protected processes".into(), "Who they run as can't be seen".into()),
-            Group::Nobody(_) => ("Someone you can't see".into(), "Only their owner and Administrators may see whose these are".into()),
+            Group::Nobody(Closed::Protected) => (
+                "Protected processes".into(),
+                "Who they run as can't be seen".into(),
+            ),
+            Group::Nobody(_) => (
+                "Someone you can't see".into(),
+                "Only their owner and Administrators may see whose these are".into(),
+            ),
             Group::Kernel => ("Kernel".into(), "The kernel's own threads".into()),
             Group::All => (String::new(), String::new()),
         }
@@ -367,7 +412,11 @@ impl Manager {
         match self.sort {
             Sort::Name => rows.sort_by_cached_key(|p| (self.name(p).to_lowercase(), p.pid)),
             Sort::Pid => rows.sort_by_key(|p| p.pid),
-            Sort::Cpu => rows.sort_by(|a, b| self.share(b).unwrap_or(0.0).total_cmp(&self.share(a).unwrap_or(0.0))),
+            Sort::Cpu => rows.sort_by(|a, b| {
+                self.share(b)
+                    .unwrap_or(0.0)
+                    .total_cmp(&self.share(a).unwrap_or(0.0))
+            }),
             Sort::Memory => rows.sort_by_key(|p| std::cmp::Reverse(self.memory(p).unwrap_or(0))),
         }
         rows
@@ -406,8 +455,15 @@ impl Manager {
         // Groups by what they are called, the kernel last.
         let mut ordered: Vec<(Group, Vec<&Proc>)> = groups.into_iter().collect();
         ordered.sort_by_cached_key(|(group, _)| {
-            let last = matches!(group, Group::Kernel | Group::Unknown | Group::Nobody(_) | Group::Elsewhere);
-            (last, matches!(group, Group::Kernel), self.heading(group).0.to_lowercase())
+            let last = matches!(
+                group,
+                Group::Kernel | Group::Unknown | Group::Nobody(_) | Group::Elsewhere
+            );
+            (
+                last,
+                matches!(group, Group::Kernel),
+                self.heading(group).0.to_lowercase(),
+            )
         });
         for (group, rows) in ordered {
             if group != Group::All {
@@ -436,15 +492,24 @@ impl Manager {
     fn notes(&self) -> String {
         let mut notes = Vec::new();
         let people = self.seen.procs.iter().filter(|p| !Self::kernel(p));
-        let hidden = people.clone().filter(|p| matches!(p.owner, Err(Closed::Refused))).count();
+        let hidden = people
+            .clone()
+            .filter(|p| matches!(p.owner, Err(Closed::Refused)))
+            .count();
         if hidden > 0 {
             notes.push(format!(
                 "You can't see who runs {} or what they were started with: only their owner and \
                  Administrators may.",
-                if hidden == 1 { "1 process".to_string() } else { format!("{hidden} processes") }
+                if hidden == 1 {
+                    "1 process".to_string()
+                } else {
+                    format!("{hidden} processes")
+                }
             ));
         }
-        let protected = people.filter(|p| p.stat.is_err() && p.psb.is_some_and(|psb| psb.is_protected())).count();
+        let protected = people
+            .filter(|p| p.stat.is_err() && p.psb.is_some_and(|psb| psb.is_protected()))
+            .count();
         if protected > 0 {
             notes.push(format!(
                 "{} protected: signed as part of Peios, and closed to every process not signed at its level, \
@@ -453,9 +518,14 @@ impl Manager {
             ));
         }
         if let Err(why) = &self.seen.services {
-            notes.push(format!("Which service each process belongs to couldn't be asked of peinit: {why}"));
+            notes.push(format!(
+                "Which service each process belongs to couldn't be asked of peinit: {why}"
+            ));
         }
-        notes.iter().map(|note| format!("<p class=\"said\" role=\"status\">{}</p>", escape(note))).collect()
+        notes
+            .iter()
+            .map(|note| format!("<p class=\"said\" role=\"status\">{}</p>", escape(note)))
+            .collect()
     }
 
     fn details(&self) -> String {
@@ -463,7 +533,9 @@ impl Manager {
             return "<aside class=\"details\"><p class=\"more\">Pick a process to see it in full.</p></aside>".into();
         };
         let Some(p) = self.proc(pid) else {
-            return format!("<aside class=\"details\"><h2>Process {pid}</h2><p class=\"note\">It has ended.</p></aside>");
+            return format!(
+                "<aside class=\"details\"><h2>Process {pid}</h2><p class=\"note\">It has ended.</p></aside>"
+            );
         };
         let mut facts: Vec<(String, String)> = Vec::new();
         let mut note = String::new();
@@ -475,11 +547,22 @@ impl Manager {
                     let ran = (uptime - started).max(0.0) as u64;
                     facts.push(("Running for".into(), escape(&words::running_for(ran))));
                 }
-                facts.push(("CPU".into(), self.share(p).map(words::share).unwrap_or_else(|| "…".into())));
-                facts.push(("Memory".into(), self.memory(p).map(words::bytes).unwrap_or_default()));
+                facts.push((
+                    "CPU".into(),
+                    self.share(p)
+                        .map(words::share)
+                        .unwrap_or_else(|| "…".into()),
+                ));
+                facts.push((
+                    "Memory".into(),
+                    self.memory(p).map(words::bytes).unwrap_or_default(),
+                ));
                 facts.push(("Threads".into(), stat.threads.to_string()));
                 if stat.ppid != 0 {
-                    let parent = self.proc(stat.ppid).map(|parent| self.name(parent)).unwrap_or_default();
+                    let parent = self
+                        .proc(stat.ppid)
+                        .map(|parent| self.name(parent))
+                        .unwrap_or_default();
                     facts.push((
                         "Started by".into(),
                         format!(
@@ -504,15 +587,28 @@ impl Manager {
                 match command {
                     Ok(line) if line.is_empty() => "<span class=\"unsaid\">None</span>".into(),
                     Ok(line) => format!("<code>{}</code>", escape(line)),
-                    Err(why) => format!("<span class=\"unsaid\">{}</span>", escape(words::closed(*why))),
+                    Err(why) => format!(
+                        "<span class=\"unsaid\">{}</span>",
+                        escape(words::closed(*why))
+                    ),
                 },
             ));
         }
         match &p.member {
             Some(CgroupMember::Service { service, part }) => {
-                let shown = self.service(service).and_then(|s| s.display_name.clone()).unwrap_or_else(|| service.clone());
-                let which = if self.is_main(pid) { "its main process" } else { words::part(*part) };
-                facts.push(("Belongs to".into(), format!("{} — {}", escape(&shown), which)));
+                let shown = self
+                    .service(service)
+                    .and_then(|s| s.display_name.clone())
+                    .unwrap_or_else(|| service.clone());
+                let which = if self.is_main(pid) {
+                    "its main process"
+                } else {
+                    words::part(*part)
+                };
+                facts.push((
+                    "Belongs to".into(),
+                    format!("{} — {}", escape(&shown), which),
+                ));
                 if let Some(Ok(status)) = self.status_for(pid) {
                     if let Some(text) = &status.status_text {
                         facts.push(("Service says".into(), escape(text)));
@@ -523,24 +619,48 @@ impl Manager {
                 }
             }
             Some(CgroupMember::Job(id)) => {
-                let what = self.job(id).map(|j| j.description.clone()).filter(|d| !d.is_empty());
-                facts.push(("Belongs to".into(), escape(&what.unwrap_or_else(|| format!("Job {id}")))));
+                let what = self
+                    .job(id)
+                    .map(|j| j.description.clone())
+                    .filter(|d| !d.is_empty());
+                facts.push((
+                    "Belongs to".into(),
+                    escape(&what.unwrap_or_else(|| format!("Job {id}"))),
+                ));
             }
             None => {
                 if let Some(service) = self.seen.mains.get(&pid) {
-                    let shown = self.service(service).and_then(|s| s.display_name.clone()).unwrap_or_else(|| service.clone());
-                    facts.push(("Belongs to".into(), format!("{} — its main process", escape(&shown))));
+                    let shown = self
+                        .service(service)
+                        .and_then(|s| s.display_name.clone())
+                        .unwrap_or_else(|| service.clone());
+                    facts.push((
+                        "Belongs to".into(),
+                        format!("{} — its main process", escape(&shown)),
+                    ));
                 } else if pid == 1 {
-                    facts.push(("Belongs to".into(), "Nothing: it is the service manager, which starts every service".into()));
+                    facts.push((
+                        "Belongs to".into(),
+                        "Nothing: it is the service manager, which starts every service".into(),
+                    ));
                 }
             }
         }
         match &p.owner {
             Ok(owner) => {
-                let name = self.seen.names.get(&owner.user).cloned().unwrap_or_else(|| owner.user.to_string());
+                let name = self
+                    .seen
+                    .names
+                    .get(&owner.user)
+                    .cloned()
+                    .unwrap_or_else(|| owner.user.to_string());
                 facts.push((
                     "Runs as".into(),
-                    format!("{}<br><code class=\"sid\">{}</code>", escape(&name), escape(&owner.user.to_string())),
+                    format!(
+                        "{}<br><code class=\"sid\">{}</code>",
+                        escape(&name),
+                        escape(&owner.user.to_string())
+                    ),
                 ));
                 facts.push(("Signed-in session".into(), owner.session.0.to_string()));
                 if let Some(level) = owner.integrity {
@@ -548,7 +668,13 @@ impl Manager {
                 }
             }
             Err(why) if Some(*why) == said => {}
-            Err(why) => facts.push(("Runs as".into(), format!("<span class=\"unsaid\">{}</span>", escape(words::closed(*why))))),
+            Err(why) => facts.push((
+                "Runs as".into(),
+                format!(
+                    "<span class=\"unsaid\">{}</span>",
+                    escape(words::closed(*why))
+                ),
+            )),
         }
         let mut mitigations = String::new();
         match &p.psb {
@@ -561,14 +687,22 @@ impl Manager {
                     format!(
                         "<h3>Mitigations</h3><ul class=\"plain mitigations\">{}</ul>",
                         on.iter()
-                            .map(|(name, what)| format!("<li><span>{name}</span><small>{what}</small></li>"))
+                            .map(|(name, what)| format!(
+                                "<li><span>{name}</span><small>{what}</small></li>"
+                            ))
                             .collect::<String>()
                     )
                 };
             }
-            None => facts.push(("Protection".into(), "<span class=\"unsaid\">Its permissions don't let you see this.</span>".into())),
+            None => facts.push((
+                "Protection".into(),
+                "<span class=\"unsaid\">Its permissions don't let you see this.</span>".into(),
+            )),
         }
-        let dl: String = facts.iter().map(|(k, v)| format!("<dt>{k}</dt><dd>{v}</dd>")).collect();
+        let dl: String = facts
+            .iter()
+            .map(|(k, v)| format!("<dt>{k}</dt><dd>{v}</dd>"))
+            .collect();
         format!(
             "<aside class=\"details\"><h2>{name}</h2><p class=\"id\">Process {pid}</p>{note}{actions}<dl>{dl}</dl>{mitigations}</aside>",
             name = escape(&self.name(p)),
@@ -578,11 +712,21 @@ impl Manager {
 
     fn footer(&self) -> String {
         let count = self.seen.procs.iter().filter(|p| !Self::kernel(p)).count();
-        let cpu = self.seen.cpu.map(|cpu| format!("CPU {}", words::share(cpu))).unwrap_or_default();
+        let cpu = self
+            .seen
+            .cpu
+            .map(|cpu| format!("CPU {}", words::share(cpu)))
+            .unwrap_or_default();
         let memory = self
             .seen
             .memory
-            .map(|(total, free)| format!("Memory {} of {}", words::bytes(total.saturating_sub(free)), words::bytes(total)))
+            .map(|(total, free)| {
+                format!(
+                    "Memory {} of {}",
+                    words::bytes(total.saturating_sub(free)),
+                    words::bytes(total)
+                )
+            })
             .unwrap_or_default();
         format!(
             "<div class=\"status\"><span>{count} processes</span><span>{cpu}</span><span>{memory}</span></div>"
@@ -595,11 +739,16 @@ impl Manager {
             self.said = None;
         }
         self.picked = Some(pid);
-        let protected = self.proc(pid).and_then(|p| p.psb).is_some_and(|psb| psb.is_protected());
+        let protected = self
+            .proc(pid)
+            .and_then(|p| p.psb)
+            .is_some_and(|psb| psb.is_protected());
         let kernel = self.proc(pid).is_some_and(Self::kernel);
         self.command = Some((pid, procs::command_line(pid, protected)));
         self.may_end = Some((pid, ending::may_end(pid, protected, kernel)));
-        self.status = self.service_of(pid).map(|name| (pid, name.clone(), ask_status(&name)));
+        self.status = self
+            .service_of(pid)
+            .map(|name| (pid, name.clone(), ask_status(&name)));
     }
 
     /// What may be done to the picked process, and what is being done.
@@ -610,9 +759,15 @@ impl Manager {
             None => String::new(),
         };
         let main = self.is_main(p.pid);
-        let service_name = self.status.as_ref().filter(|(at, ..)| *at == p.pid).map(|(_, name, _)| {
-            self.service(name).and_then(|s| s.display_name.clone()).unwrap_or_else(|| name.clone())
-        });
+        let service_name =
+            self.status
+                .as_ref()
+                .filter(|(at, ..)| *at == p.pid)
+                .map(|(_, name, _)| {
+                    self.service(name)
+                        .and_then(|s| s.display_name.clone())
+                        .unwrap_or_else(|| name.clone())
+                });
         let body = match &self.doing {
             Doing::AskingEnd => format!(
                 "<div class=\"asking\"><p>End {name}? Anything it hasn't saved is lost.{service}</p>\
@@ -634,12 +789,16 @@ impl Manager {
                 name = escape(service_name.as_deref().unwrap_or("its service")),
             ),
             Doing::AskingStopJob => {
-                let what = self.job_of(p).map(|job| job.description.clone()).filter(|d| !d.is_empty());
+                let what = self
+                    .job_of(p)
+                    .map(|job| job.description.clone())
+                    .filter(|d| !d.is_empty());
                 format!(
                     "<div class=\"asking\"><p>Stop {what}? Everything in it ends.</p>\
                      <button type=\"button\" class=\"danger\" fx-click=\"stop-job-confirm\">Stop job</button>\
                      <button type=\"button\" fx-click=\"cancel\">Cancel</button></div>",
-                    what = escape(&what.map_or_else(|| "its job".to_string(), |d| format!("“{d}”"))),
+                    what =
+                        escape(&what.map_or_else(|| "its job".to_string(), |d| format!("“{d}”"))),
                 )
             }
             Doing::Ending { pid, since, .. } if *pid == p.pid => {
@@ -658,24 +817,34 @@ impl Manager {
                 let mut buttons = Vec::new();
                 let mut why_not = Vec::new();
                 match self.may_end.as_ref().filter(|(pid, _)| *pid == p.pid) {
-                    Some((_, Ok(()))) => buttons.push("<button type=\"button\" fx-click=\"end\">End process</button>"),
+                    Some((_, Ok(()))) => buttons
+                        .push("<button type=\"button\" fx-click=\"end\">End process</button>"),
                     Some((_, Err(why))) => why_not.push(why.clone()),
                     None => {}
                 }
                 match self.status_for(p.pid) {
-                    Some(Ok(status)) if admission(Command::Stop, status.summary.state) == Admission::Acts => {
+                    Some(Ok(status))
+                        if admission(Command::Stop, status.summary.state) == Admission::Acts =>
+                    {
                         if status.granted.iter().any(|right| right == "stop") {
                             buttons.push("<button type=\"button\" fx-click=\"stop-service\">Stop service</button>");
                         } else {
                             why_not.push("Its service's permissions don't let you stop it.".into());
                         }
                     }
-                    Some(Err(why)) => why_not.push(format!("Whether you may stop its service couldn't be asked: {why}")),
+                    Some(Err(why)) => why_not.push(format!(
+                        "Whether you may stop its service couldn't be asked: {why}"
+                    )),
                     _ => {}
                 }
-                if let Some(job) = self.job_of(p).filter(|job| job.state == "running" || job.state == "created") {
+                if let Some(job) = self
+                    .job_of(p)
+                    .filter(|job| job.state == "running" || job.state == "created")
+                {
                     if job.granted.iter().any(|right| right == "stop") {
-                        buttons.push("<button type=\"button\" fx-click=\"stop-job\">Stop job</button>");
+                        buttons.push(
+                            "<button type=\"button\" fx-click=\"stop-job\">Stop job</button>",
+                        );
                     } else {
                         why_not.push("Its job's permissions don't let you stop it.".into());
                     }
@@ -685,7 +854,10 @@ impl Manager {
                 } else {
                     format!("<div class=\"actions\">{}</div>", buttons.concat())
                 };
-                let why_not: String = why_not.iter().map(|why| format!("<p class=\"may\">{}</p>", escape(why))).collect();
+                let why_not: String = why_not
+                    .iter()
+                    .map(|why| format!("<p class=\"may\">{}</p>", escape(why)))
+                    .collect();
                 format!("{buttons}{why_not}")
             }
         };
@@ -742,16 +914,31 @@ impl Manager {
             }
             "end-confirm" => {
                 self.doing = Doing::Looking;
-                match ending::pidfd(pid).and_then(|fd| ending::signal(&fd, libc::SIGTERM).map(|()| fd)) {
-                    Ok(pidfd) => self.doing = Doing::Ending { pid, pidfd, since: Instant::now() },
-                    Err(e) => self.said = Some(Err(format!("It couldn't be ended: {}.", words::io_error(&e)))),
+                match ending::pidfd(pid)
+                    .and_then(|fd| ending::signal(&fd, libc::SIGTERM).map(|()| fd))
+                {
+                    Ok(pidfd) => {
+                        self.doing = Doing::Ending {
+                            pid,
+                            pidfd,
+                            since: Instant::now(),
+                        }
+                    }
+                    Err(e) => {
+                        self.said = Some(Err(format!(
+                            "It couldn't be ended: {}.",
+                            words::io_error(&e)
+                        )))
+                    }
                 }
             }
             "end-now" => {
                 if let Doing::Ending { pidfd, .. } = &self.doing {
                     self.said = Some(match ending::signal(pidfd, libc::SIGKILL) {
                         Ok(()) => Ok("Ended at once.".into()),
-                        Err(e) if e.raw_os_error() == Some(libc::ESRCH) => Ok("It has ended.".into()),
+                        Err(e) if e.raw_os_error() == Some(libc::ESRCH) => {
+                            Ok("It has ended.".into())
+                        }
                         Err(e) => Err(format!("It couldn't be ended: {}.", words::io_error(&e))),
                     });
                 }
@@ -766,7 +953,11 @@ impl Manager {
                 if let Some((_, name, _)) = self.status.clone().filter(|(at, ..)| *at == pid) {
                     let done = ControlClient::connect_default()
                         .map_err(|e| e.to_string())
-                        .and_then(|mut client| client.command(Command::Stop, &name).map_err(|e| e.to_string()));
+                        .and_then(|mut client| {
+                            client
+                                .command(Command::Stop, &name)
+                                .map_err(|e| e.to_string())
+                        });
                     self.said = Some(match done {
                         Ok(_) => Ok("Asked peinit to stop its service.".into()),
                         Err(why) => Err(format!("Its service couldn't be stopped: {why}")),
@@ -780,7 +971,10 @@ impl Manager {
             }
             "stop-job-confirm" => {
                 self.doing = Doing::Looking;
-                let id = self.proc(pid).and_then(|p| self.job_of(p)).map(|job| job.id.clone());
+                let id = self
+                    .proc(pid)
+                    .and_then(|p| self.job_of(p))
+                    .map(|job| job.id.clone());
                 if let Some(id) = id {
                     self.stop_job(&id);
                 }
@@ -844,13 +1038,18 @@ impl Manager {
     /// Whether a session is a person's, and not a service's or the kernel's
     /// own.
     fn a_persons(s: &Signed) -> bool {
-        s.id != LogonSessionInfo::SYSTEM.0 && s.id != LogonSessionInfo::ANONYMOUS.0 && s.logon_type != Some(5)
+        s.id != LogonSessionInfo::SYSTEM.0
+            && s.id != LogonSessionInfo::ANONYMOUS.0
+            && s.logon_type != Some(5)
     }
 
     /// What kind of sign-in a session is: the kernel says console, remote,
     /// service and so on; where its processes are says desktop from SSH.
     fn kind(&self, s: &Signed) -> &'static str {
-        let members = s.pids.iter().filter_map(|pid| self.proc(*pid)?.member.as_ref());
+        let members = s
+            .pids
+            .iter()
+            .filter_map(|pid| self.proc(*pid)?.member.as_ref());
         let mut desktop = false;
         let mut ssh = false;
         for member in members {
@@ -864,7 +1063,11 @@ impl Manager {
     }
 
     fn who(&self, sid: &Sid) -> String {
-        self.seen.names.get(sid).cloned().unwrap_or_else(|| sid.to_string())
+        self.seen
+            .names
+            .get(sid)
+            .cloned()
+            .unwrap_or_else(|| sid.to_string())
     }
 
     fn sessions_listing(&self, fields: &Fields) -> String {
@@ -874,7 +1077,11 @@ impl Manager {
             .signed()
             .into_iter()
             .filter(|s| all || Self::a_persons(s))
-            .filter(|s| filter.is_empty() || self.who(&s.user).to_lowercase().contains(&filter) || s.id.to_string() == filter)
+            .filter(|s| {
+                filter.is_empty()
+                    || self.who(&s.user).to_lowercase().contains(&filter)
+                    || s.id.to_string() == filter
+            })
             .collect();
         if signed.is_empty() {
             return "<p class=\"more\">Nobody is signed in that you can see.</p>".into();
@@ -919,7 +1126,9 @@ impl Manager {
                 Some(Ok(done)) => escape(done),
                 _ => "It has ended.".into(),
             };
-            return format!("<aside class=\"details\"><h2>Session {id}</h2><p class=\"note\" role=\"status\">{said}</p></aside>");
+            return format!(
+                "<aside class=\"details\"><h2>Session {id}</h2><p class=\"note\" role=\"status\">{said}</p></aside>"
+            );
         };
         let mut facts: Vec<(String, String)> = vec![("Signed in".into(), self.kind(&s).into())];
         if let Some(at) = s.created {
@@ -928,17 +1137,20 @@ impl Manager {
         if let Some(package) = &s.package {
             facts.push(("Through".into(), escape(&words::package(package))));
         }
-        facts.push(("SID".into(), format!("<code class=\"sid\">{}</code>", escape(&s.user.to_string()))));
-        if let Some(job) = self
-            .seen
-            .jobs
-            .as_ref()
-            .ok()
-            .and_then(|jobs| jobs.iter().find(|j| j.logon_session == Some(id) && j.state == "running"))
-        {
+        facts.push((
+            "SID".into(),
+            format!("<code class=\"sid\">{}</code>", escape(&s.user.to_string())),
+        ));
+        if let Some(job) = self.seen.jobs.as_ref().ok().and_then(|jobs| {
+            jobs.iter()
+                .find(|j| j.logon_session == Some(id) && j.state == "running")
+        }) {
             facts.push(("Desktop".into(), escape(&job.description)));
         }
-        let dl: String = facts.iter().map(|(k, v)| format!("<dt>{k}</dt><dd>{v}</dd>")).collect();
+        let dl: String = facts
+            .iter()
+            .map(|(k, v)| format!("<dt>{k}</dt><dd>{v}</dd>"))
+            .collect();
         let processes = if s.pids.is_empty() {
             "<p class=\"more\">None you can see. A session lasts while anything holds it, \
              such as a sign-in still under way.</p>"
@@ -969,7 +1181,9 @@ impl Manager {
     /// the window too.
     fn is_own_session(&self, id: u64) -> bool {
         let me = std::process::id();
-        self.proc(me).and_then(|p| p.owner.as_ref().ok()).is_some_and(|owner| owner.session.0 == id)
+        self.proc(me)
+            .and_then(|p| p.owner.as_ref().ok())
+            .is_some_and(|owner| owner.session.0 == id)
     }
 
     /// Whether authd would let this person sign the session `id` out, asked
@@ -978,7 +1192,10 @@ impl Manager {
         if let Some(s) = self.signed().into_iter().find(|s| s.id == id)
             && !Self::a_persons(&s)
         {
-            return Err("A service's session ends when its service stops, and the kernel's own never end.".into());
+            return Err(
+                "A service's session ends when its service stops, and the kernel's own never end."
+                    .into(),
+            );
         }
         match Logon::new().with_timeout(Duration::from_secs(5)).may_end_session(id) {
             Ok(()) => Ok(()),
@@ -1025,7 +1242,11 @@ impl Manager {
         self.said = Some(match Logon::new().end_session(id) {
             Ok(ended) if ended.remaining == 0 => Ok(format!(
                 "Signed out: {}.",
-                if ended.ended == 1 { "1 process ended".to_string() } else { format!("{} processes ended", ended.ended) }
+                if ended.ended == 1 {
+                    "1 process ended".to_string()
+                } else {
+                    format!("{} processes ended", ended.ended)
+                }
             )),
             Ok(ended) => Ok(format!(
                 "{} ended, but {} still hold the session: authd couldn't end them.",
@@ -1041,7 +1262,12 @@ impl Manager {
     fn jobs_listing(&self, fields: &Fields) -> String {
         let jobs = match &self.seen.jobs {
             Ok(jobs) => jobs,
-            Err(why) => return format!("<p class=\"more\">peinit couldn't be asked for its jobs: {}</p>", escape(why)),
+            Err(why) => {
+                return format!(
+                    "<p class=\"more\">peinit couldn't be asked for its jobs: {}</p>",
+                    escape(why)
+                );
+            }
         };
         let filter = fields.get("filter").trim().to_lowercase();
         let mut shown: Vec<&SubmittedJob> = jobs
@@ -1050,7 +1276,10 @@ impl Manager {
                 filter.is_empty()
                     || job.description.to_lowercase().contains(&filter)
                     || job.image_path.to_lowercase().contains(&filter)
-                    || self.sid_name(&job.identity).to_lowercase().contains(&filter)
+                    || self
+                        .sid_name(&job.identity)
+                        .to_lowercase()
+                        .contains(&filter)
             })
             .collect();
         if shown.is_empty() {
@@ -1079,7 +1308,10 @@ impl Manager {
 
     /// What a SID string is called, as far as is known.
     fn sid_name(&self, sid: &str) -> String {
-        sid.parse::<Sid>().ok().and_then(|sid| self.seen.names.get(&sid).cloned()).unwrap_or_else(|| sid.to_string())
+        sid.parse::<Sid>()
+            .ok()
+            .and_then(|sid| self.seen.names.get(&sid).cloned())
+            .unwrap_or_else(|| sid.to_string())
     }
 
     fn jobs_notes(&self) -> String {
@@ -1095,14 +1327,18 @@ impl Manager {
         let Some(job) = self.job(id) else {
             return "<aside class=\"details\"><h2>A job</h2><p class=\"note\">It has gone: peinit keeps an ended job for a minute.</p></aside>".into();
         };
-        let mut facts: Vec<(String, String)> = vec![("State".into(), words::job_state(&job.state).into())];
+        let mut facts: Vec<(String, String)> =
+            vec![("State".into(), words::job_state(&job.state).into())];
         if let Some(text) = &job.status_text {
             facts.push(("Says".into(), escape(text)));
         }
         if let Some(progress) = &job.progress {
             facts.push(("Progress".into(), escape(&words::progress(progress))));
         }
-        facts.push(("Program".into(), format!("<code>{}</code>", escape(&job.image_path))));
+        facts.push((
+            "Program".into(),
+            format!("<code>{}</code>", escape(&job.image_path)),
+        ));
         if let Some(pid) = job.pid.filter(|pid| self.proc(*pid).is_some()) {
             facts.push((
                 "Process".into(),
@@ -1110,9 +1346,15 @@ impl Manager {
             ));
         }
         facts.push(("Runs as".into(), escape(&self.sid_name(&job.identity))));
-        facts.push(("Asked for by".into(), escape(&self.sid_name(&job.submitter))));
+        facts.push((
+            "Asked for by".into(),
+            escape(&self.sid_name(&job.submitter)),
+        ));
         for (label, at) in [("Started", &job.started_at), ("Ended", &job.ended_at)] {
-            if let Some(at) = at.as_deref().and_then(|at| at.parse::<jiff::Timestamp>().ok()) {
+            if let Some(at) = at
+                .as_deref()
+                .and_then(|at| at.parse::<jiff::Timestamp>().ok())
+            {
                 facts.push((label.into(), escape(&words::when(at.into()))));
             }
         }
@@ -1141,7 +1383,10 @@ impl Manager {
             Some(Err(why)) => format!("<p class=\"note bad\" role=\"alert\">{}</p>", escape(why)),
             None => String::new(),
         };
-        let dl: String = facts.iter().map(|(k, v)| format!("<dt>{k}</dt><dd>{v}</dd>")).collect();
+        let dl: String = facts
+            .iter()
+            .map(|(k, v)| format!("<dt>{k}</dt><dd>{v}</dd>"))
+            .collect();
         format!(
             "<aside class=\"details\"><h2>{title}</h2><p class=\"id\">Job {id}</p>{said}{action}<dl>{dl}</dl></aside>",
             title = escape(&job_title(job)),
@@ -1163,7 +1408,11 @@ impl Manager {
 /// What a job is called: its description, or its program.
 fn job_title(job: &SubmittedJob) -> String {
     if job.description.is_empty() {
-        job.image_path.rsplit('/').next().unwrap_or("A job").to_string()
+        job.image_path
+            .rsplit('/')
+            .next()
+            .unwrap_or("A job")
+            .to_string()
     } else {
         job.description.clone()
     }
@@ -1318,146 +1567,5 @@ impl Live for Manager {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::procs::{Owner, Stat};
-    use peinit::client::ServicePart;
-    use peios::token::SessionId;
-    use std::time::Duration;
-
-    fn stat(name: &str, ticks: u64) -> Stat {
-        Stat { name: name.into(), state: 'S', ppid: 1, kernel: false, ticks, threads: 1, started: 0, resident: 100 }
-    }
-
-    fn proc(pid: u32, name: &str, service: Option<&str>, user: Option<&str>) -> Proc {
-        Proc {
-            pid,
-            stat: Ok(stat(name, 0)),
-            member: service.map(|s| CgroupMember::Service { service: s.into(), part: Some(ServicePart::Main) }),
-            owner: match user {
-                Some(sid) => Ok(Owner { user: sid.parse().unwrap(), session: SessionId(1000), integrity: None }),
-                None => Err(Closed::Refused),
-            },
-            psb: None,
-        }
-    }
-
-    fn window(procs: Vec<Proc>) -> Manager {
-        Manager::new(Seen { procs, ..Seen::default() })
-    }
-
-    #[test]
-    fn processes_are_listed_together_until_grouped() {
-        let m = window(vec![proc(10, "sshd", Some("sshd"), Some("S-1-5-18")), proc(12, "bash", None, None)]);
-        assert_eq!(m.grouping, Grouping::None);
-        let listing = m.listing(&Fields::default());
-        assert!(!listing.contains("<small>"), "{listing}");
-        assert!(listing.contains("<span class=\"name\">sshd</span>"), "{listing}");
-        assert!(listing.contains("<span class=\"name\">bash</span>"), "{listing}");
-    }
-
-    #[test]
-    fn processes_group_under_their_service_and_the_rest_say_where_they_are() {
-        let mut m = window(vec![
-            proc(10, "sshd", Some("sshd"), Some("S-1-5-18")),
-            proc(11, "sshd", Some("sshd"), Some("S-1-5-18")),
-            proc(12, "bash", None, None),
-        ]);
-        m.grouping = Grouping::Service;
-        let fields = Fields::default();
-        let listing = m.listing(&fields);
-        assert!(listing.contains("sshd <small>2</small>"), "{listing}");
-        assert!(listing.contains("Not in a service <small>1</small>"), "{listing}");
-        // The person can't see whose 12 is, and is told so.
-        assert!(m.notes().contains("You can&#39;t see who runs 1 process") || m.notes().contains("You can't see who runs 1 process"));
-    }
-
-    #[test]
-    fn by_person_a_process_whose_owner_is_closed_goes_under_someone_you_can_t_see() {
-        let mut m = window(vec![proc(10, "sshd", Some("sshd"), Some("S-1-5-18")), proc(12, "bash", None, None)]);
-        m.grouping = Grouping::Person;
-        let listing = m.listing(&Fields::default());
-        assert!(listing.contains("S-1-5-18 <small>1</small>"), "{listing}");
-        assert!(listing.contains("Someone you can"), "{listing}");
-    }
-
-    #[test]
-    fn a_protected_process_peinit_names_is_called_by_its_service() {
-        let mut closed = proc(20, "", None, None);
-        closed.stat = Err(Closed::Protected);
-        closed.owner = Err(Closed::Protected);
-        let mut m = window(vec![closed]);
-        m.seen.mains.insert(20, "authd".into());
-        m.grouping = Grouping::Service;
-        let listing = m.listing(&Fields::default());
-        assert!(listing.contains("authd <small>1</small>"), "{listing}");
-        assert!(listing.contains("<span class=\"name\">authd</span>"), "{listing}");
-    }
-
-    #[test]
-    fn the_filter_finds_by_name_pid_and_service() {
-        let m = window(vec![proc(10, "sshd", Some("ssh"), Some("S-1-5-18")), proc(31, "bash", None, Some("S-1-5-18"))]);
-        let p10 = m.proc(10).unwrap();
-        assert!(m.matches(p10, "SSHD"));
-        assert!(m.matches(p10, "ssh"));
-        assert!(m.matches(m.proc(31).unwrap(), "31"));
-        assert!(!m.matches(p10, "bash"));
-    }
-
-    fn session(id: u64, sid: &str, logon_type: u32) -> LogonSessionInfo {
-        LogonSessionInfo {
-            id: SessionId(id),
-            user: sid.parse().unwrap(),
-            logon_type,
-            auth_package: "lpsd".into(),
-            created_at: std::time::UNIX_EPOCH + Duration::from_secs(1_791_120_598),
-        }
-    }
-
-    #[test]
-    fn the_kernel_s_list_gives_each_session_its_processes_and_services_wait_to_be_asked_for() {
-        let mut desktop = proc(40, "gexora", None, Some("S-1-5-21-1-2-3-1002"));
-        desktop.member = Some(CgroupMember::Job("4f7a".into()));
-        if let Ok(owner) = &mut desktop.owner {
-            owner.session = SessionId(1007);
-        }
-        let mut m = window(vec![desktop]);
-        m.seen.sessions = Ok(vec![
-            session(1007, "S-1-5-21-1-2-3-1002", 10),
-            session(1004, "S-1-5-80-1-2-3-4-5", 5),
-            session(999, "S-1-5-18", 5),
-        ]);
-        m.view = View::SignedIn;
-        let listing = m.sessions_listing(&Fields::default());
-        assert!(listing.contains("On the desktop"), "{listing}");
-        assert!(!listing.contains("S-1-5-80"), "a service's session waits to be asked for: {listing}");
-        assert!(!listing.contains("S-1-5-18"), "{listing}");
-        let signed = m.signed();
-        assert_eq!(signed.iter().find(|s| s.id == 1007).unwrap().pids, vec![40]);
-    }
-
-    #[test]
-    fn without_the_list_the_person_s_own_sessions_are_shown_and_why_is_said() {
-        let mut own = proc(50, "sh", None, Some("S-1-5-21-1-2-3-1001"));
-        if let Ok(owner) = &mut own.owner {
-            owner.session = SessionId(1010);
-        }
-        let mut m = window(vec![own]);
-        m.seen.sessions = Err("Only Administrators may see everyone who is signed in.".into());
-        let signed = m.signed();
-        assert_eq!(signed.len(), 1);
-        assert_eq!(signed[0].id, 1010);
-        assert_eq!(signed[0].logon_type, None);
-        assert!(m.sessions_notes().contains("Only Administrators"));
-    }
-
-    #[test]
-    fn kernel_threads_are_left_out_until_asked_for() {
-        let mut k = proc(2, "kthreadd", None, Some("S-1-5-18"));
-        if let Ok(stat) = &mut k.stat {
-            stat.kernel = true;
-        }
-        let m = window(vec![k]);
-        assert!(m.listing(&Fields::default()).contains("No process matches"));
-    }
-}
+#[path = "manager_tests.rs"]
+mod tests;

@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.toml",
+    "BUILD.bazel",
+])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "pnp_core",
+    srcs = glob(["**/*.rs"]) + ["//vendor/kernel:semantic-sources"],
+    compile_data = ["Cargo.toml"],
+    crate_root = "lib.rs",
+    edition = "2021",
+    version = "0.1.0",
+    deps = ["//vendor/kernel:peios-uapi"],
+)

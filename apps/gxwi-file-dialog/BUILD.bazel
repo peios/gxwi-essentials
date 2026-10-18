@@ -1,0 +1,105 @@
+load("@crates//:crates.bzl", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
+load("//build:version.bzl", "VERSION")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.toml",
+    "BUILD.bazel",
+])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "**/__pycache__/**",
+            "**/*.pyc",
+            "target/**",
+        ],
+    ),
+)
+
+rust_library(
+    name = "library",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["Cargo.toml"] + glob(
+        [
+            "src/**/*.css",
+            "page/**",
+        ],
+        allow_empty = True,
+    ),
+    crate_features = ["program"],
+    crate_name = "gxwi_file_dialog",
+    crate_root = "src/lib.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = VERSION,
+    deps = all_crate_deps(normal = True) + ["//crates/gxwi-fs"],
+)
+
+rust_test(
+    name = "library-tests",
+    size = "small",
+    crate = ":library",
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+    deps = all_crate_deps(normal_dev = True),
+)
+
+rust_doc_test(
+    name = "doc-tests",
+    crate = ":library",
+)
+
+# Protocol clients remain usable without the application or GXWI framework.
+rust_library(
+    name = "client",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "gxwi_file_dialog",
+    crate_root = "src/lib.rs",
+    edition = "2024",
+    version = VERSION,
+    deps = [
+        "@crates//:serde",
+        "@crates//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "client-tests",
+    size = "small",
+    crate = ":client",
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+    deps = all_crate_deps(normal_dev = True),
+)
+
+rust_binary(
+    name = "gxwi-file-dialog",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = ["Cargo.toml"] + glob(
+        [
+            "src/**/*.css",
+            "page/**",
+        ],
+        allow_empty = True,
+    ),
+    crate_features = ["program"],
+    crate_root = "src/main.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = VERSION,
+    deps = all_crate_deps(normal = True) + [
+        ":library",
+        "//crates/gxwi-fs",
+    ],
+)
+
+rust_test(
+    name = "tests",
+    size = "small",
+    crate = ":gxwi-file-dialog",
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+    deps = all_crate_deps(normal_dev = True),
+)

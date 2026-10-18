@@ -1,0 +1,35 @@
+--- currentuser\software\gxwi-event-viewer
+canonical: CurrentUser\Software\gxwi-event-viewer
+
+Personal saved metric dashboards.
+
+Event Viewer reads these settings as the session account. Access follows
+the key's registry security. Saving dashboards needs write access.
+
+--- currentuser\software\gxwi-event-viewer dashboards
+canonical: CurrentUser\Software\gxwi-event-viewer Dashboards
+type: REG_MULTI_SZ
+default: (absent: built-in health dashboard)
+valid: dashboard and chart lines as described below
+applies: restart (when Event Viewer opens)
+
+Ordered dashboards and their metric charts.
+
+Each string starts a dashboard or adds a chart to the preceding dashboard.
+The format is `dashboard SPAN NAME` or
+`chart METRIC TRANSFORM FUNCTION GROUPING`, with spaces between fields.
+A name can contain spaces and must contain non-whitespace text.
+
+SPAN is `15m`, `1h`, `6h`, `24h`, or `7d`. TRANSFORM is `none`, `rate`,
+`delta`, `p50`, `p95`, or `p99`. FUNCTION is `avg`, `min`, `max`, or `sum`.
+GROUPING is `one` for a combined series or `each` for separate series.
+METRIC names a metric known to eventd; the query service checks its meaning.
+
+The reader accepts at most 64 dashboards and 32 charts per dashboard.
+Malformed lines are skipped. A chart needs a preceding accepted dashboard.
+An absent value or a list with no accepted dashboard selects the built-in
+health dashboard. Read errors or a wrong registry type also select that
+dashboard and display an explanation. Reading does not repair the value.
+
+The viewer's own dashboard controls update the open window and save this
+value. Reopen the viewer to load changes made by another program.

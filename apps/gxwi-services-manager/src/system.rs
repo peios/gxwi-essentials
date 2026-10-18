@@ -84,7 +84,11 @@ pub struct Defined {
 impl Defined {
     /// One known by its name and nothing else.
     pub fn named(name: &str) -> Defined {
-        Defined { name: name.into(), display_name: None, description: None }
+        Defined {
+            name: name.into(),
+            display_name: None,
+            description: None,
+        }
     }
 }
 
@@ -121,10 +125,18 @@ pub fn look(chosen: Option<&str>) -> Seen {
 /// What peinit lists, or why it could not be asked.
 pub fn listing() -> Result<Vec<Summary>, Unasked> {
     match ControlClient::connect_default() {
-        Ok(mut client) => client.services().map_err(|failure| Unasked::Unreachable(unreachable(&failure))),
+        Ok(mut client) => client
+            .services()
+            .map_err(|failure| Unasked::Unreachable(unreachable(&failure))),
         // Whether it was this caller that was refused, the error says by its
         // kind, which the client's message no longer carries.
-        Err(_) if UnixStream::connect(CONTROL_SOCKET_PATH).err().is_some_and(|e| e.kind() == ErrorKind::PermissionDenied) => Err(Unasked::NotAllowed),
+        Err(_)
+            if UnixStream::connect(CONTROL_SOCKET_PATH)
+                .err()
+                .is_some_and(|e| e.kind() == ErrorKind::PermissionDenied) =>
+        {
+            Err(Unasked::NotAllowed)
+        }
         Err(e) => Err(Unasked::Unreachable(unreachable(&Failure::from(e)))),
     }
 }
@@ -149,7 +161,10 @@ impl Registry {
     /// chosen, is not.
     pub fn covers(&self, services: &Result<Vec<Summary>, Unasked>, chosen: Option<&str>) -> bool {
         self.changeable.as_ref().map(|(chosen, _)| chosen.as_str()) == chosen
-            && services.iter().flatten().all(|service| self.rights.contains_key(&service.service))
+            && services
+                .iter()
+                .flatten()
+                .all(|service| self.rights.contains_key(&service.service))
     }
 }
 
@@ -162,12 +177,22 @@ pub fn registry(services: &Result<Vec<Summary>, Unasked>, chosen: Option<&str>) 
         from: HashMap::new(),
         every: every().map(|(_, from)| from),
         every_changeable: changeable(SERVICES_ROOT_KEY),
-        changeable: chosen.map(|chosen| (chosen.to_string(), changeable(&format!("{SERVICES_ROOT_KEY}\\{chosen}")))),
+        changeable: chosen.map(|chosen| {
+            (
+                chosen.to_string(),
+                changeable(&format!("{SERVICES_ROOT_KEY}\\{chosen}")),
+            )
+        }),
         creatable: crate::store::creatable(),
         defined: Err(()),
     };
-    let listed = services.iter().flatten().map(|service| service.service.clone());
-    let names: Vec<String> = listed.chain(defined.iter().flatten().map(|defined| defined.name.clone())).collect();
+    let listed = services
+        .iter()
+        .flatten()
+        .map(|service| service.service.clone());
+    let names: Vec<String> = listed
+        .chain(defined.iter().flatten().map(|defined| defined.name.clone()))
+        .collect();
     for name in names {
         if registry.rights.contains_key(&name) {
             continue;
@@ -186,7 +211,15 @@ pub fn registry(services: &Result<Vec<Summary>, Unasked>, chosen: Option<&str>) 
 pub fn seen(services: Result<Vec<Summary>, Unasked>, registry: &Registry) -> Seen {
     let hidden = match (&services, &registry.defined) {
         (Ok(listed), Ok(defined)) => Hidden::These(
-            defined.iter().filter(|defined| !listed.iter().any(|service| service.service.eq_ignore_ascii_case(&defined.name))).cloned().collect(),
+            defined
+                .iter()
+                .filter(|defined| {
+                    !listed
+                        .iter()
+                        .any(|service| service.service.eq_ignore_ascii_case(&defined.name))
+                })
+                .cloned()
+                .collect(),
         ),
         // Nothing is the caller's to ask: every service defined is one whose
         // state is hidden from them.
@@ -215,7 +248,14 @@ pub fn seen(services: Result<Vec<Summary>, Unasked>, registry: &Registry) -> See
 /// of keys the caller may not read, by design of the registry, and what
 /// changed is read again as the caller, as any look is.
 pub fn watch_registry(changed: Sender<()>) -> bool {
-    let Ok(key) = Key::open(None, SERVICES_ROOT_KEY, KeyAccess::NOTIFY, OpenFlags::empty()) else { return false };
+    let Ok(key) = Key::open(
+        None,
+        SERVICES_ROOT_KEY,
+        KeyAccess::NOTIFY,
+        OpenFlags::empty(),
+    ) else {
+        return false;
+    };
     if key.notify(NotifyFilter::ALL, true).is_err() {
         return false;
     }
@@ -247,28 +287,61 @@ pub fn status(service: &str) -> Result<Status, Failure> {
 pub fn unreachable(failure: &Failure) -> String {
     match failure {
         Failure::Unreachable(why) => format!("The service manager could not be asked ({why})."),
-        Failure::Refused { message, .. } => format!("The service manager would not say: {message}."),
+        Failure::Refused { message, .. } => {
+            format!("The service manager would not say: {message}.")
+        }
     }
 }
 
 /// The services defined in the registry, if which they are can be read, each
 /// with what it is called and what it does where those can be read too.
 fn defined() -> Result<Vec<Defined>, ()> {
-    let key = Key::open(None, SERVICES_ROOT_KEY, KeyAccess::ENUMERATE_SUB_KEYS, OpenFlags::empty()).map_err(|_| ())?;
-    let names: Vec<String> = key.subkeys(None).map(|subkey| subkey.map(|subkey| String::from_utf8_lossy(&subkey.name).into_owned()).map_err(|_| ())).collect::<Result<_, _>>()?;
+    let key = Key::open(
+        None,
+        SERVICES_ROOT_KEY,
+        KeyAccess::ENUMERATE_SUB_KEYS,
+        OpenFlags::empty(),
+    )
+    .map_err(|_| ())?;
+    let names: Vec<String> = key
+        .subkeys(None)
+        .map(|subkey| {
+            subkey
+                .map(|subkey| String::from_utf8_lossy(&subkey.name).into_owned())
+                .map_err(|_| ())
+        })
+        .collect::<Result<_, _>>()?;
     Ok(names
         .into_iter()
         .map(|name| {
-            let definition = Key::open(None, &format!("{SERVICES_ROOT_KEY}\\{name}"), KeyAccess::QUERY_VALUE, OpenFlags::empty()).ok();
-            let text = |value: &[u8]| definition.as_ref().and_then(|definition| string(definition, value)).filter(|text| !text.is_empty());
-            Defined { display_name: text(b"DisplayName"), description: text(b"Description"), name }
+            let definition = Key::open(
+                None,
+                &format!("{SERVICES_ROOT_KEY}\\{name}"),
+                KeyAccess::QUERY_VALUE,
+                OpenFlags::empty(),
+            )
+            .ok();
+            let text = |value: &[u8]| {
+                definition
+                    .as_ref()
+                    .and_then(|definition| string(definition, value))
+                    .filter(|text| !text.is_empty())
+            };
+            Defined {
+                display_name: text(b"DisplayName"),
+                description: text(b"Description"),
+                name,
+            }
         })
         .collect())
 }
 
 /// A string value of a key, if it is one and may be read.
 fn string(key: &Key, name: &[u8]) -> Option<String> {
-    let value = key.query_value(name, None).ok().filter(|value| value.ty == ValueType::SZ)?;
+    let value = key
+        .query_value(name, None)
+        .ok()
+        .filter(|value| value.ty == ValueType::SZ)?;
     let text = value.data.strip_suffix(&[0]).unwrap_or(&value.data);
     String::from_utf8(text.to_vec()).ok()
 }
@@ -280,7 +353,12 @@ pub fn rights(service: &str) -> (Rights, Option<From>) {
         Ok(found) => found,
         Err(why) => return (Rights::Unknown(why), None),
     };
-    let mapping = GenericMapping::new(SERVICE_GENERIC_MAPPING.read, SERVICE_GENERIC_MAPPING.write, SERVICE_GENERIC_MAPPING.execute, SERVICE_GENERIC_MAPPING.all);
+    let mapping = GenericMapping::new(
+        SERVICE_GENERIC_MAPPING.read,
+        SERVICE_GENERIC_MAPPING.write,
+        SERVICE_GENERIC_MAPPING.execute,
+        SERVICE_GENERIC_MAPPING.all,
+    );
     let rights = match AccessCheck::new(&descriptor, AccessMask::MAXIMUM_ALLOWED, mapping).check() {
         Ok(decision) => Rights::Granted(decision.granted.bits() & SERVICE_GENERIC_MAPPING.all),
         Err(e) => Rights::Unknown(format!("they could not be checked ({e})")),
@@ -315,7 +393,8 @@ pub fn every() -> Result<(SecurityDescriptor, From), String> {
     if let Some(descriptor) = stored(SERVICES_ROOT_KEY)? {
         return Ok((descriptor, From::AllServices));
     }
-    let descriptor = sddl::parse(DEFAULT_SERVICE_SECURITY_SDDL).map_err(|e| format!("peinit's default could not be read ({e})"))?;
+    let descriptor = sddl::parse(DEFAULT_SERVICE_SECURITY_SDDL)
+        .map_err(|e| format!("peinit's default could not be read ({e})"))?;
     Ok((descriptor, From::BuiltIn))
 }
 
@@ -323,13 +402,19 @@ pub fn every() -> Result<(SecurityDescriptor, From), String> {
 fn stored(path: &str) -> Result<Option<SecurityDescriptor>, String> {
     let key = match Key::open(None, path, KeyAccess::QUERY_VALUE, OpenFlags::empty()) {
         Ok(key) => key,
-        Err(e) if e.raw_os_error() == Some(EACCES) => return Err("you may not read who may control it".into()),
+        Err(e) if e.raw_os_error() == Some(EACCES) => {
+            return Err("you may not read who may control it".into());
+        }
         Err(e) => return Err(format!("who may control it could not be read ({e})")),
     };
     match key.query_value(b"ServiceSecurity", None) {
-        Ok(value) => SecurityDescriptor::from_validated_bytes(value.data).map(Some).map_err(|e| format!("who may control it is not readable ({e})")),
+        Ok(value) => SecurityDescriptor::from_validated_bytes(value.data)
+            .map(Some)
+            .map_err(|e| format!("who may control it is not readable ({e})")),
         Err(e) if e.raw_os_error() == Some(ENOENT) => Ok(None),
-        Err(e) if e.raw_os_error() == Some(EACCES) => Err("you may not read who may control it".into()),
+        Err(e) if e.raw_os_error() == Some(EACCES) => {
+            Err("you may not read who may control it".into())
+        }
         Err(e) => Err(format!("who may control it could not be read ({e})")),
     }
 }
@@ -337,10 +422,17 @@ fn stored(path: &str) -> Result<Option<SecurityDescriptor>, String> {
 /// Whether the key at `path` may be written, asked of the registry, or why
 /// not.
 fn changeable(path: &str) -> Result<(), String> {
-    match Key::open(None, path, KeyAccess::QUERY_VALUE | KeyAccess::SET_VALUE, OpenFlags::empty()) {
+    match Key::open(
+        None,
+        path,
+        KeyAccess::QUERY_VALUE | KeyAccess::SET_VALUE,
+        OpenFlags::empty(),
+    ) {
         Ok(_) => Ok(()),
         Err(e) if e.raw_os_error() == Some(EACCES) => Err("you may not change it".into()),
-        Err(e) => Err(format!("whether you may change it could not be found out ({e})")),
+        Err(e) => Err(format!(
+            "whether you may change it could not be found out ({e})"
+        )),
     }
 }
 
@@ -348,11 +440,19 @@ fn changeable(path: &str) -> Result<(), String> {
 /// none, the Services key's, so that what it was covering takes the
 /// default again.
 pub fn forget(service: Option<&str>) -> Result<(), String> {
-    let path = service.map_or_else(|| SERVICES_ROOT_KEY.to_string(), |service| format!("{SERVICES_ROOT_KEY}\\{service}"));
+    let path = service.map_or_else(
+        || SERVICES_ROOT_KEY.to_string(),
+        |service| format!("{SERVICES_ROOT_KEY}\\{service}"),
+    );
     let key = Key::open(None, &path, KeyAccess::SET_VALUE, OpenFlags::empty()).map_err(|e| {
-        if e.raw_os_error() == Some(EACCES) { "you are not allowed to".to_string() } else { e.to_string() }
+        if e.raw_os_error() == Some(EACCES) {
+            "you are not allowed to".to_string()
+        } else {
+            e.to_string()
+        }
     })?;
-    key.delete_value(b"ServiceSecurity", None, None).map_err(|e| e.to_string())
+    key.delete_value(b"ServiceSecurity", None, None)
+        .map_err(|e| e.to_string())
 }
 
 /// How a command came out.
@@ -374,16 +474,24 @@ pub enum Outcome {
 /// Asks for `command` on `service`, and follows what it started until it is
 /// over, telling `going` what it is doing on the way.
 pub fn ask(command: Command, service: &str, mut going: impl FnMut(&Operation)) -> Outcome {
-    let accepted = match ControlClient::connect_default().map_err(Failure::from).and_then(|mut client| client.command(command, service)) {
+    let accepted = match ControlClient::connect_default()
+        .map_err(Failure::from)
+        .and_then(|mut client| client.command(command, service))
+    {
         Ok(accepted) => accepted,
         Err(Failure::Refused { code, message }) => return Outcome::Refused { code, message },
         Err(failure) => return Outcome::Failed(unreachable(&failure)),
     };
-    let Some(mut id) = accepted.operation_id.clone() else { return Outcome::Answered(accepted) };
+    let Some(mut id) = accepted.operation_id.clone() else {
+        return Outcome::Answered(accepted);
+    };
     let until = Instant::now() + FOLLOWED_FOR;
     while Instant::now() < until {
         std::thread::sleep(Duration::from_millis(250));
-        let operation = match ControlClient::connect_default().map_err(Failure::from).and_then(|mut client| client.operation(&id)) {
+        let operation = match ControlClient::connect_default()
+            .map_err(Failure::from)
+            .and_then(|mut client| client.operation(&id))
+        {
             Ok(operation) => operation,
             Err(failure) => return Outcome::Failed(unreachable(&failure)),
         };
@@ -399,7 +507,10 @@ pub fn ask(command: Command, service: &str, mut going: impl FnMut(&Operation)) -
                 None => return Outcome::Done(None),
             },
             _ => {
-                let why = operation.error.or(operation.result).map(|error| crate::words::failure(&error));
+                let why = operation
+                    .error
+                    .or(operation.result)
+                    .map(|error| crate::words::failure(&error));
                 return Outcome::Failed(why.unwrap_or_else(|| "it did not finish".into()));
             }
         }
@@ -412,7 +523,15 @@ mod tests {
     use super::*;
 
     fn summary(service: &str) -> Summary {
-        Summary { service: service.into(), display_name: None, description: None, state: peinit::client::State::Active, cause: None, health: None, next_timer_at: None }
+        Summary {
+            service: service.into(),
+            display_name: None,
+            description: None,
+            state: peinit::client::State::Active,
+            cause: None,
+            health: None,
+            next_timer_at: None,
+        }
     }
 
     /// What was read of the registry: timed and secret defined, and the
@@ -420,7 +539,12 @@ mod tests {
     fn read(chosen: Option<&str>) -> Registry {
         Registry {
             defined: Ok(vec![Defined::named("timed"), Defined::named("secret")]),
-            rights: [("timed".to_string(), Rights::Granted(0xf)), ("secret".to_string(), Rights::Granted(0))].into_iter().collect(),
+            rights: [
+                ("timed".to_string(), Rights::Granted(0xf)),
+                ("secret".to_string(), Rights::Granted(0)),
+            ]
+            .into_iter()
+            .collect(),
             from: HashMap::new(),
             every: Ok(From::BuiltIn),
             every_changeable: Ok(()),

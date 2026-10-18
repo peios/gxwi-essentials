@@ -26,7 +26,10 @@ struct Heard {
 
 impl vt100::Callbacks for Heard {
     fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
-        let title: String = String::from_utf8_lossy(title).chars().filter(|c| !c.is_control()).collect();
+        let title: String = String::from_utf8_lossy(title)
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect();
         self.title = Some(title);
     }
 }
@@ -35,7 +38,12 @@ pub struct Screen(Parser<Heard>);
 
 impl Screen {
     pub fn new(size: Size) -> Screen {
-        Screen(Parser::new_with_callbacks(size.rows, size.cols, KEPT, Heard::default()))
+        Screen(Parser::new_with_callbacks(
+            size.rows,
+            size.cols,
+            KEPT,
+            Heard::default(),
+        ))
     }
 
     /// What the terminal has been called since this was last asked, if it
@@ -109,12 +117,25 @@ impl Screen {
 /// One line as it would be printed, and on to the next unless it ran on
 /// into it and `running_on` lets it.
 fn line(screen: &vt100::Screen, row: u16, cols: u16, running_on: bool, out: &mut String) {
-    let drawn = |col| screen.cell(row, col).is_some_and(|cell| cell.has_contents() || cell.bgcolor() != Color::Default || cell.inverse());
+    let drawn = |col| {
+        screen.cell(row, col).is_some_and(|cell| {
+            cell.has_contents() || cell.bgcolor() != Color::Default || cell.inverse()
+        })
+    };
     let wrapped = running_on && screen.row_wrapped(row);
-    let end = if wrapped { cols } else { (0..cols).rev().find(|&col| drawn(col)).map_or(0, |last| last + 1) };
+    let end = if wrapped {
+        cols
+    } else {
+        (0..cols)
+            .rev()
+            .find(|&col| drawn(col))
+            .map_or(0, |last| last + 1)
+    };
     let mut looks = String::new();
     for col in 0..end {
-        let Some(cell) = screen.cell(row, col) else { break };
+        let Some(cell) = screen.cell(row, col) else {
+            break;
+        };
         if cell.is_wide_continuation() {
             continue;
         }
@@ -123,7 +144,11 @@ fn line(screen: &vt100::Screen, row: u16, cols: u16, running_on: bool, out: &mut
             out.push_str(&these);
             looks = these;
         }
-        out.push_str(if cell.has_contents() { cell.contents() } else { " " });
+        out.push_str(if cell.has_contents() {
+            cell.contents()
+        } else {
+            " "
+        });
     }
     if !looks.is_empty() && looks != "\x1b[m" {
         out.push_str("\x1b[m");
@@ -136,11 +161,19 @@ fn line(screen: &vt100::Screen, row: u16, cols: u16, running_on: bool, out: &mut
 /// What sets how a cell looks, from however the one before it looked.
 fn looks_of(cell: &vt100::Cell) -> String {
     let mut looks = String::from("\x1b[");
-    let flags = [(cell.bold(), "1"), (cell.dim(), "2"), (cell.italic(), "3"), (cell.underline(), "4"), (cell.inverse(), "7")];
+    let flags = [
+        (cell.bold(), "1"),
+        (cell.dim(), "2"),
+        (cell.italic(), "3"),
+        (cell.underline(), "4"),
+        (cell.inverse(), "7"),
+    ];
     for (_, code) in flags.iter().filter(|(set, _)| *set) {
         let _ = write!(looks, ";{code}");
     }
-    for (color, plain, bright, other) in [(cell.fgcolor(), 30, 90, 38), (cell.bgcolor(), 40, 100, 48)] {
+    for (color, plain, bright, other) in
+        [(cell.fgcolor(), 30, 90, 38), (cell.bgcolor(), 40, 100, 48)]
+    {
         let _ = match color {
             Color::Default => Ok(()),
             Color::Idx(n @ 0..8) => write!(looks, ";{}", plain + u16::from(n)),
@@ -151,7 +184,11 @@ fn looks_of(cell: &vt100::Cell) -> String {
     }
     looks.push('m');
     // Nothing set is said as the shortest way of setting nothing.
-    if looks == "\x1b[m" { looks } else { looks.replacen("\x1b[;", "\x1b[0;", 1) }
+    if looks == "\x1b[m" {
+        looks
+    } else {
+        looks.replacen("\x1b[;", "\x1b[0;", 1)
+    }
 }
 
 #[cfg(test)]
@@ -194,7 +231,10 @@ mod tests {
         assert_eq!(later.0.screen().cursor_position(), (3, 2));
         let cell = later.0.screen().cell(1, 0).unwrap();
         assert!(cell.bold() && cell.fgcolor() == Color::Idx(1));
-        assert_eq!(later.0.screen().cell(2, 10).unwrap().bgcolor(), Color::Idx(4));
+        assert_eq!(
+            later.0.screen().cell(2, 10).unwrap().bgcolor(),
+            Color::Idx(4)
+        );
         assert_eq!(lines(&mut later), lines(&mut screen));
     }
 
@@ -211,10 +251,16 @@ mod tests {
         assert_eq!(before[0], "line 1");
         let mut later = shown(&mut screen);
         assert_eq!(lines(&mut later), before);
-        assert_eq!(later.0.screen().cursor_position(), screen.0.screen().cursor_position());
+        assert_eq!(
+            later.0.screen().cursor_position(),
+            screen.0.screen().cursor_position()
+        );
         // The colours went with them.
         later.0.screen_mut().set_scrollback(usize::MAX);
-        assert_eq!(later.0.screen().cell(0, 0).unwrap().fgcolor(), Color::Idx(1));
+        assert_eq!(
+            later.0.screen().cell(0, 0).unwrap().fgcolor(),
+            Color::Idx(1)
+        );
     }
 
     #[test]

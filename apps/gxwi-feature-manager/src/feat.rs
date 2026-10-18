@@ -4,7 +4,6 @@
 //! how it ended. feat asks nothing, so nothing is answered. Feature Manager
 //! never parses the words feat prints for a person.
 
-use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 use serde::Deserialize;
@@ -29,7 +28,10 @@ pub enum State {
 impl State {
     /// A script for it was started and never finished.
     pub fn interrupted(self) -> bool {
-        matches!(self, State::Installing | State::Enabling | State::Disabling | State::Uninstalling)
+        matches!(
+            self,
+            State::Installing | State::Enabling | State::Disabling | State::Uninstalling
+        )
     }
 }
 
@@ -74,7 +76,11 @@ pub fn list() -> Result<Vec<Feature>, String> {
 
 /// The last thing feat said on failing, without its name in front.
 fn said(stderr: &str) -> String {
-    let line = stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("feat failed without saying why");
+    let line = stderr
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("feat failed without saying why");
     line.trim().trim_start_matches("feat: ").to_string()
 }
 
@@ -84,15 +90,24 @@ fn said(stderr: &str) -> String {
 pub enum Event {
     /// A lifecycle script is starting: `phase` is install, enable, disable
     /// or uninstall, `step` of `steps`.
-    Progress { phase: String, step: usize, steps: usize },
+    Progress {
+        phase: String,
+        step: usize,
+        steps: usize,
+    },
     /// A line a script wrote, or what feat said it did.
-    Message { text: String },
+    Message {
+        text: String,
+    },
     Done {
         #[serde(default)]
         summary: String,
         state: State,
     },
-    Error { code: String, message: String },
+    Error {
+        code: String,
+        message: String,
+    },
 }
 
 impl Event {
@@ -104,40 +119,24 @@ impl Event {
 /// Starts `feat --driven` with `args` and calls `heard` with each event, on
 /// a thread of its own, ending with exactly one that ends it. Nothing holds
 /// feat to this window: closed, the change still finishes.
-pub fn drive(args: &[&str], mut heard: impl FnMut(Event) + Send + 'static) -> Result<(), String> {
-    let mut child = Command::new(PROGRAM)
-        .arg("--driven")
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("feat couldn't be run: {e}"))?;
-    let stdout = child.stdout.take().expect("piped");
-    let stderr = child.stderr.take().expect("piped");
-    std::thread::spawn(move || {
-        let mut ended = false;
-        for line in BufReader::new(stdout).lines() {
-            let Ok(line) = line else { break };
-            let Ok(event) = serde_json::from_str::<Event>(&line) else { continue };
-            ended = event.ends();
-            heard(event);
-            if ended {
-                break;
-            }
-        }
-        // Anything feat wrote outside its events is a fault in it, or a
-        // usage error from before it knew it was driven. It is the best
-        // word on a run that ended unsaid.
-        let mut fault = String::new();
-        let _ = std::io::Read::read_to_string(&mut BufReader::new(stderr), &mut fault);
-        let _ = child.wait();
-        if !ended {
-            let message = if fault.trim().is_empty() { "feat stopped without saying how it ended".to_string() } else { said(&fault) };
-            heard(Event::Error { code: "failed".into(), message });
-        }
-    });
-    Ok(())
+pub fn drive(args: &[&str], heard: impl FnMut(Event) + Send + 'static) -> Result<(), String> {
+    let mut command = Command::new(PROGRAM);
+    command.arg("--driven").args(args).stdin(Stdio::null());
+    gxwi_process::drive(command, Event::ends, failed, heard)
+        .map(|_answers| ())
+        .map_err(|error| format!("feat couldn't be run: {error}"))
+}
+
+fn failed(fault: &str) -> Event {
+    let message = if fault.trim().is_empty() {
+        "feat stopped without saying how it ended".to_string()
+    } else {
+        said(fault)
+    };
+    Event::Error {
+        code: "failed".into(),
+        message,
+    }
 }
 
 #[cfg(test)]
@@ -159,13 +158,30 @@ mod tests {
 
     #[test]
     fn events_read_as_feat_writes_them() {
-        let progress: Event = serde_json::from_str(r#"{"event":"progress","phase":"install","step":1,"steps":2}"#).unwrap();
-        assert_eq!(progress, Event::Progress { phase: "install".into(), step: 1, steps: 2 });
-        let done: Event = serde_json::from_str(r#"{"event":"done","state":"not-installed","summary":"uninstalled x"}"#).unwrap();
+        let progress: Event =
+            serde_json::from_str(r#"{"event":"progress","phase":"install","step":1,"steps":2}"#)
+                .unwrap();
+        assert_eq!(
+            progress,
+            Event::Progress {
+                phase: "install".into(),
+                step: 1,
+                steps: 2
+            }
+        );
+        let done: Event = serde_json::from_str(
+            r#"{"event":"done","state":"not-installed","summary":"uninstalled x"}"#,
+        )
+        .unwrap();
         assert!(done.ends());
         let error: Event = serde_json::from_str(r#"{"code":"script","event":"error","message":"feature x: install script failed (exit 1)"}"#).unwrap();
         assert!(error.ends());
-        assert!(!Event::Message { text: String::new() }.ends());
+        assert!(
+            !Event::Message {
+                text: String::new()
+            }
+            .ends()
+        );
     }
 
     #[test]

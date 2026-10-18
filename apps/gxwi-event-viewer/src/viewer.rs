@@ -165,7 +165,11 @@ impl Viewer {
         filter.errors = !fields.get("errors").is_empty();
         filter.containing = fields.get("containing").trim().to_string();
         filter.event_type = fields.get("type").trim().to_string();
-        filter.source = fields.get("source").parse().ok().filter(|source| SOURCES.iter().any(|(class, _)| class == source));
+        filter.source = fields
+            .get("source")
+            .parse()
+            .ok()
+            .filter(|source| SOURCES.iter().any(|(class, _)| class == source));
         filter
     }
 
@@ -174,7 +178,9 @@ impl Viewer {
     fn retitle(&self) {
         if let Some(window) = self.window.upgrade() {
             match (self.tab, self.metrics.dashboard()) {
-                (Tab::Metrics, Some(dashboard)) => window.retitle(&format!("Event Viewer: {}", dashboard.name)),
+                (Tab::Metrics, Some(dashboard)) => {
+                    window.retitle(&format!("Event Viewer: {}", dashboard.name))
+                }
                 (Tab::Settings, _) => window.retitle("Event Viewer: Settings"),
                 _ => window.retitle(&title(&self.filter)),
             }
@@ -211,7 +217,9 @@ impl Viewer {
 
     fn apply(&mut self, fields: &Fields) {
         let filter = self.chosen(fields);
-        let suggest = filter.range != self.filter.range || filter.kind != self.filter.kind || self.suggestions.is_empty();
+        let suggest = filter.range != self.filter.range
+            || filter.kind != self.filter.kind
+            || self.suggestions.is_empty();
         self.filter = filter;
         self.retitle();
         self.restart();
@@ -237,9 +245,15 @@ impl Viewer {
     fn follow(&mut self) {
         let mine = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         self.following = Following::Starting;
-        let Some(window) = self.window.upgrade() else { return };
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
         let window = Arc::downgrade(&window);
-        let (socket, text, generation) = (self.socket.clone(), self.filter.first_page(), self.generation.clone());
+        let (socket, text, generation) = (
+            self.socket.clone(),
+            self.filter.first_page(),
+            self.generation.clone(),
+        );
         std::thread::spawn(move || tail(&window, &generation, mine, &socket, &text));
     }
 
@@ -255,7 +269,10 @@ impl Viewer {
 
     fn row(&mut self, record: Record) -> Row {
         self.next_id += 1;
-        Row { id: self.next_id, record }
+        Row {
+            id: self.next_id,
+            record,
+        }
     }
 
     /// The first page.
@@ -304,9 +321,22 @@ impl Viewer {
         if self.paging || self.complete {
             return;
         }
-        let Some((anchor, oldest)) = self.rows.back().and_then(|row| Some((row.id, words::timestamp(&row.record)?))) else { return };
-        let shown = self.rows.iter().rev().take_while(|row| words::timestamp(&row.record) == Some(oldest)).count();
-        let Some(window) = self.window.upgrade() else { return };
+        let Some((anchor, oldest)) = self
+            .rows
+            .back()
+            .and_then(|row| Some((row.id, words::timestamp(&row.record)?)))
+        else {
+            return;
+        };
+        let shown = self
+            .rows
+            .iter()
+            .rev()
+            .take_while(|row| words::timestamp(&row.record) == Some(oldest))
+            .count();
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
         self.paging = true;
         self.paging_trouble = None;
         let (socket, text) = (self.socket.clone(), self.filter.older(oldest, shown));
@@ -364,7 +394,9 @@ impl Viewer {
 
     /// Reads what the person may read, on a thread: the registry is read.
     fn read_policy(&self) {
-        let Some(window) = self.window.upgrade() else { return };
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
         std::thread::spawn(move || {
             let logs = access::readable(Namespace::Logs);
             let events = access::readable(Namespace::Events);
@@ -374,8 +406,14 @@ impl Viewer {
 
     /// Finds what may be typed as an origin or a type, on a thread.
     fn suggest(&mut self) {
-        let Some(window) = self.window.upgrade() else { return };
-        let (socket, text, filter) = (self.socket.clone(), self.filter.suggestions(), self.filter.clone());
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        let (socket, text, filter) = (
+            self.socket.clone(),
+            self.filter.suggestions(),
+            self.filter.clone(),
+        );
         std::thread::spawn(move || {
             let field = match filter.kind {
                 Kind::Logs => "origin",
@@ -425,12 +463,23 @@ impl Viewer {
             Readable::Nothing => Some(format!("You can't read {noun} on this machine.")),
             Readable::Unknown(why) => Some(format!("Some {noun} may be hidden from you: {why}.")),
             Readable::Some { hidden } => {
-                let named: Vec<String> = hidden.iter().filter(|pattern| *pattern != "*").map(|pattern| format!("{pattern}*")).collect();
+                let named: Vec<String> = hidden
+                    .iter()
+                    .filter(|pattern| *pattern != "*")
+                    .map(|pattern| format!("{pattern}*"))
+                    .collect();
                 let rest = hidden.iter().any(|pattern| pattern == "*");
                 Some(match (named.as_slice(), rest) {
-                    ([], _) => format!("Only some {noun} are yours to read: those {from} a name eventd's policy lets you read."),
-                    (named, false) => format!("Hidden from you: {noun} {from} {}.", named.join(", ")),
-                    (named, true) => format!("Only some {noun} are yours to read. Hidden: {noun} {from} {}, and any {from} a name the policy does not list.", named.join(", ")),
+                    ([], _) => format!(
+                        "Only some {noun} are yours to read: those {from} a name eventd's policy lets you read."
+                    ),
+                    (named, false) => {
+                        format!("Hidden from you: {noun} {from} {}.", named.join(", "))
+                    }
+                    (named, true) => format!(
+                        "Only some {noun} are yours to read. Hidden: {noun} {from} {}, and any {from} a name the policy does not list.",
+                        named.join(", ")
+                    ),
                 })
             }
         }
@@ -439,7 +488,9 @@ impl Viewer {
     fn bar(&self, facts: &Facts) -> String {
         let fields = facts.fields;
         let tab = |name: &str, label: &str, pressed: bool| {
-            format!("<button type=\"button\" class=\"tab\" fx-click=\"kind\" fx-value-kind=\"{name}\" aria-pressed=\"{pressed}\">{label}</button>")
+            format!(
+                "<button type=\"button\" class=\"tab\" fx-click=\"kind\" fx-value-kind=\"{name}\" aria-pressed=\"{pressed}\">{label}</button>"
+            )
         };
         let records = |kind: Kind| self.tab == Tab::Records && self.kind == kind;
         let tabs = format!(
@@ -464,10 +515,25 @@ impl Viewer {
         }
         let ranges: String = Range::ALL
             .iter()
-            .map(|range| format!("<option value=\"{}\"{}>{}</option>", range.name(), if fields.get("range") == range.name() { " selected" } else { "" }, range.words()))
+            .map(|range| {
+                format!(
+                    "<option value=\"{}\"{}>{}</option>",
+                    range.name(),
+                    if fields.get("range") == range.name() {
+                        " selected"
+                    } else {
+                        ""
+                    },
+                    range.words()
+                )
+            })
             .collect();
         let range = format!("<select name=\"range\" aria-label=\"Time range\">{ranges}</select>");
-        let suggestions: String = self.suggestions.iter().map(|text| format!("<option value=\"{}\">", escape(text))).collect();
+        let suggestions: String = self
+            .suggestions
+            .iter()
+            .map(|text| format!("<option value=\"{}\">", escape(text)))
+            .collect();
         let filters = match self.kind {
             Kind::Logs => "<input name=\"origin\" list=\"suggestions\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"From (a service)\" aria-label=\"From\">\
                  <input name=\"containing\" autocomplete=\"off\" spellcheck=\"false\" placeholder=\"Containing\" aria-label=\"Containing\">\
@@ -498,8 +564,13 @@ impl Viewer {
     }
 
     fn listing(&self, now: jiff::Timestamp, zone: &jiff::tz::TimeZone) -> String {
-        let when = |row: &Row| words::timestamp(&row.record).map(|at| words::when(at, now, zone)).unwrap_or_default();
-        let text = |record: &Record, field: &str| record.get(field).map(words::value).unwrap_or_default();
+        let when = |row: &Row| {
+            words::timestamp(&row.record)
+                .map(|at| words::when(at, now, zone))
+                .unwrap_or_default()
+        };
+        let text =
+            |record: &Record, field: &str| record.get(field).map(words::value).unwrap_or_default();
         let rows: String = self
             .rows
             .iter()
@@ -536,8 +607,14 @@ impl Viewer {
             })
             .collect();
         let (columns, head) = match self.kind {
-            Kind::Logs => ("150px minmax(0, 160px) minmax(0, 1fr)", "<span>Time</span><span>From</span><span>Message</span>"),
-            Kind::Events => ("150px minmax(0, 1fr) 140px", "<span>Time</span><span>Type</span><span>Source</span>"),
+            Kind::Logs => (
+                "150px minmax(0, 160px) minmax(0, 1fr)",
+                "<span>Time</span><span>From</span><span>Message</span>",
+            ),
+            Kind::Events => (
+                "150px minmax(0, 1fr) 140px",
+                "<span>Time</span><span>Type</span><span>Source</span>",
+            ),
         };
         let noun = self.noun();
         let empty = if !self.rows.is_empty() {
@@ -547,13 +624,21 @@ impl Viewer {
         } else if self.following == Following::Starting {
             format!("<p class=\"more\">Reading {noun}…</p>")
         } else if self.readable() == Some(&Readable::Nothing) {
-            format!("<p class=\"more\">You can't read {noun} on this machine, so there are none to show.</p>")
+            format!(
+                "<p class=\"more\">You can't read {noun} on this machine, so there are none to show.</p>"
+            )
         } else if self.filter.narrowed() {
-            format!("<p class=\"more\">No {noun} match in the {}.</p>", self.filter.range.words().to_lowercase())
+            format!(
+                "<p class=\"more\">No {noun} match in the {}.</p>",
+                self.filter.range.words().to_lowercase()
+            )
         } else if self.filter.range == Range::Any {
             format!("<p class=\"more\">There are no {noun} you may read.</p>")
         } else {
-            format!("<p class=\"more\">There are no {noun} you may read in the {}.</p>", self.filter.range.words().to_lowercase())
+            format!(
+                "<p class=\"more\">There are no {noun} you may read in the {}.</p>",
+                self.filter.range.words().to_lowercase()
+            )
         };
         format!(
             "<div class=\"listing\" id=\"listing-{kind}\" fx-columns=\"{columns}\"><div class=\"head\">{head}</div>\
@@ -586,58 +671,113 @@ impl Viewer {
             return String::new();
         }
         if let Some(why) = &self.paging_trouble {
-            return format!("<p class=\"trouble\">{} <button type=\"button\" class=\"link\" fx-click=\"older\">Try again</button></p>", escape(why));
+            return format!(
+                "<p class=\"trouble\">{} <button type=\"button\" class=\"link\" fx-click=\"older\">Try again</button></p>",
+                escape(why)
+            );
         }
         if self.paging {
             return "<p class=\"more\">Reading older ones…</p>".into();
         }
         if self.complete {
             return match self.filter.range {
-                Range::Any => format!("<p class=\"more\">That is every one of the {} you may read.</p>", self.noun()),
-                range => format!("<p class=\"more\">That is everything in the {}.</p>", range.words().to_lowercase()),
+                Range::Any => format!(
+                    "<p class=\"more\">That is every one of the {} you may read.</p>",
+                    self.noun()
+                ),
+                range => format!(
+                    "<p class=\"more\">That is everything in the {}.</p>",
+                    range.words().to_lowercase()
+                ),
             };
         }
         "<p class=\"more\"><button type=\"button\" class=\"older\" fx-click=\"older\">Show older</button></p>".into()
     }
 
     fn details(&self, zone: &jiff::tz::TimeZone) -> String {
-        let Some(row) = self.picked.and_then(|picked| self.rows.iter().find(|row| row.id == picked)) else {
-            return format!("<aside class=\"details empty\" aria-label=\"Details\"><p>Pick one of the {} to see all of it.</p></aside>", self.noun());
+        let Some(row) = self
+            .picked
+            .and_then(|picked| self.rows.iter().find(|row| row.id == picked))
+        else {
+            return format!(
+                "<aside class=\"details empty\" aria-label=\"Details\"><p>Pick one of the {} to see all of it.</p></aside>",
+                self.noun()
+            );
         };
         let record = &row.record;
         let said = |field: &str, item: &Value| match field {
-            "timestamp" | words::EVENT_TIME => words::timestamp(record).map_or_else(|| words::value(item), |at| words::when_exactly(at, zone)),
+            "timestamp" | words::EVENT_TIME => words::timestamp(record)
+                .map_or_else(|| words::value(item), |at| words::when_exactly(at, zone)),
             words::EMITTER_CLASS => words::source(item),
             "is_error" if *item == Value::Bool(true) => "Standard error".into(),
             "is_error" => "Standard output".into(),
             _ => words::value(item),
         };
         let fact = |field: &str, item: &Value| {
-            let name = words::field_name(field).map_or_else(|| escape(field), |name| format!("{name}<code>{}</code>", escape(field)));
+            let name = words::field_name(field).map_or_else(
+                || escape(field),
+                |name| format!("{name}<code>{}</code>", escape(field)),
+            );
             format!("<dt>{name}</dt><dd>{}</dd>", escape(&said(field, item)))
         };
-        let copy: String = record.iter().map(|(field, item)| format!("{field}: {}\n", said(field, item))).collect();
+        let copy: String = record
+            .iter()
+            .map(|(field, item)| format!("{field}: {}\n", said(field, item)))
+            .collect();
         let (title, body, only) = match self.kind {
             Kind::Logs => {
                 let origin = record.get("origin").map(words::value).unwrap_or_default();
-                let facts: String = ["timestamp", "is_error", "job_id", "boot_id"].iter().filter_map(|field| record.get(*field).map(|item| fact(field, item))).collect();
+                let facts: String = ["timestamp", "is_error", "job_id", "boot_id"]
+                    .iter()
+                    .filter_map(|field| record.get(*field).map(|item| fact(field, item)))
+                    .collect();
                 let message = record.get("message").map(words::value).unwrap_or_default();
-                let error = if record.get("is_error") == Some(&Value::Bool(true)) { " error" } else { "" };
+                let error = if record.get("is_error") == Some(&Value::Bool(true)) {
+                    " error"
+                } else {
+                    ""
+                };
                 (
                     origin.clone(),
-                    format!("<pre class=\"message{error}\">{}</pre><dl>{facts}</dl>", escape(&message)),
-                    format!("<button type=\"button\" fx-click=\"only\" fx-value-row=\"{}\">Show only {}</button>", row.id, escape(&origin)),
+                    format!(
+                        "<pre class=\"message{error}\">{}</pre><dl>{facts}</dl>",
+                        escape(&message)
+                    ),
+                    format!(
+                        "<button type=\"button\" fx-click=\"only\" fx-value-row=\"{}\">Show only {}</button>",
+                        row.id,
+                        escape(&origin)
+                    ),
                 )
             }
             Kind::Events => {
-                let event_type = record.get(words::EVENT_TYPE).map(words::value).unwrap_or_default();
-                let headers: String = words::HEADERS.iter().filter(|field| **field != words::EVENT_TYPE).filter_map(|field| record.get(*field).map(|item| fact(field, item))).collect();
-                let own: String = record.iter().filter(|(field, _)| !words::HEADERS.contains(&field.as_str())).map(|(field, item)| fact(field, item)).collect();
-                let own = if own.is_empty() { String::new() } else { format!("<h3>Its fields</h3><dl>{own}</dl>") };
+                let event_type = record
+                    .get(words::EVENT_TYPE)
+                    .map(words::value)
+                    .unwrap_or_default();
+                let headers: String = words::HEADERS
+                    .iter()
+                    .filter(|field| **field != words::EVENT_TYPE)
+                    .filter_map(|field| record.get(*field).map(|item| fact(field, item)))
+                    .collect();
+                let own: String = record
+                    .iter()
+                    .filter(|(field, _)| !words::HEADERS.contains(&field.as_str()))
+                    .map(|(field, item)| fact(field, item))
+                    .collect();
+                let own = if own.is_empty() {
+                    String::new()
+                } else {
+                    format!("<h3>Its fields</h3><dl>{own}</dl>")
+                };
                 (
                     event_type.clone(),
                     format!("<dl>{headers}</dl>{own}"),
-                    format!("<button type=\"button\" fx-click=\"only\" fx-value-row=\"{}\">Show only {}</button>", row.id, escape(&event_type)),
+                    format!(
+                        "<button type=\"button\" fx-click=\"only\" fx-value-row=\"{}\">Show only {}</button>",
+                        row.id,
+                        escape(&event_type)
+                    ),
                 )
             }
         };
@@ -659,30 +799,48 @@ impl Viewer {
             Following::Paused => " · paused",
             _ => "",
         };
-        let hidden = self.hidden().map(|hidden| escape(&hidden)).unwrap_or_default();
-        format!("<footer class=\"status\"><span>{count}{state}</span><span class=\"hidden\">{hidden}</span></footer>")
+        let hidden = self
+            .hidden()
+            .map(|hidden| escape(&hidden))
+            .unwrap_or_default();
+        format!(
+            "<footer class=\"status\"><span>{count}{state}</span><span class=\"hidden\">{hidden}</span></footer>"
+        )
     }
 
     /// The row `step` rows from the picked one, for the arrow keys.
     fn near(&self, step: isize) -> String {
-        let at = self.picked.and_then(|picked| self.rows.iter().position(|row| row.id == picked));
+        let at = self
+            .picked
+            .and_then(|picked| self.rows.iter().position(|row| row.id == picked));
         let to = match at {
-            Some(at) => at.saturating_add_signed(step).min(self.rows.len().saturating_sub(1)),
+            Some(at) => at
+                .saturating_add_signed(step)
+                .min(self.rows.len().saturating_sub(1)),
             None => 0,
         };
-        self.rows.get(to).map(|row| row.id.to_string()).unwrap_or_default()
+        self.rows
+            .get(to)
+            .map(|row| row.id.to_string())
+            .unwrap_or_default()
     }
 
     /// Narrows to what `row` came from: its origin, or its type.
     fn only(&mut self, row: u64, fields: &mut Fields) {
-        let Some(row) = self.rows.iter().find(|candidate| candidate.id == row) else { return };
+        let Some(row) = self.rows.iter().find(|candidate| candidate.id == row) else {
+            return;
+        };
         match self.kind {
             Kind::Logs => {
-                let Some(Value::String(origin)) = row.record.get("origin") else { return };
+                let Some(Value::String(origin)) = row.record.get("origin") else {
+                    return;
+                };
                 fields.set("origin", &origin.clone());
             }
             Kind::Events => {
-                let Some(Value::String(event_type)) = row.record.get(words::EVENT_TYPE) else { return };
+                let Some(Value::String(event_type)) = row.record.get(words::EVENT_TYPE) else {
+                    return;
+                };
                 fields.set("type", &event_type.clone());
             }
         }
@@ -693,10 +851,20 @@ impl Viewer {
 impl Live for Viewer {
     fn render(&self, facts: &Facts) -> String {
         if self.tab == Tab::Metrics {
-            return format!("{}{}{}", self.bar(facts), self.metrics.body(facts.fields, &self.clock), self.metrics.footer());
+            return format!(
+                "{}{}{}",
+                self.bar(facts),
+                self.metrics.body(facts.fields, &self.clock),
+                self.metrics.footer()
+            );
         }
         if self.tab == Tab::Settings {
-            return format!("{}{}{}", self.bar(facts), self.settings.body(), self.settings.footer());
+            return format!(
+                "{}{}{}",
+                self.bar(facts),
+                self.settings.body(),
+                self.settings.footer()
+            );
         }
         let (now, zone) = self.clock.now();
         let only = match self.kind {
@@ -719,10 +887,14 @@ impl Live for Viewer {
     }
 
     fn event(&mut self, name: &str, value: &libgxwi::Value, fields: &mut Fields) {
-        let row = value["row"].as_str().and_then(|row| row.parse::<u64>().ok());
+        let row = value["row"]
+            .as_str()
+            .and_then(|row| row.parse::<u64>().ok());
         match name {
             "pick" => {
-                if let Some(row) = row.filter(|row| self.rows.iter().any(|candidate| candidate.id == *row)) {
+                if let Some(row) =
+                    row.filter(|row| self.rows.iter().any(|candidate| candidate.id == *row))
+                {
                     self.picked = Some(row);
                 }
             }
@@ -750,10 +922,14 @@ impl Live for Viewer {
                     self.apply(fields);
                 }
             }
-            "refresh" if self.tab == Tab::Metrics => self.metrics.reread(&self.window, &self.socket),
+            "refresh" if self.tab == Tab::Metrics => {
+                self.metrics.reread(&self.window, &self.socket)
+            }
             "refresh" if self.tab == Tab::Settings => self.settings.read(&self.window),
             "setting" | "setting-default" => {
-                let Some(setting) = value["name"].as_str() else { return };
+                let Some(setting) = value["name"].as_str() else {
+                    return;
+                };
                 if name == "setting" {
                     self.settings.set(setting, fields, &self.window);
                 } else {
@@ -761,7 +937,12 @@ impl Live for Viewer {
                 }
             }
             "policy-edit" | "policy-remove-ask" | "policy-remove" => {
-                let (Some(space), Some(pattern)) = (value["space"].as_str().and_then(Space::named), value["pattern"].as_str()) else { return };
+                let (Some(space), Some(pattern)) = (
+                    value["space"].as_str().and_then(Space::named),
+                    value["pattern"].as_str(),
+                ) else {
+                    return;
+                };
                 match name {
                     "policy-edit" => self.settings.edit(space, pattern, &self.window),
                     "policy-remove-ask" => self.settings.ask_remove(space, pattern),
@@ -775,12 +956,21 @@ impl Live for Viewer {
                 }
             }
             "add" => {
-                let (Some(metric), Some(metric_type)) = (value["metric"].as_str(), value["type"].as_str()) else { return };
+                let (Some(metric), Some(metric_type)) =
+                    (value["metric"].as_str(), value["type"].as_str())
+                else {
+                    return;
+                };
                 self.metrics.add(metric, metric_type);
                 self.metrics.ask(&self.window, &self.socket);
             }
             "chart" => {
-                let (Some(chart), Some(set)) = (value["chart"].as_str().and_then(|chart| chart.parse().ok()), value["set"].as_str()) else { return };
+                let (Some(chart), Some(set)) = (
+                    value["chart"].as_str().and_then(|chart| chart.parse().ok()),
+                    value["set"].as_str(),
+                ) else {
+                    return;
+                };
                 self.metrics.change(chart, set);
                 self.metrics.ask(&self.window, &self.socket);
             }
@@ -807,7 +997,9 @@ impl Live for Viewer {
             }
             "apply" => self.apply(fields),
             "older" => self.older(),
-            "pause" if matches!(self.following, Following::Yes | Following::Starting) => self.stop(Following::Paused),
+            "pause" if matches!(self.following, Following::Yes | Following::Starting) => {
+                self.stop(Following::Paused)
+            }
             "resume" | "refresh" => self.restart(),
             "only" => {
                 if let Some(row) = row {
@@ -848,12 +1040,22 @@ pub fn title(filter: &Filter) -> String {
         Kind::Logs => &filter.origin,
         Kind::Events => &filter.event_type,
     };
-    if narrowed.is_empty() { "Event Viewer".into() } else { format!("Event Viewer: {narrowed}") }
+    if narrowed.is_empty() {
+        "Event Viewer".into()
+    } else {
+        format!("Event Viewer: {narrowed}")
+    }
 }
 
 /// Follows `text` until it ends, the window goes, or another takes its
 /// place, putting what comes on the screen no more often than `BETWEEN`.
-fn tail(window: &Weak<Surface<Viewer>>, generation: &AtomicU64, mine: u64, socket: &std::path::Path, text: &str) {
+fn tail(
+    window: &Weak<Surface<Viewer>>,
+    generation: &AtomicU64,
+    mine: u64,
+    socket: &std::path::Path,
+    text: &str,
+) {
     let tail = match Tail::start(socket, text, WAITING) {
         Ok(tail) => tail,
         Err(error) => {
@@ -876,14 +1078,18 @@ fn tail(window: &Weak<Surface<Viewer>>, generation: &AtomicU64, mine: u64, socke
         let mut batch = Vec::new();
         let mut ended = None;
         let mut initial = None;
-        for report in std::iter::once(first).chain(std::iter::from_fn(|| tail.updates().try_recv().ok())) {
+        for report in
+            std::iter::once(first).chain(std::iter::from_fn(|| tail.updates().try_recv().ok()))
+        {
             match report {
                 Tailed::Initial(records) => initial = Some(records),
                 Tailed::Live(records) => batch.extend(records),
                 Tailed::Ended(error) => ended = Some(error),
             }
         }
-        let Some(window) = window.upgrade() else { return };
+        let Some(window) = window.upgrade() else {
+            return;
+        };
         window.update(|viewer, _| {
             if let Some(records) = initial {
                 viewer.initial(mine, records);
@@ -909,7 +1115,10 @@ pub(crate) fn trouble(error: &Error) -> String {
         Error::Connect { source, .. } if source.kind() == std::io::ErrorKind::PermissionDenied => {
             "eventd, which keeps the logs and events, doesn't let you ask it anything.".into()
         }
-        Error::Connect { .. } => "eventd, which keeps the logs and events, can't be reached. It may not be running.".into(),
+        Error::Connect { .. } => {
+            "eventd, which keeps the logs and events, can't be reached. It may not be running."
+                .into()
+        }
         Error::Channel(error) => format!("The connection to eventd failed: {error}."),
         Error::Refused(message) => format!("eventd refused: {message}."),
     }
@@ -920,38 +1129,64 @@ mod tests {
     use super::*;
 
     fn record(at: i64, fields: &[(&str, Value)]) -> Record {
-        let mut record: Record = fields.iter().map(|(name, value)| ((*name).to_string(), value.clone())).collect();
+        let mut record: Record = fields
+            .iter()
+            .map(|(name, value)| ((*name).to_string(), value.clone()))
+            .collect();
         record.insert("timestamp".into(), Value::Signed(at));
         record
     }
 
     fn log(at: i64, origin: &str, message: &str, error: bool) -> Record {
-        record(at, &[("origin", Value::String(origin.into())), ("message", Value::String(message.into())), ("is_error", Value::Bool(error))])
+        record(
+            at,
+            &[
+                ("origin", Value::String(origin.into())),
+                ("message", Value::String(message.into())),
+                ("is_error", Value::Bool(error)),
+            ],
+        )
     }
 
     fn viewer(kind: Kind) -> Viewer {
         let mut viewer = Viewer::new(kind);
-        viewer.clock = Clock::Fixed("2026-10-03T12:20:00Z".parse().unwrap(), jiff::tz::TimeZone::UTC);
+        viewer.clock = Clock::Fixed(
+            "2026-10-03T12:20:00Z".parse().unwrap(),
+            jiff::tz::TimeZone::UTC,
+        );
         viewer
     }
 
     fn shown(viewer: &Viewer) -> String {
         let mut fields = Fields::default();
         fields.set("range", "24h");
-        viewer.render(&Facts { views: 1, fields: &fields })
+        viewer.render(&Facts {
+            views: 1,
+            fields: &fields,
+        })
     }
 
     fn messages(viewer: &Viewer) -> Vec<String> {
-        viewer.rows.iter().map(|row| words::value(&row.record["message"])).collect()
+        viewer
+            .rows
+            .iter()
+            .map(|row| words::value(&row.record["message"]))
+            .collect()
     }
 
     #[test]
     fn the_first_page_then_live_batches_newest_first_whatever_order_they_came_in() {
         let mut viewer = viewer(Kind::Logs);
-        viewer.initial(0, vec![log(20, "sshd", "b", false), log(10, "sshd", "a", true)]);
+        viewer.initial(
+            0,
+            vec![log(20, "sshd", "b", false), log(10, "sshd", "a", true)],
+        );
         assert_eq!(viewer.following, Following::Yes);
         assert!(viewer.complete);
-        viewer.live(0, vec![log(30, "sshd", "c", false), log(40, "sshd", "d", false)]);
+        viewer.live(
+            0,
+            vec![log(30, "sshd", "c", false), log(40, "sshd", "d", false)],
+        );
         assert_eq!(messages(&viewer), ["d", "c", "b", "a"]);
         // A tail that was replaced says nothing more.
         viewer.live(7, vec![log(50, "sshd", "e", false)]);
@@ -965,29 +1200,72 @@ mod tests {
     #[test]
     fn following_lets_the_oldest_go_and_paging_back_the_newest() {
         let mut viewer = viewer(Kind::Logs);
-        viewer.initial(0, (0..PAGE as i64).rev().map(|at| log(1000 + at, "a", "x", false)).collect());
+        viewer.initial(
+            0,
+            (0..PAGE as i64)
+                .rev()
+                .map(|at| log(1000 + at, "a", "x", false))
+                .collect(),
+        );
         assert!(!viewer.complete);
-        viewer.live(0, (0..HELD as i64).map(|at| log(5000 + at, "a", "new", false)).collect());
+        viewer.live(
+            0,
+            (0..HELD as i64)
+                .map(|at| log(5000 + at, "a", "new", false))
+                .collect(),
+        );
         assert_eq!(viewer.rows.len(), HELD);
-        assert!(viewer.rows.iter().all(|row| words::value(&row.record["message"]) == "new"));
+        assert!(
+            viewer
+                .rows
+                .iter()
+                .all(|row| words::value(&row.record["message"]) == "new")
+        );
         // Paged back past what is held, the newest go and it stops following.
         let anchor = viewer.rows.back().unwrap().id;
-        viewer.paged(0, anchor, Ok((0..PAGE as i64).rev().map(|at| log(at, "a", "old", false)).collect()));
+        viewer.paged(
+            0,
+            anchor,
+            Ok((0..PAGE as i64)
+                .rev()
+                .map(|at| log(at, "a", "old", false))
+                .collect()),
+        );
         assert_eq!(viewer.rows.len(), HELD);
         assert_eq!(viewer.following, Following::Back);
-        assert!(shown(&viewer).contains("Showing older logs. Newer ones were let go to make room."));
+        assert!(
+            shown(&viewer).contains("Showing older logs. Newer ones were let go to make room.")
+        );
     }
 
     #[test]
     fn a_page_asked_for_before_its_rows_were_let_go_is_dropped() {
         let mut viewer = viewer(Kind::Logs);
-        viewer.initial(0, (0..PAGE as i64).rev().map(|at| log(1000 + at, "a", "x", false)).collect());
+        viewer.initial(
+            0,
+            (0..PAGE as i64)
+                .rev()
+                .map(|at| log(1000 + at, "a", "x", false))
+                .collect(),
+        );
         let anchor = viewer.rows.back().unwrap().id;
         // While the page is on its way, enough new ones come that the row
         // it was asked from goes.
-        viewer.live(0, (0..HELD as i64).map(|at| log(5000 + at, "a", "new", false)).collect());
+        viewer.live(
+            0,
+            (0..HELD as i64)
+                .map(|at| log(5000 + at, "a", "new", false))
+                .collect(),
+        );
         let oldest = viewer.rows.back().unwrap().id;
-        viewer.paged(0, anchor, Ok((0..PAGE as i64).rev().map(|at| log(at, "a", "old", false)).collect()));
+        viewer.paged(
+            0,
+            anchor,
+            Ok((0..PAGE as i64)
+                .rev()
+                .map(|at| log(at, "a", "old", false))
+                .collect()),
+        );
         assert_eq!(viewer.rows.len(), HELD);
         assert_eq!(viewer.rows.back().unwrap().id, oldest);
         assert_eq!(viewer.following, Following::Yes);
@@ -998,21 +1276,45 @@ mod tests {
     #[test]
     fn an_older_page_steps_over_the_records_shown_at_its_time() {
         let mut viewer = viewer(Kind::Logs);
-        viewer.initial(0, (0..PAGE as i64).map(|at| log(if at < 197 { 100 - at } else { 3 }, "a", "x", false)).collect());
-        assert_eq!(viewer.filter.older(3, 3), "LOGS SINCE 24h ago WHERE timestamp <= 3 SKIP 3 TAKE 200");
-        let oldest = viewer.rows.back().and_then(|row| words::timestamp(&row.record));
-        let shown = viewer.rows.iter().rev().take_while(|row| words::timestamp(&row.record) == oldest).count();
+        viewer.initial(
+            0,
+            (0..PAGE as i64)
+                .map(|at| log(if at < 197 { 100 - at } else { 3 }, "a", "x", false))
+                .collect(),
+        );
+        assert_eq!(
+            viewer.filter.older(3, 3),
+            "LOGS SINCE 24h ago WHERE timestamp <= 3 SKIP 3 TAKE 200"
+        );
+        let oldest = viewer
+            .rows
+            .back()
+            .and_then(|row| words::timestamp(&row.record));
+        let shown = viewer
+            .rows
+            .iter()
+            .rev()
+            .take_while(|row| words::timestamp(&row.record) == oldest)
+            .count();
         assert_eq!((oldest, shown), (Some(3), 3));
     }
 
     #[test]
     fn a_failure_is_said_in_words_and_where_it_happened() {
         let mut viewer = viewer(Kind::Events);
-        viewer.ended(0, &Error::Refused("query needs more memory than the collector allows queries".into()));
-        assert!(shown(&viewer).contains("eventd refused: query needs more memory than the collector allows queries."));
+        viewer.ended(
+            0,
+            &Error::Refused("query needs more memory than the collector allows queries".into()),
+        );
+        assert!(shown(&viewer).contains(
+            "eventd refused: query needs more memory than the collector allows queries."
+        ));
         let mut viewer = self::viewer(Kind::Logs);
         viewer.initial(0, vec![log(1, "a", "x", false)]);
-        viewer.ended(0, &Error::Channel(eventd_client::wire::Error::UnexpectedStatus));
+        viewer.ended(
+            0,
+            &Error::Channel(eventd_client::wire::Error::UnexpectedStatus),
+        );
         let html = shown(&viewer);
         assert!(html.contains("New logs stopped coming:"));
         assert!(html.contains("fx-click=\"resume\">Show the newest</button>"));
@@ -1026,12 +1328,29 @@ mod tests {
         viewer.readable = [Some(Readable::Nothing), None];
         let html = shown(&viewer);
         assert!(html.contains("You can't read logs on this machine, so there are none to show."));
-        viewer.readable = [Some(Readable::Some { hidden: vec!["sshd".into(), "authd".into()] }), None];
+        viewer.readable = [
+            Some(Readable::Some {
+                hidden: vec!["sshd".into(), "authd".into()],
+            }),
+            None,
+        ];
         assert!(shown(&viewer).contains("Hidden from you: logs from sshd*, authd*."));
-        viewer.readable = [Some(Readable::Some { hidden: vec!["*".into()] }), None];
+        viewer.readable = [
+            Some(Readable::Some {
+                hidden: vec!["*".into()],
+            }),
+            None,
+        ];
         assert!(shown(&viewer).contains("Only some logs are yours to read"));
-        viewer.readable = [Some(Readable::Unknown("its policy can't be read (access denied)".into())), None];
-        assert!(shown(&viewer).contains("Some logs may be hidden from you: its policy can't be read (access denied)."));
+        viewer.readable = [
+            Some(Readable::Unknown(
+                "its policy can't be read (access denied)".into(),
+            )),
+            None,
+        ];
+        assert!(shown(&viewer).contains(
+            "Some logs may be hidden from you: its policy can't be read (access denied)."
+        ));
     }
 
     #[test]
@@ -1041,18 +1360,28 @@ mod tests {
         // paths, and the payload flattened beside it.
         let event: Record = [
             ("event.time", Value::Signed(1_791_017_896_126_088_777)),
-            ("event.type", Value::String("peinit.graph.operation.ended".into())),
+            (
+                "event.type",
+                Value::String("peinit.graph.operation.ended".into()),
+            ),
             ("emitter.class", Value::Signed(0)),
             ("event.sequence", Value::Unsigned(7)),
             ("service.name", Value::String("timed".into())),
-            ("subject.token.sid", Value::Binary(vec![1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0])),
+            (
+                "subject.token.sid",
+                Value::Binary(vec![1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0]),
+            ),
         ]
         .into_iter()
         .map(|(name, value)| (name.to_string(), value))
         .collect();
         viewer.initial(0, vec![event]);
         let id = viewer.rows[0].id;
-        viewer.event("pick", &serde_json::json!({ "row": id.to_string() }), &mut Fields::default());
+        viewer.event(
+            "pick",
+            &serde_json::json!({ "row": id.to_string() }),
+            &mut Fields::default(),
+        );
         let html = shown(&viewer);
         assert!(html.contains("<h2>peinit.graph.operation.ended</h2>"));
         assert!(html.contains("<dt>Source<code>emitter.class</code></dt><dd>Programs</dd>"));

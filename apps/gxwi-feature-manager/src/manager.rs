@@ -27,15 +27,27 @@ pub enum Verb {
 }
 
 impl Verb {
-    pub const ALL: [(Verb, &'static str); 5] =
-        [(Verb::Add, "add"), (Verb::Install, "install"), (Verb::Enable, "enable"), (Verb::Disable, "disable"), (Verb::Remove, "remove")];
+    pub const ALL: [(Verb, &'static str); 5] = [
+        (Verb::Add, "add"),
+        (Verb::Install, "install"),
+        (Verb::Enable, "enable"),
+        (Verb::Disable, "disable"),
+        (Verb::Remove, "remove"),
+    ];
 
     pub fn by(name: &str) -> Option<Verb> {
-        Verb::ALL.iter().find(|(_, by)| *by == name).map(|(verb, _)| *verb)
+        Verb::ALL
+            .iter()
+            .find(|(_, by)| *by == name)
+            .map(|(verb, _)| *verb)
     }
 
     pub fn arg(self) -> &'static str {
-        Verb::ALL.iter().find(|(verb, _)| *verb == self).map(|(_, by)| *by).unwrap_or("install")
+        Verb::ALL
+            .iter()
+            .find(|(verb, _)| *verb == self)
+            .map(|(_, by)| *by)
+            .unwrap_or("install")
     }
 
     /// What it is doing, as the run's title: "Turning On".
@@ -111,7 +123,15 @@ pub struct Manager {
 
 impl Manager {
     pub fn new() -> Manager {
-        Manager { window: Weak::new(), features: Listing::Reading, run: None, runs: 0, asking: None, close_when_done: false, said: None }
+        Manager {
+            window: Weak::new(),
+            features: Listing::Reading,
+            run: None,
+            runs: 0,
+            asking: None,
+            close_when_done: false,
+            said: None,
+        }
     }
 
     /// Whether a change is being made, so nothing else may start.
@@ -145,12 +165,22 @@ impl Manager {
         if self.busy() {
             return;
         }
-        let Some(feature) = self.feature(name).filter(|f| f.may_change && f.defined) else { return };
+        let Some(feature) = self.feature(name).filter(|f| f.may_change && f.defined) else {
+            return;
+        };
         let shown = feature.shown().to_string();
         self.runs += 1;
         let number = self.runs;
         let window = self.window.clone();
-        let mut run = Run { number, name: name.to_string(), shown, verb, progress: None, output: Vec::new(), failed: None };
+        let mut run = Run {
+            number,
+            name: name.to_string(),
+            shown,
+            verb,
+            progress: None,
+            output: Vec::new(),
+            failed: None,
+        };
         // The window's lock is held here, so the first event waits for the
         // run to be in place before it lands.
         if let Err(why) = feat::drive(&[verb.arg(), name], move |event| {
@@ -158,7 +188,10 @@ impl Manager {
                 window.update(|manager, _| manager.heard(number, event));
             }
         }) {
-            run.failed = Some(Failure { code: "failed".into(), message: why });
+            run.failed = Some(Failure {
+                code: "failed".into(),
+                message: why,
+            });
         }
         self.run = Some(run);
         self.asking = None;
@@ -166,7 +199,9 @@ impl Manager {
     }
 
     fn heard(&mut self, number: u64, event: Event) {
-        let Some(run) = self.run.as_mut().filter(|r| r.number == number) else { return };
+        let Some(run) = self.run.as_mut().filter(|r| r.number == number) else {
+            return;
+        };
         match event {
             Event::Progress { phase, step, steps } => run.progress = Some((phase, step, steps)),
             Event::Message { text } => run.output.push(text),
@@ -197,7 +232,13 @@ impl Live for Manager {
     }
 
     fn event(&mut self, name: &str, value: &Value, _fields: &mut Fields) {
-        let named = || value.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+        let named = || {
+            value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
         match name {
             "change" => {
                 if let Some(verb) = value.get("verb").and_then(Value::as_str).and_then(Verb::by) {

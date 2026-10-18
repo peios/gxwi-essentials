@@ -27,15 +27,26 @@ pub enum View {
 }
 
 impl View {
-    const ALL: [(View, &'static str); 4] =
-        [(View::Trusted, "trusted"), (View::Distrusted, "distrusted"), (View::Settings, "settings"), (View::Keys, "keys")];
+    const ALL: [(View, &'static str); 4] = [
+        (View::Trusted, "trusted"),
+        (View::Distrusted, "distrusted"),
+        (View::Settings, "settings"),
+        (View::Keys, "keys"),
+    ];
 
     fn by(name: &str) -> Option<View> {
-        View::ALL.iter().find(|(_, by)| *by == name).map(|(view, _)| *view)
+        View::ALL
+            .iter()
+            .find(|(_, by)| *by == name)
+            .map(|(view, _)| *view)
     }
 
     fn id(self) -> &'static str {
-        View::ALL.iter().find(|(view, _)| *view == self).map(|(_, by)| *by).unwrap_or("trusted")
+        View::ALL
+            .iter()
+            .find(|(view, _)| *view == self)
+            .map(|(_, by)| *by)
+            .unwrap_or("trusted")
     }
 }
 
@@ -107,7 +118,11 @@ impl Policy {
 
     /// Puts what is set in every field that shows a setting.
     pub fn fill(&self, fields: &mut Fields) {
-        let on = self.store.status.as_ref().is_none_or(|s| s.compat_mode != 0);
+        let on = self
+            .store
+            .status
+            .as_ref()
+            .is_none_or(|s| s.compat_mode != 0);
         fields.set("compat", if on { "on" } else { "" });
     }
 
@@ -142,10 +157,20 @@ impl Policy {
     }
 
     fn nav(&self) -> Vec<Nav> {
-        let section = |view: View, title, now: String, glyph, tile| Nav::Section(Section { id: view.id(), title, now, glyph, tile });
+        let section = |view: View, title, now: String, glyph, tile| {
+            Nav::Section(Section {
+                id: view.id(),
+                title,
+                now,
+                glyph,
+                tile,
+            })
+        };
         let trusted = match (&self.store.roots, &self.store.status) {
             (Err(_), _) => "Unavailable".to_string(),
-            (_, Some(status)) if status.health == libtrust::Health::Degraded => "Needs attention".to_string(),
+            (_, Some(status)) if status.health == libtrust::Health::Degraded => {
+                "Needs attention".to_string()
+            }
             (Ok(roots), _) => format!("{} trusted", roots.len()),
         };
         let distrusted = match &self.store.distrusted {
@@ -164,9 +189,27 @@ impl Policy {
         };
         vec![
             Nav::Heading("Certificates"),
-            section(View::Trusted, "Trusted", trusted, Glyph::Certificate, Tile::Green),
-            section(View::Distrusted, "Distrusted", distrusted, Glyph::Blocked, Tile::Red),
-            section(View::Settings, "Settings", files.to_string(), Glyph::Server, Tile::Slate),
+            section(
+                View::Trusted,
+                "Trusted",
+                trusted,
+                Glyph::Certificate,
+                Tile::Green,
+            ),
+            section(
+                View::Distrusted,
+                "Distrusted",
+                distrusted,
+                Glyph::Blocked,
+                Tile::Red,
+            ),
+            section(
+                View::Settings,
+                "Settings",
+                files.to_string(),
+                Glyph::Server,
+                Tile::Slate,
+            ),
             Nav::Heading("Code Signing"),
             section(View::Keys, "Signing Keys", keys, Glyph::Key, Tile::Violet),
         ]
@@ -180,17 +223,24 @@ impl Policy {
         let request = Choose {
             mode: Mode::Open,
             title: "Add a certificate".into(),
-            purpose: Some("A certificate authority for this machine to trust, as a PEM or DER file.".into()),
+            purpose: Some(
+                "A certificate authority for this machine to trust, as a PEM or DER file.".into(),
+            ),
             folder: None,
             name: None,
             filters: vec![Filter {
                 name: "Certificates".into(),
-                extensions: ["pem", "crt", "cer", "der"].iter().map(|e| e.to_string()).collect(),
+                extensions: ["pem", "crt", "cer", "der"]
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect(),
             }],
         };
         let window = self.window.clone();
         let opened = gxwi_file_dialog::choose(&request, move |file| {
-            let Some(window) = window.upgrade() else { return };
+            let Some(window) = window.upgrade() else {
+                return;
+            };
             window.update(|policy, fields| {
                 policy.choosing = false;
                 if let Some(file) = file {
@@ -200,21 +250,30 @@ impl Policy {
         });
         match opened {
             Ok(()) => self.choosing = true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.said = Some(Err("The file dialog isn't installed.".into())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.said = Some(Err("The file dialog isn't installed.".into()))
+            }
             Err(e) => self.said = Some(Err(format!("The file dialog couldn't be opened: {e}."))),
         }
     }
 
     /// Reads the certificate in `file` and shows it, to be added.
     fn read_candidate(&mut self, file: &Path, fields: &mut Fields) {
-        let shown = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| file.display().to_string());
+        let shown = file
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| file.display().to_string());
         let bytes = match std::fs::read(file) {
             Ok(bytes) => bytes,
             Err(e) => return self.said = Some(Err(format!("{shown} couldn't be read: {e}."))),
         };
         let der = match trust::certificate(&bytes, &shown) {
             Ok(der) => der,
-            Err(_) => return self.said = Some(Err(format!("{shown} holds more than one certificate. Add them one at a time."))),
+            Err(_) => {
+                return self.said = Some(Err(format!(
+                    "{shown} holds more than one certificate. Add them one at a time."
+                )));
+            }
         };
         let Ok(details) = cert::describe(&der) else {
             return self.said = Some(Err(format!("{shown} isn't a certificate.")));
@@ -225,13 +284,21 @@ impl Policy {
         for (purpose, _, field) in words::PURPOSES {
             fields.set(field, if purpose == "ServerAuth" { "on" } else { "" });
         }
-        self.page = Page::Adding(Box::new(Candidate { file: shown, der, fingerprint, details, problem }));
+        self.page = Page::Adding(Box::new(Candidate {
+            file: shown,
+            der,
+            fingerprint,
+            details,
+            problem,
+        }));
         self.said = None;
     }
 
     /// Adds the certificate being looked at, as the form says.
     fn add(&mut self, fields: &mut Fields) -> Result<String, String> {
-        let Page::Adding(candidate) = &self.page else { return Err("There's no certificate to add.".into()) };
+        let Page::Adding(candidate) = &self.page else {
+            return Err("There's no certificate to add.".into());
+        };
         if let Some(problem) = &candidate.problem {
             return Err(problem.clone());
         }
@@ -239,22 +306,36 @@ impl Policy {
         if !trust::usable_name(&name) {
             return Err("Give it a name, without slashes.".into());
         }
-        if self.store.added_names().iter().any(|n| n.eq_ignore_ascii_case(&name)) {
+        if self
+            .store
+            .added_names()
+            .iter()
+            .any(|n| n.eq_ignore_ascii_case(&name))
+        {
             return Err(format!("A certificate is already added as {name}."));
         }
-        let purposes: Vec<String> =
-            words::PURPOSES.iter().filter(|(_, _, field)| fields.get(field) == "on").map(|(id, ..)| id.to_string()).collect();
+        let purposes: Vec<String> = words::PURPOSES
+            .iter()
+            .filter(|(_, _, field)| fields.get(field) == "on")
+            .map(|(id, ..)| id.to_string())
+            .collect();
         if purposes.is_empty() {
             return Err("Choose at least one purpose.".into());
         }
         // ServerAuth alone is what an addition has unless told otherwise,
         // so it is written as nothing, as `trust add` writes it.
-        let written: &[String] = if purposes == ["ServerAuth"] { &[] } else { &purposes };
+        let written: &[String] = if purposes == ["ServerAuth"] {
+            &[]
+        } else {
+            &purposes
+        };
         let called = candidate.details.name().to_string();
         trust::add(&name, &candidate.der, written).map_err(said_error)?;
         fields.set("add-name", "");
         self.page = Page::List;
-        Ok(format!("{called} added. Programs trust it within a few seconds."))
+        Ok(format!(
+            "{called} added. Programs trust it within a few seconds."
+        ))
     }
 
     /// Opens the file dialog for where to export a certificate.
@@ -262,7 +343,9 @@ impl Policy {
         if self.choosing {
             return;
         }
-        let Some(cert) = self.store.certificate(fingerprint) else { return };
+        let Some(cert) = self.store.certificate(fingerprint) else {
+            return;
+        };
         let (der, called) = (cert.root.der.clone(), cert.name().to_string());
         let request = Choose {
             mode: Mode::Save,
@@ -270,11 +353,16 @@ impl Policy {
             purpose: Some(format!("{called} is saved as a PEM file.")),
             folder: None,
             name: Some(format!("{}.pem", words::suggested_name(&called))),
-            filters: vec![Filter { name: "PEM certificates".into(), extensions: vec!["pem".into()] }],
+            filters: vec![Filter {
+                name: "PEM certificates".into(),
+                extensions: vec!["pem".into()],
+            }],
         };
         let window = self.window.clone();
         let opened = gxwi_file_dialog::choose(&request, move |file: Option<PathBuf>| {
-            let Some(window) = window.upgrade() else { return };
+            let Some(window) = window.upgrade() else {
+                return;
+            };
             window.update(|policy, _| {
                 policy.choosing = false;
                 let Some(file) = file else { return };
@@ -286,13 +374,18 @@ impl Policy {
         });
         match opened {
             Ok(()) => self.choosing = true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.said = Some(Err("The file dialog isn't installed.".into())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.said = Some(Err("The file dialog isn't installed.".into()))
+            }
             Err(e) => self.said = Some(Err(format!("The file dialog couldn't be opened: {e}."))),
         }
     }
 
     fn distrust(&mut self, fingerprint: &str, fields: &mut Fields) -> Result<String, String> {
-        let called = self.store.certificate(fingerprint).map(|c| c.name().to_string());
+        let called = self
+            .store
+            .certificate(fingerprint)
+            .map(|c| c.name().to_string());
         let reason = fields.get("reason").trim().to_string();
         trust::distrust(fingerprint, &reason).map_err(said_error)?;
         fields.set("reason", "");
@@ -308,8 +401,12 @@ impl Policy {
         if typed.is_empty() {
             return Err("Enter the certificate's SHA-256 fingerprint.".into());
         }
-        let roots: Vec<libtrust::Root> =
-            self.store.roots.as_ref().map(|roots| roots.iter().map(|c| c.root.clone()).collect()).unwrap_or_default();
+        let roots: Vec<libtrust::Root> = self
+            .store
+            .roots
+            .as_ref()
+            .map(|roots| roots.iter().map(|c| c.root.clone()).collect())
+            .unwrap_or_default();
         let fingerprint = trust::fingerprint_in(&typed, &roots).map_err(|e| match e {
             trust::Error::NotFound(_) => "No trusted certificate starts with that. Give the whole fingerprint for one this machine doesn't have.".to_string(),
             other => capitalised(&other.to_string()),
@@ -317,7 +414,10 @@ impl Policy {
         if self.store.refused(&fingerprint).is_some() {
             return Err("That certificate is distrusted already.".into());
         }
-        let called = self.store.certificate(&fingerprint).map(|c| c.name().to_string());
+        let called = self
+            .store
+            .certificate(&fingerprint)
+            .map(|c| c.name().to_string());
         let reason = fields.get("by-reason").trim().to_string();
         trust::distrust(&fingerprint, &reason).map_err(said_error)?;
         fields.set("by-fp", "");
@@ -329,16 +429,26 @@ impl Policy {
     }
 
     fn remove(&mut self, fingerprint: &str) -> Result<String, String> {
-        let Some(cert) = self.store.certificate(fingerprint) else { return Err("That certificate has gone.".into()) };
-        let Some(name) = cert.root.name.clone() else { return Err("Only an added certificate can be removed.".into()) };
+        let Some(cert) = self.store.certificate(fingerprint) else {
+            return Err("That certificate has gone.".into());
+        };
+        let Some(name) = cert.root.name.clone() else {
+            return Err("Only an added certificate can be removed.".into());
+        };
         let called = cert.name().to_string();
         trust::remove(&name).map_err(said_error)?;
         self.page = Page::List;
-        Ok(format!("{called} removed. Programs stop trusting it within a few seconds."))
+        Ok(format!(
+            "{called} removed. Programs stop trusting it within a few seconds."
+        ))
     }
 
     fn restore(&mut self, fingerprint: &str) -> Result<String, String> {
-        let called = self.store.refused(fingerprint).and_then(|r| r.known.as_ref()).map(|d| d.name().to_string());
+        let called = self
+            .store
+            .refused(fingerprint)
+            .and_then(|r| r.known.as_ref())
+            .map(|d| d.name().to_string());
         trust::restore(fingerprint).map_err(said_error)?;
         Ok(match called {
             Some(name) => format!("{name} trusted again."),
@@ -353,7 +463,11 @@ impl Policy {
 
     fn compat(&mut self, on: bool) -> Result<String, String> {
         trust::set_compat(u32::from(on)).map_err(said_error)?;
-        Ok(if on { "Certificate files turned on.".into() } else { "Certificate files turned off.".into() })
+        Ok(if on {
+            "Certificate files turned on.".into()
+        } else {
+            "Certificate files turned off.".into()
+        })
     }
 
     /// Opens the permissions editor on `which`: the trust key, or trustd's
@@ -369,7 +483,10 @@ impl Policy {
         };
         let (request, mut apply) = match opened {
             Ok(opened) => opened,
-            Err(why) => return self.said = Some(Err(format!("The permissions couldn't be opened: {why}."))),
+            Err(why) => {
+                return self.said =
+                    Some(Err(format!("The permissions couldn't be opened: {why}.")));
+            }
         };
         let looking = self.window.clone();
         let applied = move |sd: &[u8], parts: &[gxwi_sd_editor::Part]| {
@@ -391,8 +508,14 @@ impl Policy {
         self.said = None;
         match gxwi_sd_editor::edit(&request, applied, done) {
             Ok(()) => self.editing.push(which),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.said = Some(Err("The permissions editor isn't installed.".into())),
-            Err(e) => self.said = Some(Err(format!("The permissions editor couldn't be started: {e}."))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.said = Some(Err("The permissions editor isn't installed.".into()))
+            }
+            Err(e) => {
+                self.said = Some(Err(format!(
+                    "The permissions editor couldn't be started: {e}."
+                )))
+            }
         }
     }
 }
@@ -407,13 +530,20 @@ fn problem(store: &Store, der: &[u8], fingerprint: &str) -> Option<String> {
         });
     }
     if store.refused(fingerprint).is_some() {
-        return Some("This certificate is distrusted. Restore it under Distrusted to trust it again.".into());
+        return Some(
+            "This certificate is distrusted. Restore it under Distrusted to trust it again.".into(),
+        );
     }
     match trust::vet(der) {
         Ok(_) => None,
-        Err(cert::Error::NotACa) => Some("This isn't a certificate authority's certificate, so it can't vouch for others.".into()),
+        Err(cert::Error::NotACa) => Some(
+            "This isn't a certificate authority's certificate, so it can't vouch for others."
+                .into(),
+        ),
         Err(cert::Error::Expired) => {
-            let expired = cert::describe(der).map(|d| words::date(d.not_after)).unwrap_or_default();
+            let expired = cert::describe(der)
+                .map(|d| words::date(d.not_after))
+                .unwrap_or_default();
             Some(format!("This certificate expired on {expired}."))
         }
         Err(_) => Some("This certificate can't be read in full, so it can't be trusted.".into()),
@@ -431,7 +561,9 @@ fn said_error(error: trust::Error) -> String {
 /// `text` as a sentence: a capital first letter and a full stop.
 fn capitalised(text: &str) -> String {
     let mut chars = text.chars();
-    let Some(first) = chars.next() else { return String::new() };
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
     let mut out: String = first.to_uppercase().chain(chars).collect();
     if !out.ends_with('.') {
         out.push('.');
@@ -447,16 +579,29 @@ impl Live for Policy {
             View::Trusted => match &self.page {
                 Page::List => certificates::list(&self.store, fields, now, self.choosing),
                 Page::Certificate(fingerprint) => match self.store.certificate(fingerprint) {
-                    Some(cert) => certificates::detail(cert, &self.store, self.asking.as_ref(), now, self.choosing),
+                    Some(cert) => certificates::detail(
+                        cert,
+                        &self.store,
+                        self.asking.as_ref(),
+                        now,
+                        self.choosing,
+                    ),
                     None => certificates::list(&self.store, fields, now, self.choosing),
                 },
-                Page::Adding(candidate) => certificates::adding(candidate, &self.store, now, self.choosing),
+                Page::Adding(candidate) => {
+                    certificates::adding(candidate, &self.store, now, self.choosing)
+                }
             },
             View::Distrusted => certificates::distrusted(&self.store, self.asking.as_ref()),
             View::Settings => options::render(&self.store, self.asking.as_ref()),
             View::Keys => keys::render(&self.store.keys),
         };
-        settings::window(&self.nav(), self.view.id(), &page, &settings::status(self.said.as_ref(), ""))
+        settings::window(
+            &self.nav(),
+            self.view.id(),
+            &page,
+            &settings::status(self.said.as_ref(), ""),
+        )
     }
 
     fn input(&mut self, name: &str, fields: &mut Fields) {
@@ -482,10 +627,20 @@ impl Live for Policy {
     }
 
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
-        let cert = || value.get("cert").and_then(Value::as_str).unwrap_or_default().to_string();
+        let cert = || {
+            value
+                .get("cert")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
         let done = match name {
             "section" => {
-                if let Some(view) = value.get("section").and_then(Value::as_str).and_then(View::by) {
+                if let Some(view) = value
+                    .get("section")
+                    .and_then(Value::as_str)
+                    .and_then(View::by)
+                {
                     self.view = view;
                     self.page = Page::List;
                     self.asking = None;
@@ -552,6 +707,9 @@ mod tests {
     #[test]
     fn a_refusal_reads_as_a_sentence() {
         assert_eq!(capitalised("no addition named x"), "No addition named x.");
-        assert_eq!(said_error(trust::Error::Denied("k".into())), "You can't change what this machine trusts: as shipped, only Administrators can.");
+        assert_eq!(
+            said_error(trust::Error::Denied("k".into())),
+            "You can't change what this machine trusts: as shipped, only Administrators can."
+        );
     }
 }

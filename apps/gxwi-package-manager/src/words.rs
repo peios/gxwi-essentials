@@ -3,7 +3,10 @@
 /// A package's short name: its id without the publisher in front, as
 /// `make` for `org.gnu.make`. The whole id is shown where it matters.
 pub fn short(name: &str) -> &str {
-    name.rsplit('.').next().filter(|s| !s.is_empty()).unwrap_or(name)
+    name.rsplit('.')
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(name)
 }
 
 /// A size in bytes, in the unit that suits it: 420 KB, 1.2 MB.
@@ -12,7 +15,11 @@ pub fn size(bytes: i64) -> String {
     for (unit, scale) in [("GB", 1e9), ("MB", 1e6), ("KB", 1e3)] {
         if bytes >= scale {
             let n = bytes / scale;
-            return if n < 10.0 { format!("{:.1} {unit}", n) } else { format!("{:.0} {unit}", n) };
+            return if n < 10.0 {
+                format!("{:.1} {unit}", n)
+            } else {
+                format!("{:.0} {unit}", n)
+            };
         }
     }
     format!("{} bytes", bytes as i64)
@@ -20,7 +27,11 @@ pub fn size(bytes: i64) -> String {
 
 /// `n` of something, in words: 1 package, 3 packages.
 pub fn count(n: usize, one: &str, many: &str) -> String {
-    if n == 1 { format!("1 {one}") } else { format!("{n} {many}") }
+    if n == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{n} {many}")
+    }
 }
 
 /// An RFC 3339 time as a date: 4 October 2026. Anything unreadable is
@@ -43,7 +54,9 @@ pub fn when(rfc3339: &str) -> String {
 /// How long ago an RFC 3339 time was, in days: today, yesterday, 3 days
 /// ago. `now` is seconds since the epoch.
 pub fn ago(rfc3339: &str, now: i64) -> String {
-    let Ok(t) = rfc3339.parse::<jiff::Timestamp>() else { return rfc3339.to_string() };
+    let Ok(t) = rfc3339.parse::<jiff::Timestamp>() else {
+        return rfc3339.to_string();
+    };
     match (now - t.as_second()).max(0) / 86_400 {
         0 => "today".to_string(),
         1 => "yesterday".to_string(),
@@ -55,10 +68,19 @@ pub fn ago(rfc3339: &str, now: i64) -> String {
 pub fn sentence(text: &str) -> String {
     let text = text.trim();
     let mut chars = text.chars();
-    let Some(first) = chars.next() else { return String::new() };
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
     // A package's id keeps its case: dev.peios.net is not Dev.peios.net.
-    let id = text.split(' ').next().is_some_and(|word| word.contains(['.', '/']));
-    let mut out: String = if id { text.to_string() } else { first.to_uppercase().chain(chars).collect() };
+    let id = text
+        .split(' ')
+        .next()
+        .is_some_and(|word| word.contains(['.', '/']));
+    let mut out: String = if id {
+        text.to_string()
+    } else {
+        first.to_uppercase().chain(chars).collect()
+    };
     if !out.ends_with(['.', '!', '?']) {
         out.push('.');
     }
@@ -72,7 +94,9 @@ pub fn detail(message: &str) -> &str {
     let mut detail = message.lines().next().unwrap_or_default();
     while let Some((head, rest)) = detail.split_once(": ")
         && head.len() <= 24
-        && head.chars().all(|c| c.is_ascii_lowercase() || matches!(c, ' ' | '/' | '-'))
+        && head
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || matches!(c, ' ' | '/' | '-'))
     {
         detail = rest;
     }
@@ -88,14 +112,22 @@ pub fn newer(a: &str, b: &str) -> bool {
         let mut digits = false;
         for c in v.chars() {
             if c.is_ascii_digit() != digits && !run.is_empty() {
-                out.push(if digits { Ok(run.parse().unwrap_or(0)) } else { Err(run.clone()) });
+                out.push(if digits {
+                    Ok(run.parse().unwrap_or(0))
+                } else {
+                    Err(run.clone())
+                });
                 run.clear();
             }
             digits = c.is_ascii_digit();
             run.push(c);
         }
         if !run.is_empty() {
-            out.push(if digits { Ok(run.parse().unwrap_or(0)) } else { Err(run) });
+            out.push(if digits {
+                Ok(run.parse().unwrap_or(0))
+            } else {
+                Err(run)
+            });
         }
         out
     }
@@ -134,13 +166,25 @@ mod tests {
     fn dates_and_sentences() {
         assert_eq!(date("2026-10-04T22:59:22Z"), "4 October 2026");
         assert_eq!(when("2026-10-04T22:59:22Z"), "4 October 2026, 22:59");
-        let now = "2026-10-07T12:00:00Z".parse::<jiff::Timestamp>().unwrap().as_second();
+        let now = "2026-10-07T12:00:00Z"
+            .parse::<jiff::Timestamp>()
+            .unwrap()
+            .as_second();
         assert_eq!(ago("2026-10-04T00:00:00Z", now), "3 days ago");
         assert_eq!(ago("2026-10-07T01:00:00Z", now), "today");
         assert_eq!(sentence("install: nothing"), "Install: nothing.");
-        assert_eq!(sentence("dev.peios.net would move backward"), "dev.peios.net would move backward.");
-        assert_eq!(detail("install: repository \"x\": stale\npass --allow-stale"), "repository \"x\": stale");
-        assert_eq!(detail("peipkg/resolver: package \"a\" depends on \"b\""), "package \"a\" depends on \"b\"");
+        assert_eq!(
+            sentence("dev.peios.net would move backward"),
+            "dev.peios.net would move backward."
+        );
+        assert_eq!(
+            detail("install: repository \"x\": stale\npass --allow-stale"),
+            "repository \"x\": stale"
+        );
+        assert_eq!(
+            detail("peipkg/resolver: package \"a\" depends on \"b\""),
+            "package \"a\" depends on \"b\""
+        );
     }
 
     #[test]

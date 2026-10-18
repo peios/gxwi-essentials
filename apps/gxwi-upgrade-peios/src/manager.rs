@@ -24,7 +24,10 @@ pub enum Check {
     Current,
     /// A newer release, and the plan upgrading to it would make.
     Available(Plan),
-    Failed { code: String, message: String },
+    Failed {
+        code: String,
+        message: String,
+    },
 }
 
 /// What a run is for.
@@ -40,9 +43,14 @@ pub enum Purpose {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ended {
     /// Its settings were queued for the next boot rather than applied.
-    Done { queued: bool },
+    Done {
+        queued: bool,
+    },
     Cancelled,
-    Failed { code: String, message: String },
+    Failed {
+        code: String,
+        message: String,
+    },
 }
 
 /// An upgrade being made, or the last one, until it is put away.
@@ -82,7 +90,11 @@ impl Run {
             Event::Plan(plan) => self.plan = Some(plan),
             Event::Question(question) => {
                 // Shown and chosen already: the same plan needs no second yes.
-                let same = self.shown.as_ref().is_some_and(|shown| self.plan.as_ref().is_some_and(|plan| plan.operations == shown.operations));
+                let same = self.shown.as_ref().is_some_and(|shown| {
+                    self.plan
+                        .as_ref()
+                        .is_some_and(|plan| plan.operations == shown.operations)
+                });
                 if question.kind == "proceed" && same {
                     self.answer(question.id, "yes");
                     return;
@@ -97,7 +109,9 @@ impl Run {
             Event::Message { text } => self.doing = Some(text),
             Event::Done { seeds_queued, .. } => {
                 self.question = None;
-                self.end = Some(Ended::Done { queued: seeds_queued });
+                self.end = Some(Ended::Done {
+                    queued: seeds_queued,
+                });
             }
             Event::Cancelled { .. } => {
                 self.question = None;
@@ -113,9 +127,16 @@ impl Run {
     /// Answers the open question.
     pub fn answer(&mut self, id: u64, answer: &str) {
         if let Some(answers) = &self.answers {
-            answers.answer(id, answer);
+            // A closed child is reported by the event reader; do not report the
+            // same failure again from this UI answer callback.
+            let _ = answers.answer(id, answer);
         }
-        if answer == "yes" && self.question.as_ref().is_none_or(|q| q.kind == "proceed" && q.id == id) {
+        if answer == "yes"
+            && self
+                .question
+                .as_ref()
+                .is_none_or(|q| q.kind == "proceed" && q.id == id)
+        {
             self.proceeded = true;
         }
         self.question = None;
@@ -139,7 +160,16 @@ pub struct Manager {
 
 impl Manager {
     pub fn new() -> Manager {
-        Manager { window: Weak::new(), status: None, check: Check::Unchecked, stale_ok: false, run: None, runs: 0, close_when_done: false, said: None }
+        Manager {
+            window: Weak::new(),
+            status: None,
+            check: Check::Unchecked,
+            stale_ok: false,
+            run: None,
+            runs: 0,
+            close_when_done: false,
+            said: None,
+        }
     }
 
     pub fn busy(&self) -> bool {
@@ -196,7 +226,10 @@ impl Manager {
         if self.busy() || !self.may() {
             return;
         }
-        if self.stale_ok && purpose == Purpose::Upgrade && !args.iter().any(|a| a == "--allow-stale") {
+        if self.stale_ok
+            && purpose == Purpose::Upgrade
+            && !args.iter().any(|a| a == "--allow-stale")
+        {
             args.push("--allow-stale".into());
         }
         self.runs += 1;
@@ -224,14 +257,21 @@ impl Manager {
             }
         }) {
             Ok(answers) => run.answers = Some(answers),
-            Err(message) => run.end = Some(Ended::Failed { code: "failed".into(), message }),
+            Err(message) => {
+                run.end = Some(Ended::Failed {
+                    code: "failed".into(),
+                    message,
+                })
+            }
         }
         self.run = Some(run);
         self.said = None;
     }
 
     fn heard(&mut self, number: u64, event: Event) {
-        let Some(run) = self.run.as_mut().filter(|r| r.number == number) else { return };
+        let Some(run) = self.run.as_mut().filter(|r| r.number == number) else {
+            return;
+        };
         let ended = event.ends();
         run.heard(event);
         if !ended {
@@ -268,7 +308,12 @@ fn collect(args: &[String]) -> Check {
         let _ = send.send(event);
     }) {
         Ok(answers) => answers,
-        Err(message) => return Check::Failed { code: "failed".into(), message },
+        Err(message) => {
+            return Check::Failed {
+                code: "failed".into(),
+                message,
+            };
+        }
     };
     answers.close();
     let mut plan = None;
@@ -286,7 +331,10 @@ fn collect(args: &[String]) -> Check {
             _ => {}
         }
     }
-    Check::Failed { code: "failed".into(), message: "upgrade-peios stopped without saying how it ended".into() }
+    Check::Failed {
+        code: "failed".into(),
+        message: "upgrade-peios stopped without saying how it ended".into(),
+    }
 }
 
 impl Live for Manager {
@@ -295,7 +343,13 @@ impl Live for Manager {
     }
 
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
-        let id = || value.get("id").and_then(Value::as_str).and_then(|id| id.parse().ok()).unwrap_or(0);
+        let id = || {
+            value
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| id.parse().ok())
+                .unwrap_or(0)
+        };
         match name {
             "check" => self.look(false),
             "check-anyway" => {
@@ -303,7 +357,9 @@ impl Live for Manager {
                 self.look(true);
             }
             "upgrade" => {
-                let Check::Available(plan) = &self.check else { return };
+                let Check::Available(plan) = &self.check else {
+                    return;
+                };
                 let plan = plan.clone();
                 let mut args = Vec::new();
                 if fields.get("on-reboot") == "on" {
@@ -323,13 +379,21 @@ impl Live for Manager {
                 }
             }
             "modified" => {
-                let answer = value.get("answer").and_then(Value::as_str).unwrap_or("abort").to_string();
+                let answer = value
+                    .get("answer")
+                    .and_then(Value::as_str)
+                    .unwrap_or("abort")
+                    .to_string();
                 if let Some(run) = &mut self.run {
                     run.answer(id(), &answer);
                 }
             }
             "retry" => {
-                let flag = value.get("flag").and_then(Value::as_str).unwrap_or_default().to_string();
+                let flag = value
+                    .get("flag")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 self.retry(&flag);
             }
             "dismiss" if !self.busy() => self.run = None,
@@ -357,7 +421,15 @@ mod tests {
     use crate::tool::Operation;
 
     fn plan(to: &str) -> Plan {
-        Plan { operations: vec![Operation { kind: "upgrade".into(), name: "e".into(), to: Some(to.into()), ..Default::default() }], ..Default::default() }
+        Plan {
+            operations: vec![Operation {
+                kind: "upgrade".into(),
+                name: "e".into(),
+                to: Some(to.into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
     }
 
     fn run(shown: Option<Plan>) -> Run {
@@ -381,12 +453,20 @@ mod tests {
     fn the_plan_shown_is_approved_once_and_a_different_one_is_asked() {
         let mut same = run(Some(plan("2")));
         same.heard(Event::Plan(plan("2")));
-        same.heard(Event::Question(Question { id: 1, kind: "proceed".into(), ..Default::default() }));
+        same.heard(Event::Question(Question {
+            id: 1,
+            kind: "proceed".into(),
+            ..Default::default()
+        }));
         assert!(same.proceeded && same.question.is_none());
 
         let mut other = run(Some(plan("2")));
         other.heard(Event::Plan(plan("3")));
-        other.heard(Event::Question(Question { id: 1, kind: "proceed".into(), ..Default::default() }));
+        other.heard(Event::Question(Question {
+            id: 1,
+            kind: "proceed".into(),
+            ..Default::default()
+        }));
         assert!(!other.proceeded && other.question.is_some());
     }
 
@@ -394,7 +474,11 @@ mod tests {
     fn an_authorisation_is_always_asked() {
         let mut r = run(Some(plan("2")));
         r.heard(Event::Plan(plan("2")));
-        r.heard(Event::Question(Question { id: 1, kind: "authorise".into(), ..Default::default() }));
+        r.heard(Event::Question(Question {
+            id: 1,
+            kind: "authorise".into(),
+            ..Default::default()
+        }));
         assert!(r.question.is_some() && !r.proceeded);
     }
 }

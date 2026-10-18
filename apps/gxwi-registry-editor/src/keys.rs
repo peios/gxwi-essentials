@@ -6,7 +6,9 @@
 //! a key that may not be listed can still have keys beneath it that may be
 //! read. Those are reached by their paths.
 
-use peios::registry::{CreateFlags, Data, Disposition, Key, KeyAccess, OpenFlags, Transaction, ValueType, layers};
+use peios::registry::{
+    CreateFlags, Data, Disposition, Key, KeyAccess, OpenFlags, Transaction, ValueType, layers,
+};
 use peios::security::{SecurityDescriptor, sddl};
 
 const EACCES: i32 = 13;
@@ -29,7 +31,11 @@ pub fn join(parent: &str, name: &str) -> String {
 /// A typed path as the registry writes it: either separator, with empty
 /// names dropped. `None` for a path with no names in it.
 pub fn tidy(typed: &str) -> Option<String> {
-    let names: Vec<&str> = typed.split(['\\', '/']).map(str::trim).filter(|name| !name.is_empty()).collect();
+    let names: Vec<&str> = typed
+        .split(['\\', '/'])
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .collect();
     (!names.is_empty()).then(|| names.join("\\"))
 }
 
@@ -86,8 +92,12 @@ pub struct Value {
 /// and the self-relative flag set in its control) and that then parse as
 /// one in full. Anything else is only bytes.
 pub fn descriptor(data: &Data) -> Option<String> {
-    let Data::Binary(bytes) = data else { return None };
-    let starts = bytes.len() >= 20 && bytes[0] == 1 && u16::from_le_bytes([bytes[2], bytes[3]]) & SE_SELF_RELATIVE != 0;
+    let Data::Binary(bytes) = data else {
+        return None;
+    };
+    let starts = bytes.len() >= 20
+        && bytes[0] == 1
+        && u16::from_le_bytes([bytes[2], bytes[3]]) & SE_SELF_RELATIVE != 0;
     if !starts {
         return None;
     }
@@ -112,7 +122,10 @@ pub fn read(path: &str) -> Result<Read, String> {
     match open(path, KeyAccess::ENUMERATE_SUB_KEYS | KeyAccess::QUERY_VALUE) {
         Ok(key) => Ok(read_from(path, Ok(&key), Ok(&key))),
         Err(e) if e.raw_os_error() == Some(EACCES) => {
-            let (listing, querying) = (open(path, KeyAccess::ENUMERATE_SUB_KEYS), open(path, KeyAccess::QUERY_VALUE));
+            let (listing, querying) = (
+                open(path, KeyAccess::ENUMERATE_SUB_KEYS),
+                open(path, KeyAccess::QUERY_VALUE),
+            );
             if listing.is_err() && querying.is_err() {
                 return Err(unopened(&e));
             }
@@ -131,12 +144,19 @@ pub fn missing(path: &str) -> bool {
 /// What a key opened for listing and one opened for its values say, as far
 /// as each could be opened. What the key is itself needs a key of its own,
 /// opened to read its descriptor, which the registry asks for that.
-fn read_from(path: &str, listing: Result<&Key, &peios::Error>, querying: Result<&Key, &peios::Error>) -> Read {
-    let facts = open(path, KeyAccess::READ_CONTROL).ok().and_then(|key| key.info().ok()).map(|info| Facts {
-        changed: info.last_write_time,
-        volatile: info.volatile,
-        link: info.symlink,
-    });
+fn read_from(
+    path: &str,
+    listing: Result<&Key, &peios::Error>,
+    querying: Result<&Key, &peios::Error>,
+) -> Read {
+    let facts = open(path, KeyAccess::READ_CONTROL)
+        .ok()
+        .and_then(|key| key.info().ok())
+        .map(|info| Facts {
+            changed: info.last_write_time,
+            volatile: info.volatile,
+            link: info.symlink,
+        });
     let subkeys = match listing {
         Ok(key) => subkeys(key),
         Err(e) => Err(refused(e, "list this key's subkeys")),
@@ -145,7 +165,11 @@ fn read_from(path: &str, listing: Result<&Key, &peios::Error>, querying: Result<
         Ok(key) => values(key),
         Err(e) => Err(refused(e, "read this key's values")),
     };
-    Read { facts, subkeys, values }
+    Read {
+        facts,
+        subkeys,
+        values,
+    }
 }
 
 /// Where the value `name` of the key at `path` comes from, if it can be read.
@@ -153,7 +177,14 @@ pub fn origin(path: &str, name: &str) -> Option<Origin> {
     let key = open(path, KeyAccess::QUERY_VALUE).ok()?;
     let value = key.query_value(name.as_bytes(), None).ok()?;
     let layer = String::from_utf8_lossy(&value.layer).into_owned();
-    Some(Origin { layer: if layer.is_empty() { "base".into() } else { layer }, sequence: value.sequence })
+    Some(Origin {
+        layer: if layer.is_empty() {
+            "base".into()
+        } else {
+            layer
+        },
+        sequence: value.sequence,
+    })
 }
 
 /// The key at `path`, opened for watching, if it may be.
@@ -191,8 +222,11 @@ pub fn may(path: &str) -> May {
 
 /// The bytes of the value `name` of the key at `path`, as they are now.
 pub fn bytes(path: &str, name: &str) -> Result<Vec<u8>, String> {
-    let key = open(path, KeyAccess::QUERY_VALUE).map_err(|e| refused(&e, "read this key's values"))?;
-    key.query_value(name.as_bytes(), None).map(|value| value.data).map_err(|e| refused(&e, "read this value"))
+    let key =
+        open(path, KeyAccess::QUERY_VALUE).map_err(|e| refused(&e, "read this key's values"))?;
+    key.query_value(name.as_bytes(), None)
+        .map(|value| value.data)
+        .map_err(|e| refused(&e, "read this value"))
 }
 
 /// Why a value was not set.
@@ -207,8 +241,15 @@ pub enum Unset {
 /// Sets the value `name` of the key at `path` to `data`, in `layer` (`None`
 /// for the base layer). With `expected`, only if the value is still as it
 /// was when it was read: its sequence number then.
-pub fn set(path: &str, name: &str, data: &Data, expected: Option<u64>, layer: Option<&str>) -> Result<(), Unset> {
-    let key = open(path, KeyAccess::SET_VALUE).map_err(|e| Unset::Refused(refused(&e, "change this key's values")))?;
+pub fn set(
+    path: &str,
+    name: &str,
+    data: &Data,
+    expected: Option<u64>,
+    layer: Option<&str>,
+) -> Result<(), Unset> {
+    let key = open(path, KeyAccess::SET_VALUE)
+        .map_err(|e| Unset::Refused(refused(&e, "change this key's values")))?;
     let bytes = data.encode();
     let mut write = key.set_value(name.as_bytes(), data.ty(), &bytes);
     if let Some(sequence) = expected {
@@ -226,8 +267,10 @@ pub fn set(path: &str, name: &str, data: &Data, expected: Option<u64>, layer: Op
 /// Deletes `layer`'s entry for the value `name` of the key at `path`. An
 /// entry beneath it, in a lower layer, then shows.
 pub fn delete_value(path: &str, name: &str, layer: Option<&str>) -> Result<(), String> {
-    let key = open(path, KeyAccess::SET_VALUE).map_err(|e| refused(&e, "change this key's values"))?;
-    key.delete_value(name.as_bytes(), layer, None).map_err(|e| refused(&e, "delete this value"))
+    let key =
+        open(path, KeyAccess::SET_VALUE).map_err(|e| refused(&e, "change this key's values"))?;
+    key.delete_value(name.as_bytes(), layer, None)
+        .map_err(|e| refused(&e, "delete this value"))
 }
 
 /// Creates the key `name` under the key at `path`, in `layer`, and gives its
@@ -236,9 +279,17 @@ pub fn create(path: &str, name: &str, layer: Option<&str>) -> Result<String, Str
     if name.is_empty() || name.contains(['\\', '/']) {
         return Err("A key's name can't be empty or have \\ or / in it.".into());
     }
-    let parent = open(path, KeyAccess::CREATE_SUB_KEY).map_err(|e| refused(&e, "create keys here"))?;
-    let (_, made) = Key::create(Some(&parent), name, KeyAccess::READ_CONTROL, CreateFlags::empty(), layer, None)
-        .map_err(|e| refused(&e, "create this key"))?;
+    let parent =
+        open(path, KeyAccess::CREATE_SUB_KEY).map_err(|e| refused(&e, "create keys here"))?;
+    let (_, made) = Key::create(
+        Some(&parent),
+        name,
+        KeyAccess::READ_CONTROL,
+        CreateFlags::empty(),
+        layer,
+        None,
+    )
+    .map_err(|e| refused(&e, "create this key"))?;
     match made {
         Disposition::CreatedNew => Ok(join(path, name)),
         Disposition::OpenedExisting => Err(format!("There is a key called {name} here already.")),
@@ -254,15 +305,20 @@ pub fn may_write_into(layer: Option<&str>) -> Result<(), String> {
     match open(&format!("{}\\{name}", layers::LAYERS), KeyAccess::SET_VALUE) {
         Ok(_) => Ok(()),
         Err(e) if e.raw_os_error() == Some(ENOENT) && layer.is_none() => Ok(()),
-        Err(e) if e.raw_os_error() == Some(EACCES) => Err(format!("You may not write into the layer {name}.")),
-        Err(e) => Err(format!("Whether you may write into the layer {name} can't be told: {e}.")),
+        Err(e) if e.raw_os_error() == Some(EACCES) => {
+            Err(format!("You may not write into the layer {name}."))
+        }
+        Err(e) => Err(format!(
+            "Whether you may write into the layer {name} can't be told: {e}."
+        )),
     }
 }
 
 /// Deletes the key at `path` and everything under it from `layer`, all or
 /// nothing, and says how many keys went.
 pub fn delete_tree(path: &str, layer: Option<&str>) -> Result<u64, String> {
-    let key = open(path, KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS).map_err(|e| refused(&e, "delete this key"))?;
+    let key = open(path, KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS)
+        .map_err(|e| refused(&e, "delete this key"))?;
     let txn = Transaction::begin().map_err(|e| refused(&e, "delete this key"))?;
     let deleted = key.delete_tree(layer, Some(&txn)).map_err(|e| match e.raw_os_error() {
         // A transaction holds 4,096 changes, and every key is held open
@@ -290,13 +346,20 @@ fn subkeys(key: &Key) -> Result<Vec<String>, String> {
 }
 
 fn values(key: &Key) -> Result<Vec<Value>, String> {
-    let records = key.query_values_batch(None).map_err(|e| refused(&e, "read this key's values"))?;
+    let records = key
+        .query_values_batch(None)
+        .map_err(|e| refused(&e, "read this key's values"))?;
     let mut values: Vec<Value> = records
         .into_iter()
         .filter(|record| record.ty != ValueType::TOMBSTONE)
         .map(|record| {
             let data = Data::decode(record.ty, &record.data);
-            Value { name: String::from_utf8_lossy(&record.name).into_owned(), size: record.data.len(), sddl: descriptor(&data), data }
+            Value {
+                name: String::from_utf8_lossy(&record.name).into_owned(),
+                size: record.data.len(),
+                sddl: descriptor(&data),
+                data,
+            }
         })
         .collect();
     values.sort_by_cached_key(|value| (!value.name.is_empty(), value.name.to_lowercase()));
@@ -314,7 +377,11 @@ fn unopened(e: &peios::Error) -> String {
 
 /// Why `what` could not be done.
 fn refused(e: &peios::Error, what: &str) -> String {
-    if e.raw_os_error() == Some(EACCES) { format!("You may not {what}.") } else { format!("Could not {what}: {e}.") }
+    if e.raw_os_error() == Some(EACCES) {
+        format!("You may not {what}.")
+    } else {
+        format!("Could not {what}: {e}.")
+    }
 }
 
 #[cfg(test)]
@@ -323,7 +390,10 @@ mod tests {
 
     #[test]
     fn a_typed_path_is_written_as_the_registry_writes_it() {
-        assert_eq!(tidy(r" /Machine//System\Services/ ").as_deref(), Some(r"Machine\System\Services"));
+        assert_eq!(
+            tidy(r" /Machine//System\Services/ ").as_deref(),
+            Some(r"Machine\System\Services")
+        );
         assert_eq!(tidy("  "), None);
         assert_eq!(tidy(r"\\"), None);
     }
@@ -333,7 +403,10 @@ mod tests {
         assert_eq!(join("Machine", "System"), r"Machine\System");
         assert_eq!(parent(r"Machine\System\Services"), Some(r"Machine\System"));
         assert_eq!(parent("Machine"), None);
-        assert_eq!(names(r"Machine\System").collect::<Vec<_>>(), ["Machine", "System"]);
+        assert_eq!(
+            names(r"Machine\System").collect::<Vec<_>>(),
+            ["Machine", "System"]
+        );
         assert!(same(r"machine\SYSTEM", r"Machine\System"));
     }
 }

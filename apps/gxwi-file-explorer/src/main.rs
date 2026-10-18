@@ -1,4 +1,4 @@
-//! Gexora — a file explorer: one window showing a directory, with a way into
+//! File Explorer — a file explorer: one window showing a directory, with a way into
 //! each thing in it.
 //!
 //! It is an app like any other, drawn by this process for whoever is looking.
@@ -20,7 +20,7 @@
 //! entry's menu offers every candidate by name, the default first and the
 //! rest by title. The choices are read again whenever a file is opened, so
 //! a change to them is used at once; the menus show them as they were when
-//! the directory was last read, or a file last opened. Gexora is
+//! the directory was last read, or a file last opened. File Explorer is
 //! no part of the shell, so it starts what it opens itself, as a child of
 //! its own on the desktop it is on. A file whose name says nothing of its
 //! type is opened as text if it reads as text, which is found out when it
@@ -47,7 +47,7 @@
 //!
 //! PERMISSIONS. An entry's menu opens its permissions in gxwi-sd-editor, a
 //! dialog of its own that this starts and speaks for (its library): the
-//! owner, and who may do what with it. Gexora reads the descriptor and
+//! owner, and who may do what with it. File Explorer reads the descriptor and
 //! applies what the person applies, through a handle it holds on the entry
 //! while the dialog is open, which can do nothing but that. So what is
 //! applied is applied to the entry it was opened on, wherever it has been
@@ -77,13 +77,15 @@ mod work;
 use held::{Held, Holding};
 
 // What this program looks like, to whatever lists it. The icon itself is
-// `gexora.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gexora");
+// `gxwi-file-explorer.svg` at the repo root, installed as the base theme's.
+libgxwi::icon!(b"dev.peios.gxwi-file-explorer");
 
 /// The most entries drawn at once. A directory with more says so.
 const MOST: usize = 2000;
 
 struct Entry {
+    id: String,
+    native_name: std::ffi::OsString,
     name: String,
     directory: bool,
     /// Whether opening it starts it: a regular file this process may run.
@@ -100,12 +102,20 @@ impl Entry {
     /// Its kind: a folder, its media type, or a file. What a type is called
     /// waits for something that says.
     fn kind(&self) -> &str {
-        if self.directory { "Folder" } else { self.media.as_deref().unwrap_or("File") }
+        if self.directory {
+            "Folder"
+        } else {
+            self.media.as_deref().unwrap_or("File")
+        }
     }
 
     /// The media type an application is asked about to open it.
     fn opened_as(&self) -> Option<&str> {
-        if self.directory { Some("inode/directory") } else { self.media.as_deref() }
+        if self.directory {
+            Some("inode/directory")
+        } else {
+            self.media.as_deref()
+        }
     }
 }
 
@@ -235,7 +245,12 @@ struct Explorer {
 
 impl Explorer {
     fn new(at: PathBuf) -> Explorer {
-        Explorer::with(at, Catalogue::system(), Choosing::Registry, Holding::session())
+        Explorer::with(
+            at,
+            Catalogue::system(),
+            Choosing::Registry,
+            Holding::session(),
+        )
     }
 
     fn with(at: PathBuf, catalogue: Catalogue, choosing: Choosing, holding: Holding) -> Explorer {
@@ -275,7 +290,9 @@ impl Explorer {
             Ok(listing) => listing,
             Err(e) => {
                 self.trouble = Some(match e.kind() {
-                    std::io::ErrorKind::PermissionDenied => "You are not allowed to see what is in here.".into(),
+                    std::io::ErrorKind::PermissionDenied => {
+                        "You are not allowed to see what is in here.".into()
+                    }
                     std::io::ErrorKind::NotFound => "There is no such directory.".into(),
                     _ => format!("This directory could not be read: {e}."),
                 });
@@ -287,28 +304,37 @@ impl Explorer {
         let mut failed = None;
         let entries: Vec<Entry> = listing
             .filter_map(|entry| entry.map_err(|e| failed = Some(e)).ok())
-            .filter_map(|entry| {
-                let name = entry.file_name().into_string().ok()?;
+            .map(|entry| {
+                let native_name = entry.file_name();
+                let id = gxwi_fs::entry_id(&native_name);
+                let name = native_name.to_string_lossy().into_owned();
                 let path = entry.path();
                 // Through a link, as the thing opened would be.
                 let metadata = std::fs::metadata(&path).ok();
                 let directory = metadata.as_ref().is_some_and(|m| m.is_dir());
                 let program = metadata.as_ref().is_some_and(|m| m.is_file()) && may_run(&path);
-                Some(Entry {
+                Entry {
+                    id,
+                    native_name,
                     icon: icons::identify(&path, &self.themes),
-                    media: metadata.as_ref().and_then(|m| icons::media_type(&path, m)).filter(|_| !directory),
+                    media: metadata
+                        .as_ref()
+                        .and_then(|m| icons::media_type(&path, m))
+                        .filter(|_| !directory),
                     size: metadata.as_ref().map_or(0, |m| m.len()),
                     modified: metadata.as_ref().and_then(|m| m.modified().ok()),
                     created: metadata.as_ref().and_then(|m| m.created().ok()),
                     name,
                     directory,
                     program,
-                })
+                }
             })
             .collect();
         self.unshown = entries.len().saturating_sub(MOST);
         self.trouble = failed.map(|e| match (e.kind(), entries.is_empty()) {
-            (std::io::ErrorKind::PermissionDenied, true) => "You are not allowed to see what is in here.".into(),
+            (std::io::ErrorKind::PermissionDenied, true) => {
+                "You are not allowed to see what is in here.".into()
+            }
             _ => format!("Not everything in here could be read: {e}."),
         });
         self.entries = entries;
@@ -317,36 +343,62 @@ impl Explorer {
         self.picked = self.picked.filter(|&picked| picked < self.entries.len());
         self.space = space(&self.at);
         self.volumes = volumes();
-        self.openers = self.catalogue.read().into_iter().filter(|application| !application.opens.is_empty()).collect();
-        self.openers.sort_by_cached_key(|application| (application.title.to_lowercase(), application.id.clone()));
+        self.openers = self
+            .catalogue
+            .read()
+            .into_iter()
+            .filter(|application| !application.opens.is_empty())
+            .collect();
+        self.openers.sort_by_cached_key(|application| {
+            (application.title.to_lowercase(), application.id.clone())
+        });
         self.defaults = self.choosing.read();
         // What was being asked about may have gone.
-        self.asking = self.asking.take().filter(|asking| asking.about().is_none_or(|name| self.entries.iter().any(|entry| entry.name == name)));
+        self.asking = self.asking.take().filter(|asking| {
+            asking
+                .about()
+                .is_none_or(|name| self.entries.iter().any(|entry| entry.id == name))
+        });
         true
     }
 
     /// The applications that are candidates to open `entry`, first the one
     /// that opening it uses.
     fn candidates(&self, entry: &Entry) -> Vec<&Application> {
-        entry.opened_as().map(|media| self.opening(media)).unwrap_or_default()
+        entry
+            .opened_as()
+            .map(|media| self.opening(media))
+            .unwrap_or_default()
     }
 
     /// The applications that say they open `media`: its default first, if
     /// it has one, and the rest by title.
     fn opening(&self, media: &str) -> Vec<&Application> {
-        self.defaults.first(media, self.openers.iter().filter(|application| application.opens(media)).collect())
+        self.defaults.first(
+            media,
+            self.openers
+                .iter()
+                .filter(|application| application.opens(media))
+                .collect(),
+        )
     }
 
     /// Which entry is called `name`.
     fn named(&self, name: &str) -> Option<usize> {
-        self.entries.iter().position(|entry| entry.name == name)
+        self.entries.iter().position(|entry| entry.id == name)
     }
 
     /// Directories first, then by what was asked, then by name without
     /// regard to case, so a listing reads the same wherever it was made.
     fn sort(&mut self) {
         let (by, ascending) = (self.by, self.ascending);
-        self.entries.sort_by_cached_key(|entry| (!entry.directory, entry.name.to_lowercase(), entry.name.clone()));
+        self.entries.sort_by_cached_key(|entry| {
+            (
+                !entry.directory,
+                entry.name.to_lowercase(),
+                entry.name.clone(),
+            )
+        });
         if by != By::Name {
             self.entries.sort_by(|a, b| {
                 let within = match by {
@@ -361,7 +413,11 @@ impl Explorer {
         if !ascending {
             // The other way round within each group, with directories still
             // first: reversing the whole list would put them last.
-            let split = self.entries.iter().position(|entry| !entry.directory).unwrap_or(self.entries.len());
+            let split = self
+                .entries
+                .iter()
+                .position(|entry| !entry.directory)
+                .unwrap_or(self.entries.len());
             self.entries[..split].reverse();
             self.entries[split..].reverse();
         }
@@ -384,8 +440,10 @@ impl Explorer {
         // read: a choice is made somewhere else, and should not wait for a
         // refresh here to be used.
         self.defaults = self.choosing.read();
-        let Some(entry) = self.entries.get(index) else { return };
-        let path = self.at.join(&entry.name);
+        let Some(entry) = self.entries.get(index) else {
+            return;
+        };
+        let path = self.at.join(&entry.native_name);
         if entry.directory {
             self.go(path, fields);
         } else if entry.program {
@@ -393,21 +451,35 @@ impl Explorer {
                 self.trouble = Some(format!("{} could not be started: {e}.", entry.name));
             }
         } else if let Some(media) = entry.opened_as() {
-            match self.opening(media).first().map(|application| application.id.clone()) {
+            match self
+                .opening(media)
+                .first()
+                .map(|application| application.id.clone())
+            {
                 Some(id) => self.open_with(index, &id, fields),
-                None => self.trouble = Some(format!("Nothing installed says it opens {media} files.")),
+                None => {
+                    self.trouble = Some(format!("Nothing installed says it opens {media} files."))
+                }
             }
         } else {
             // Its name says nothing of what it is. If it reads as text,
             // what opens text opens it.
-            let text = work::reads_as_text(&path).then(|| self.opening("text/plain").first().map(|application| application.command(Some(&path)))).flatten();
+            let text = work::reads_as_text(&path)
+                .then(|| {
+                    self.opening("text/plain")
+                        .first()
+                        .map(|application| application.command(Some(&path)))
+                })
+                .flatten();
             match text {
                 Some((program, arguments)) => {
                     if let Err(e) = start(&program, &arguments) {
                         self.trouble = Some(format!("{} could not be opened: {e}.", entry.name));
                     }
                 }
-                None => self.trouble = Some("Nothing installed says it opens files like this.".into()),
+                None => {
+                    self.trouble = Some("Nothing installed says it opens files like this.".into())
+                }
             }
         }
     }
@@ -415,7 +487,11 @@ impl Explorer {
     /// Opens the directory being shown with the application `id`, if it
     /// says it opens directories: a terminal here, or another window.
     fn open_here(&mut self, id: &str) {
-        let Some(application) = self.catalogue.get(id).filter(|application| application.opens("inode/directory")) else {
+        let Some(application) = self
+            .catalogue
+            .get(id)
+            .filter(|application| application.opens("inode/directory"))
+        else {
             self.trouble = Some("This directory cannot be opened with that.".into());
             return;
         };
@@ -426,15 +502,21 @@ impl Explorer {
     }
 
     /// Opens the entry with the application `id`, as the catalogue has it
-    /// now, if it is a candidate for it. A directory opened with Gexora is
+    /// now, if it is a candidate for it. A directory opened with File Explorer is
     /// another window, like anything else opened with anything.
     fn open_with(&mut self, index: usize, id: &str, _: &mut Fields) {
-        let Some(entry) = self.entries.get(index) else { return };
-        let Some(application) = self.catalogue.get(id).filter(|application| entry.opened_as().is_some_and(|media| application.opens(media))) else {
+        let Some(entry) = self.entries.get(index) else {
+            return;
+        };
+        let Some(application) = self.catalogue.get(id).filter(|application| {
+            entry
+                .opened_as()
+                .is_some_and(|media| application.opens(media))
+        }) else {
             self.trouble = Some(format!("{} cannot be opened with that.", entry.name));
             return;
         };
-        let (program, arguments) = application.command(Some(&self.at.join(&entry.name)));
+        let (program, arguments) = application.command(Some(&self.at.join(&entry.native_name)));
         if let Err(e) = start(&program, &arguments) {
             self.trouble = Some(format!("{} could not be started: {e}.", application.title));
         }
@@ -443,6 +525,11 @@ impl Explorer {
     /// Gives the entry called `was` the name `typed`, if that is a name and
     /// nothing has it.
     fn rename(&mut self, was: &str, typed: &str) {
+        let Some(index) = self.named(was) else {
+            return;
+        };
+        let source = self.at.join(&self.entries[index].native_name);
+        let label = self.entries[index].name.clone();
         let to = typed.trim();
         if to == was {
             return;
@@ -458,22 +545,27 @@ impl Explorer {
             self.trouble = Some(format!("There is already something called {to} here."));
             return;
         }
-        match std::fs::rename(self.at.join(was), &target) {
+        match gxwi_fs::rename_noreplace(&source, &target) {
             Ok(()) => {
                 self.reread();
                 self.picked = self.named(to);
             }
-            Err(e) => self.trouble = Some(format!("{was} could not be renamed: {}.", why(&e))),
+            Err(e) => self.trouble = Some(format!("{label} could not be renamed: {}.", why(&e))),
         }
     }
 
     /// Deletes the entry called `name`: a directory with everything in it,
     /// and a link as the link it is.
     fn delete(&mut self, name: &str) {
-        let removed = work::delete(&self.at.join(name));
+        let Some(index) = self.named(name) else {
+            return;
+        };
+        let entry = &self.entries[index];
+        let label = entry.name.clone();
+        let removed = work::delete(&self.at.join(&entry.native_name));
         self.reread();
         if let Err(e) = removed {
-            self.trouble = Some(format!("{name} could not be deleted: {}.", why(&e)));
+            self.trouble = Some(format!("{label} could not be deleted: {}.", why(&e)));
         }
     }
 
@@ -489,14 +581,20 @@ impl Explorer {
         let made = if directory {
             std::fs::create_dir(&path)
         } else {
-            std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map(|_| ())
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .map(|_| ())
         };
         match made {
             Ok(()) => {
                 self.reread();
                 self.picked = self.named(name);
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => self.trouble = Some(format!("There is already something called {name} here.")),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                self.trouble = Some(format!("There is already something called {name} here."))
+            }
             Err(e) => self.trouble = Some(format!("{name} could not be made: {}.", why(&e))),
         }
     }
@@ -504,8 +602,18 @@ impl Explorer {
     /// Holds the entry called `name`, to be copied or moved to wherever it
     /// is pasted.
     fn hold(&mut self, name: &str, cut: bool) {
-        if let Err(e) = self.holding.set(Some(Held { path: self.at.join(name), cut })) {
-            self.trouble = Some(format!("{name} could not be {}: {e}.", if cut { "cut" } else { "copied" }));
+        let Some(index) = self.named(name) else {
+            return;
+        };
+        let entry = &self.entries[index];
+        if let Err(e) = self.holding.set(Some(Held {
+            path: self.at.join(&entry.native_name),
+            cut,
+        })) {
+            self.trouble = Some(format!(
+                "{name} could not be {}: {e}.",
+                if cut { "cut" } else { "copied" }
+            ));
         }
     }
 
@@ -519,7 +627,16 @@ impl Explorer {
             self.trouble = Some("Nothing has been cut or copied.".into());
             return;
         };
-        let name = held.path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+        let Some(name) = held
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned)
+        else {
+            self.trouble =
+                Some("This filename cannot be represented in the UTF-8 clipboard.".into());
+            return;
+        };
         let Ok(metadata) = std::fs::symlink_metadata(&held.path) else {
             self.trouble = Some(format!("{name} is no longer where it was."));
             let _ = self.holding.set(None);
@@ -546,8 +663,18 @@ impl Explorer {
         };
         let doing = format!("{} {name}", if held.cut { "moving" } else { "copying" });
         let work = move || {
-            let done = if held.cut { work::move_to(&held.path, &to) } else { work::copy(&held.path, &to) };
-            let said = done.map_err(|e| format!("{name} could not be {}: {}.", if held.cut { "moved" } else { "copied" }, why(&e)));
+            let done = if held.cut {
+                work::move_to(&held.path, &to)
+            } else {
+                work::copy(&held.path, &to)
+            };
+            let said = done.map_err(|e| {
+                format!(
+                    "{name} could not be {}: {}.",
+                    if held.cut { "moved" } else { "copied" },
+                    why(&e)
+                )
+            });
             (said, to, held.cut)
         };
         match self.window.upgrade() {
@@ -576,7 +703,10 @@ impl Explorer {
         }
         self.reread();
         if to.parent() == Some(self.at.as_path()) {
-            self.picked = to.file_name().and_then(|name| self.named(&name.to_string_lossy())).or(self.picked);
+            self.picked = to
+                .file_name()
+                .and_then(|name| self.named(&gxwi_fs::entry_id(name)))
+                .or(self.picked);
         }
         if let Err(why) = said {
             self.trouble = Some(why);
@@ -585,8 +715,10 @@ impl Explorer {
 
     /// Opens the editor on the permissions of the entry at `index`.
     fn permissions(&mut self, index: usize) {
-        let Some(entry) = self.entries.get(index) else { return };
-        let path = self.at.join(&entry.name);
+        let Some(entry) = self.entries.get(index) else {
+            return;
+        };
+        let path = self.at.join(&entry.native_name);
         // Open already: that dialog comes to the front. One whose editor
         // has gone without its going being heard yet is opened afresh.
         if let Some(editor) = self.editing.get(&path) {
@@ -597,7 +729,11 @@ impl Explorer {
         }
         // A handle for its descriptor and nothing else, through a link as
         // the thing opened would be.
-        let handle = match std::fs::OpenOptions::new().read(true).custom_flags(libc::O_PATH).open(&path) {
+        let handle = match std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_PATH)
+            .open(&path)
+        {
             Ok(file) => OwnedFd::from(file),
             Err(e) => {
                 self.trouble = Some(format!("{} could not be opened: {}.", entry.name, why(&e)));
@@ -624,7 +760,11 @@ impl Explorer {
         let sd = match sd {
             Ok(sd) => sd,
             Err(e) => {
-                self.trouble = Some(format!("The permissions of {} could not be read: {}.", entry.name, why(&io(e))));
+                self.trouble = Some(format!(
+                    "The permissions of {} could not be read: {}.",
+                    entry.name,
+                    why(&io(e))
+                ));
                 return;
             }
         };
@@ -636,7 +776,11 @@ impl Explorer {
                 .custom_flags(libc::O_PATH)
                 .open(up)
                 .ok()
-                .and_then(|up| peios::file::fd_get_sd(up.as_fd(), basic | SecInfo::SACL).or_else(|_| peios::file::fd_get_sd(up.as_fd(), basic)).ok())
+                .and_then(|up| {
+                    peios::file::fd_get_sd(up.as_fd(), basic | SecInfo::SACL)
+                        .or_else(|_| peios::file::fd_get_sd(up.as_fd(), basic))
+                        .ok()
+                })
                 .map(|sd| sd.as_bytes().to_vec()),
         });
         let mut can = can_change(&sd);
@@ -645,7 +789,14 @@ impl Explorer {
         // A folder's can be pushed into what is inside it.
         can.propagate = entry.directory;
         let request = Request {
-            object: Object { name: entry.name.clone(), kind: if entry.directory { "Folder" } else { "File" }.into(), container: entry.directory, children: Children::All, parent, ..Object::default() },
+            object: Object {
+                name: entry.name.clone(),
+                kind: if entry.directory { "Folder" } else { "File" }.into(),
+                container: entry.directory,
+                children: Children::All,
+                parent,
+                ..Object::default()
+            },
             sd: sd.as_bytes().to_vec(),
             read: Some(read),
             rights: file_rights(entry.directory),
@@ -662,7 +813,13 @@ impl Explorer {
             }
         };
         let opened = if entry.directory {
-            gxwi_sd_editor::open_tree(&request, move |sd, parts| apply(&handle, sd, parts), Folders, path.clone(), done)
+            gxwi_sd_editor::open_tree(
+                &request,
+                move |sd, parts| apply(&handle, sd, parts),
+                Folders,
+                path.clone(),
+                done,
+            )
         } else {
             gxwi_sd_editor::open(&request, move |sd, parts| apply(&handle, sd, parts), done)
         };
@@ -670,14 +827,24 @@ impl Explorer {
             Ok(editor) => {
                 self.editing.insert(path, editor);
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.trouble = Some("The permissions editor is not installed.".into()),
-            Err(e) => self.trouble = Some(format!("The permissions editor could not be started: {e}.")),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.trouble = Some("The permissions editor is not installed.".into())
+            }
+            Err(e) => {
+                self.trouble = Some(format!("The permissions editor could not be started: {e}."))
+            }
         }
     }
 
     /// The pane of places to go and volumes to look at.
     fn sidebar(&self) -> String {
-        let current = |path: &Path| if path == self.at { " aria-current=\"true\"" } else { "" };
+        let current = |path: &Path| {
+            if path == self.at {
+                " aria-current=\"true\""
+            } else {
+                ""
+            }
+        };
         let places: String = self
             .places
             .iter()
@@ -722,7 +889,15 @@ impl Explorer {
             return String::new();
         };
         let row = |name: &str, value: String| format!("<dt>{name}</dt><dd>{}</dd>", escape(&value));
-        let size = if entry.directory { "—".into() } else { format!("{} ({} bytes)", show::size(entry.size), show::grouped(entry.size)) };
+        let size = if entry.directory {
+            "—".into()
+        } else {
+            format!(
+                "{} ({} bytes)",
+                show::size(entry.size),
+                show::grouped(entry.size)
+            )
+        };
         let zone = show::here();
         format!(
             "<aside class=\"details\" aria-label=\"Details\">\
@@ -758,17 +933,33 @@ fn start(program: &Path, arguments: &[String]) -> std::io::Result<()> {
 /// them by, from the most to the least.
 fn file_rights(directory: bool) -> Vec<Right> {
     let generic = file_generic();
-    let right = |name: &str, mask: u32| Right { name: name.into(), mask, general: true };
-    let special = |name: &str, mask: u32| Right { name: name.into(), mask, general: false };
+    let right = |name: &str, mask: u32| Right {
+        name: name.into(),
+        mask,
+        general: true,
+    };
+    let special = |name: &str, mask: u32| Right {
+        name: name.into(),
+        mask,
+        general: false,
+    };
     // One right a bit, as a folder's and a file's say them.
     let (list, add_file, add_folder, run) = if directory {
-        ("List folder", "Create files", "Create folders", "Traverse folder")
+        (
+            "List folder",
+            "Create files",
+            "Create folders",
+            "Traverse folder",
+        )
     } else {
         ("Read data", "Write data", "Append data", "Run")
     };
     let mut rights = vec![
         right("Full control", generic.all),
-        right("Modify", generic.read | generic.write | generic.execute | AccessMask::DELETE.bits()),
+        right(
+            "Modify",
+            generic.read | generic.write | generic.execute | AccessMask::DELETE.bits(),
+        ),
         right("Read & execute", generic.read | generic.execute),
         right("Read", generic.read),
         right("Write", generic.write),
@@ -814,20 +1005,37 @@ fn file_generic() -> Generic {
 /// and the kernel decides on Apply. The label goes with the owner, taking
 /// WRITE_OWNER; the SACL with the right to read it, which reading it took.
 fn can_change(sd: &SecurityDescriptor) -> Can {
-    let granted = match AccessCheck::new(sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check() {
-        Ok(decision) => decision.granted,
-        Err(_) => return Can { dacl: true, owner: true, audit: true, label: true, ..Can::default() },
-    };
+    let granted =
+        match AccessCheck::new(sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check() {
+            Ok(decision) => decision.granted,
+            Err(_) => {
+                return Can {
+                    dacl: true,
+                    owner: true,
+                    audit: true,
+                    label: true,
+                    ..Can::default()
+                };
+            }
+        };
     let dacl = granted.contains(AccessMask::WRITE_DAC);
     let owner = granted.contains(AccessMask::WRITE_OWNER);
     let why = (!dacl).then(|| "You may not change who may use this.".to_string());
-    Can { dacl, owner, audit: true, label: owner, why, ..Can::default() }
+    Can {
+        dacl,
+        owner,
+        audit: true,
+        label: owner,
+        why,
+        ..Can::default()
+    }
 }
 
 /// Applies the parts of `sd` that changed to what `handle` is open on: what
 /// the permissions editor sent. Why not, for the person to read.
 fn apply(handle: &OwnedFd, sd: &[u8], parts: &[Part]) -> Result<(), String> {
-    let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec()).map_err(|e| format!("what came back is not a security descriptor ({e})"))?;
+    let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec())
+        .map_err(|e| format!("what came back is not a security descriptor ({e})"))?;
     let info = parts.iter().fold(SecInfo::empty(), |info, part| {
         info | match part {
             Part::Owner => SecInfo::OWNER,
@@ -851,7 +1059,12 @@ struct Folders;
 impl Folders {
     /// A handle on `path` itself for its descriptor, a link not followed.
     fn open(path: &Path) -> Result<OwnedFd, String> {
-        std::fs::OpenOptions::new().read(true).custom_flags(libc::O_PATH | libc::O_NOFOLLOW).open(path).map(OwnedFd::from).map_err(|e| why(&e))
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_PATH | libc::O_NOFOLLOW)
+            .open(path)
+            .map(OwnedFd::from)
+            .map_err(|e| why(&e))
     }
 }
 
@@ -880,19 +1093,25 @@ impl gxwi_sd_editor::propagate::Tree for Folders {
 
     fn read(&mut self, node: &PathBuf, info: SecInfo) -> Result<Vec<u8>, String> {
         let handle = Folders::open(node)?;
-        peios::file::fd_get_sd(handle.as_fd(), info).map(|sd| sd.as_bytes().to_vec()).map_err(|e| why(&io(e)))
+        peios::file::fd_get_sd(handle.as_fd(), info)
+            .map(|sd| sd.as_bytes().to_vec())
+            .map_err(|e| why(&io(e)))
     }
 
     fn write(&mut self, node: &PathBuf, sd: &[u8], info: SecInfo) -> Result<(), String> {
         let handle = Folders::open(node)?;
-        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec()).map_err(|e| format!("what was worked out is not a security descriptor ({e})"))?;
+        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec())
+            .map_err(|e| format!("what was worked out is not a security descriptor ({e})"))?;
         peios::file::fd_set_sd(handle.as_fd(), info, &sd).map_err(|e| why(&io(e)))
     }
 }
 
 /// A KACS error as the system's own, which is what it carries.
 fn io(error: peios::Error) -> std::io::Error {
-    error.raw_os_error().map_or_else(|| std::io::Error::new(error.kind(), error.to_string()), std::io::Error::from_raw_os_error)
+    error.raw_os_error().map_or_else(
+        || std::io::Error::new(error.kind(), error.to_string()),
+        std::io::Error::from_raw_os_error,
+    )
 }
 
 /// Why something could not be done, for the person to read.
@@ -907,7 +1126,9 @@ fn why(error: &std::io::Error) -> String {
 /// Whether this process may run the file: the system's word, asked the way
 /// an exec would ask it.
 fn may_run(path: &Path) -> bool {
-    let Ok(cpath) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else { return false };
+    let Ok(cpath) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else {
+        return false;
+    };
     // SAFETY: a NUL-terminated string, live for the call.
     unsafe { libc::access(cpath.as_ptr(), libc::X_OK) == 0 }
 }
@@ -915,12 +1136,32 @@ fn may_run(path: &Path) -> bool {
 /// Home, and the directories in it that a person keeps things in, by the
 /// names PGSS Icons knows them by, where they exist.
 fn places(themes: &Themes) -> Vec<Place> {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_dir()) else { return Vec::new() };
-    let mut places = vec![Place { name: "Home".into(), icon: icons::identify(&home, themes), path: home.clone() }];
-    for name in ["Desktop", "Documents", "Downloads", "Pictures", "Music", "Videos"] {
+    let Some(home) = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|home| home.is_dir())
+    else {
+        return Vec::new();
+    };
+    let mut places = vec![Place {
+        name: "Home".into(),
+        icon: icons::identify(&home, themes),
+        path: home.clone(),
+    }];
+    for name in [
+        "Desktop",
+        "Documents",
+        "Downloads",
+        "Pictures",
+        "Music",
+        "Videos",
+    ] {
         let path = home.join(name);
         if path.is_dir() {
-            places.push(Place { name: name.into(), icon: icons::identify(&path, themes), path });
+            places.push(Place {
+                name: name.into(),
+                icon: icons::identify(&path, themes),
+                path,
+            });
         }
     }
     places
@@ -930,10 +1171,32 @@ fn places(themes: &Themes) -> Vec<Place> {
 /// the views the system makes of its own directories.
 fn volumes() -> Vec<Volume> {
     const NOT_A_VOLUME: &[&str] = &[
-        "proc", "sysfs", "devtmpfs", "devpts", "tmpfs", "cgroup", "cgroup2", "stratafs", "securityfs", "debugfs", "tracefs",
-        "bpf", "mqueue", "pstore", "configfs", "fusectl", "binfmt_misc", "hugetlbfs", "autofs", "rpc_pipefs", "nsfs", "efivarfs",
+        "proc",
+        "sysfs",
+        "devtmpfs",
+        "devpts",
+        "tmpfs",
+        "cgroup",
+        "cgroup2",
+        "stratafs",
+        "securityfs",
+        "debugfs",
+        "tracefs",
+        "bpf",
+        "mqueue",
+        "pstore",
+        "configfs",
+        "fusectl",
+        "binfmt_misc",
+        "hugetlbfs",
+        "autofs",
+        "rpc_pipefs",
+        "nsfs",
+        "efivarfs",
     ];
-    let Ok(mounts) = std::fs::read_to_string("/proc/self/mountinfo") else { return Vec::new() };
+    let Ok(mounts) = std::fs::read_to_string("/proc/self/mountinfo") else {
+        return Vec::new();
+    };
     let mut volumes: Vec<Volume> = mounts
         .lines()
         .filter_map(|line| {
@@ -945,11 +1208,23 @@ fn volumes() -> Vec<Volume> {
                 return None;
             }
             let path = PathBuf::from(unescape(point));
-            let name = if path == Path::new("/") { "This machine".to_string() } else { path.file_name()?.to_string_lossy().into_owned() };
-            Some(Volume { space: space(&path), name, path })
+            let name = if path == Path::new("/") {
+                "This machine".to_string()
+            } else {
+                path.file_name()?.to_string_lossy().into_owned()
+            };
+            Some(Volume {
+                space: space(&path),
+                name,
+                path,
+            })
         })
         .collect();
-    volumes.sort_by(|a, b| (a.path != Path::new("/")).cmp(&(b.path != Path::new("/"))).then(a.path.cmp(&b.path)));
+    volumes.sort_by(|a, b| {
+        (a.path != Path::new("/"))
+            .cmp(&(b.path != Path::new("/")))
+            .then(a.path.cmp(&b.path))
+    });
     volumes
 }
 
@@ -989,26 +1264,31 @@ impl Live for Explorer {
         let now = SystemTime::now();
         let zone = show::here();
         // What has been cut is shown as on its way out.
-        let cut = self.holding.get().filter(|held| held.cut).map(|held| held.path);
+        let cut = self
+            .holding
+            .get()
+            .filter(|held| held.cut)
+            .map(|held| held.path);
         // One menu serves every entry the same applications open, which is
         // most of a directory: the entry's own values come with the choice.
-        let mut menus: Vec<Vec<&Application>> = Vec::new();
+        let mut menus: Vec<(Vec<&Application>, bool)> = Vec::new();
         let entries: String = self
             .entries
             .iter()
             .enumerate()
             .map(|(index, entry)| {
                 let candidates = self.candidates(entry);
-                let menu = menus.iter().position(|menu| menu == &candidates).unwrap_or_else(|| {
-                    menus.push(candidates);
+                let copy_path = self.at.join(&entry.native_name).to_str().is_some();
+                let menu = menus.iter().position(|(menu, copy)| menu == &candidates && *copy == copy_path).unwrap_or_else(|| {
+                    menus.push((candidates, copy_path));
                     menus.len() - 1
                 });
                 let about = format!(
                     "fx-value-index=\"{index}\" fx-value-name=\"{name}\" fx-value-path=\"{path}\"",
-                    name = escape(&entry.name),
-                    path = escape(&self.at.join(&entry.name).to_string_lossy()),
+                    name = escape(&entry.id),
+                    path = escape(self.at.join(&entry.native_name).to_str().unwrap_or_default()),
                 );
-                let class = match (entry.directory, cut.as_deref() == Some(self.at.join(&entry.name).as_path())) {
+                let class = match (entry.directory, cut.as_deref() == Some(self.at.join(&entry.native_name).as_path())) {
                     (true, false) => "directory",
                     (true, true) => "directory cut",
                     (false, false) => "file",
@@ -1022,7 +1302,7 @@ impl Live for Explorer {
                 );
                 let icon = escape(&icons::href(&entry.icon));
                 // Being renamed, its name is a field to type the new one in.
-                if self.asking == Some(Asking::Rename(entry.name.clone())) {
+                if self.asking == Some(Asking::Rename(entry.id.clone())) {
                     return format!(
                         "<li><form id=\"renaming-{index}\" class=\"{class} renaming\" fx-submit=\"renamed\" {about}>\
                          <img src=\"{icon}\" alt=\"\"><input name=\"name\" fx-autofocus autocomplete=\"off\" spellcheck=\"false\" aria-label=\"New name for {name}\">\
@@ -1043,7 +1323,7 @@ impl Live for Explorer {
         let menus: String = menus
             .iter()
             .enumerate()
-            .map(|(at, candidates)| {
+            .map(|(at, (candidates, copy_path))| {
                 let with: String = candidates
                     .iter()
                     .map(|application| {
@@ -1060,10 +1340,11 @@ impl Live for Explorer {
                      <li><button type=\"button\" fx-click=\"cut\">Cut</button></li>\
                      <li><button type=\"button\" fx-click=\"copy\">Copy</button></li>\
                      <li><button type=\"button\" fx-click=\"rename\">Rename</button></li>\
-                     <li><button type=\"button\" fx-copy=\"path\">Copy path</button></li>\
+                     <li><button type=\"button\" fx-copy=\"path\"{copy_disabled}>Copy path</button></li>\
                      <li><button type=\"button\" fx-click=\"permissions\">Permissions…</button></li><hr>\
                      <li><button type=\"button\" fx-click=\"delete\">Delete</button></li>\
-                     </menu>"
+                     </menu>",
+                    copy_disabled = if *copy_path { "" } else { " disabled title=\"This path cannot be copied as UTF-8 text.\"" },
                 )
             })
             .collect();
@@ -1095,7 +1376,11 @@ impl Live for Explorer {
                  <img src=\"{icon}\" alt=\"\"><input name=\"name\" fx-autofocus autocomplete=\"off\" spellcheck=\"false\" aria-label=\"Name for the new {what}\">\
                  <span class=\"modified\"></span><span class=\"kind\">{kind}</span><span class=\"size\"></span></form></li>",
                 class = if directory { "directory" } else { "file" },
-                icon = escape(&icons::href(if directory { "inode-directory" } else { icons::GENERIC })),
+                icon = escape(&icons::href(if directory {
+                    "inode-directory"
+                } else {
+                    icons::GENERIC
+                })),
                 what = if directory { "folder" } else { "file" },
                 kind = if directory { "Folder" } else { "File" },
             ),
@@ -1105,22 +1390,35 @@ impl Live for Explorer {
         // the way out of it.
         let asking = match &self.asking {
             Some(Asking::Delete(name)) => {
-                let directory = self.named(name).is_some_and(|index| self.entries[index].directory);
+                let directory = self
+                    .named(name)
+                    .is_some_and(|index| self.entries[index].directory);
                 format!(
                     "<div id=\"asking\" class=\"asking\" role=\"alertdialog\" aria-label=\"Delete\">\
-                     <p>Delete {name}{all}? There is nowhere to get it back from.</p>\
+                     <p>Delete {label}{all}? There is nowhere to get it back from.</p>\
                      <button type=\"button\" class=\"danger\" fx-click=\"deleted\" fx-value-name=\"{name}\">Delete</button>\
                      <button type=\"button\" fx-click=\"keep\" fx-key=\"Escape\" fx-autofocus>Keep</button>\
                      </div>",
                     name = escape(name),
-                    all = if directory { " and everything in it" } else { "" },
+                    label = escape(
+                        self.named(name)
+                            .map(|index| self.entries[index].name.as_str())
+                            .unwrap_or_default()
+                    ),
+                    all = if directory {
+                        " and everything in it"
+                    } else {
+                        ""
+                    },
                 )
             }
             _ => String::new(),
         };
         // While something is being asked, the keys are for answering it.
         let keys = match &self.asking {
-            Some(Asking::Rename(_) | Asking::New { .. }) => "<button type=\"button\" fx-key=\"Escape\" fx-click=\"keep\"></button>".to_string(),
+            Some(Asking::Rename(_) | Asking::New { .. }) => {
+                "<button type=\"button\" fx-key=\"Escape\" fx-click=\"keep\"></button>".to_string()
+            }
             Some(Asking::Delete(_)) => String::new(),
             None => format!(
                 "<button type=\"button\" fx-key=\"Enter\" fx-click=\"open\" fx-value-index=\"{picked}\"></button>\
@@ -1131,27 +1429,62 @@ impl Live for Explorer {
                  <button type=\"button\" fx-key=\"Ctrl+X\" fx-click=\"cut\" fx-value-index=\"{picked}\"></button>\
                  <button type=\"button\" fx-key=\"Ctrl+C\" fx-click=\"copy\" fx-value-index=\"{picked}\"></button>\
                  <button type=\"button\" fx-key=\"Ctrl+V\" fx-click=\"paste\"></button>",
-                picked = self.picked.map(|picked| picked.to_string()).unwrap_or_default(),
+                picked = self
+                    .picked
+                    .map(|picked| picked.to_string())
+                    .unwrap_or_default(),
             ),
         };
         let heading = |by: By, label: &str| {
-            let sorted = if self.by == by { if self.ascending { " aria-sort=\"ascending\"" } else { " aria-sort=\"descending\"" } } else { "" };
+            let sorted = if self.by == by {
+                if self.ascending {
+                    " aria-sort=\"ascending\""
+                } else {
+                    " aria-sort=\"descending\""
+                }
+            } else {
+                ""
+            };
             format!(
                 "<button type=\"button\" class=\"{}\" fx-click=\"sort\" fx-value-by=\"{}\"{sorted}>{label}</button>",
                 by.name(),
                 by.name()
             )
         };
-        let trouble = self.trouble.as_ref().map(|why| format!("<p class=\"trouble\">{}</p>", escape(why))).unwrap_or_default();
-        let more = if self.unshown > 0 { format!("<p class=\"more\">and {} more, not shown</p>", self.unshown) } else { String::new() };
-        let empty = if self.entries.is_empty() && self.trouble.is_none() && making.is_empty() { "<p class=\"more\">Nothing in here.</p>" } else { "" };
-        let counted = match (&self.working, self.picked.and_then(|picked| self.entries.get(picked))) {
-            (Some(working), _) => format!("<span class=\"working\">Busy {}</span>", escape(working)),
-            (None, Some(entry)) if !entry.directory => format!("{} items · 1 selected · {}", self.entries.len(), show::size(entry.size)),
+        let trouble = self
+            .trouble
+            .as_ref()
+            .map(|why| format!("<p class=\"trouble\">{}</p>", escape(why)))
+            .unwrap_or_default();
+        let more = if self.unshown > 0 {
+            format!("<p class=\"more\">and {} more, not shown</p>", self.unshown)
+        } else {
+            String::new()
+        };
+        let empty = if self.entries.is_empty() && self.trouble.is_none() && making.is_empty() {
+            "<p class=\"more\">Nothing in here.</p>"
+        } else {
+            ""
+        };
+        let counted = match (
+            &self.working,
+            self.picked.and_then(|picked| self.entries.get(picked)),
+        ) {
+            (Some(working), _) => {
+                format!("<span class=\"working\">Busy {}</span>", escape(working))
+            }
+            (None, Some(entry)) if !entry.directory => format!(
+                "{} items · 1 selected · {}",
+                self.entries.len(),
+                show::size(entry.size)
+            ),
             (None, Some(_)) => format!("{} items · 1 selected", self.entries.len()),
             (None, None) => format!("{} items", self.entries.len()),
         };
-        let space = self.space.map(|(free, all)| format!("{} free of {}", show::size(free), show::size(all))).unwrap_or_default();
+        let space = self
+            .space
+            .map(|(free, all)| format!("{} free of {}", show::size(free), show::size(all)))
+            .unwrap_or_default();
         // The first element is never seen. It is what the chords are hung on:
         // Enter opens what is picked, unless it is in the address bar, where
         // it is the form's.
@@ -1183,7 +1516,10 @@ impl Live for Explorer {
     }
 
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
-        let index = value["index"].as_str().and_then(|index| index.parse().ok()).filter(|&index: &usize| index < self.entries.len());
+        let index = value["index"]
+            .as_str()
+            .and_then(|index| index.parse().ok())
+            .filter(|&index: &usize| index < self.entries.len());
         let last = self.entries.len().checked_sub(1);
         // What is said of an entry by name is about the entry of that name,
         // wherever the listing has it by now, and about nothing if it has
@@ -1214,7 +1550,7 @@ impl Live for Explorer {
                 if let Some(index) = index {
                     self.picked = Some(index);
                     fields.set("name", &self.entries[index].name);
-                    self.asking = Some(Asking::Rename(self.entries[index].name.clone()));
+                    self.asking = Some(Asking::Rename(self.entries[index].id.clone()));
                 }
             }
             "renamed" => {
@@ -1226,21 +1562,28 @@ impl Live for Explorer {
             "delete" => {
                 if let Some(index) = index {
                     self.picked = Some(index);
-                    self.asking = Some(Asking::Delete(self.entries[index].name.clone()));
+                    self.asking = Some(Asking::Delete(self.entries[index].id.clone()));
                 }
             }
             // Only what was asked about is deleted, and only once.
             "deleted" => {
-                if let Some(Asking::Delete(name)) = self.asking.take() {
-                    if value["name"].as_str() == Some(name.as_str()) {
-                        self.delete(&name);
-                    }
+                if let Some(Asking::Delete(name)) = self.asking.take()
+                    && value["name"].as_str() == Some(name.as_str())
+                {
+                    self.delete(&name);
                 }
             }
             "keep" => self.asking = None,
             "new-folder" | "new-file" => {
                 let directory = name == "new-folder";
-                fields.set("name", if directory { "New folder" } else { "New file.txt" });
+                fields.set(
+                    "name",
+                    if directory {
+                        "New folder"
+                    } else {
+                        "New file.txt"
+                    },
+                );
                 self.asking = Some(Asking::New { directory });
             }
             "made" => {
@@ -1252,7 +1595,7 @@ impl Live for Explorer {
             "cut" | "copy" => {
                 if let Some(index) = index {
                     self.picked = Some(index);
-                    let held = self.entries[index].name.clone();
+                    let held = self.entries[index].id.clone();
                     self.hold(&held, name == "cut");
                 }
             }
@@ -1268,16 +1611,25 @@ impl Live for Explorer {
                     self.open_here(id);
                 }
             }
-            "next" => self.picked = last.map(|last| self.picked.map_or(0, |picked| (picked + 1).min(last))),
-            "previous" => self.picked = last.map(|_| self.picked.map_or(0, |picked| picked.saturating_sub(1))),
+            "next" => {
+                self.picked =
+                    last.map(|last| self.picked.map_or(0, |picked| (picked + 1).min(last)))
+            }
+            "previous" => {
+                self.picked = last.map(|_| self.picked.map_or(0, |picked| picked.saturating_sub(1)))
+            }
             "sort" => {
                 if let Some(by) = value["by"].as_str().and_then(By::named) {
                     self.ascending = if by == self.by { !self.ascending } else { true };
                     self.by = by;
-                    let was = self.picked.and_then(|picked| self.entries.get(picked)).map(|entry| entry.name.clone());
+                    let was = self
+                        .picked
+                        .and_then(|picked| self.entries.get(picked))
+                        .map(|entry| entry.id.clone());
                     self.sort();
                     // The same entry stays picked, wherever it went.
-                    self.picked = was.and_then(|name| self.entries.iter().position(|entry| entry.name == name));
+                    self.picked =
+                        was.and_then(|name| self.entries.iter().position(|entry| entry.id == name));
                 }
             }
             "up" => {
@@ -1292,7 +1644,15 @@ impl Live for Explorer {
             }
             "go" => {
                 let typed = fields.get("path").trim();
-                let to = if typed.starts_with('/') { PathBuf::from(typed) } else { self.at.join(typed) };
+                // The displayed label is not a reversible encoding of a native path.
+                if self.at.to_str().is_none() && typed == self.at.to_string_lossy() {
+                    return;
+                }
+                let to = if typed.starts_with('/') {
+                    PathBuf::from(typed)
+                } else {
+                    self.at.join(typed)
+                };
                 self.go(to, fields);
             }
             "reread" => {
@@ -1303,390 +1663,38 @@ impl Live for Explorer {
     }
 }
 
-
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A directory of its own with a few things in it, and a catalogue with
-    /// two applications that open text and one that opens directories.
-    fn explorer(name: &str) -> (Explorer, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("gexora-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let (files, apps) = (dir.join("files"), dir.join("apps"));
-        std::fs::create_dir_all(files.join("Music/Albums")).unwrap();
-        std::fs::create_dir_all(&apps).unwrap();
-        std::fs::write(files.join("notes.txt"), "notes").unwrap();
-        std::fs::write(files.join("other.txt"), "other").unwrap();
-        std::fs::write(files.join("Music/Albums/one.flac"), "").unwrap();
-        // The program has to be a file that is there, and this one is.
-        let program = std::env::current_exe().unwrap();
-        for (id, title, opens) in [("org.example.b", "Alpha", "text/*"), ("org.example.a", "Beta", "text/plain"), ("dev.peios.gexora", "Gexora", "inode/directory"), ("org.example.none", "None", "")] {
-            let opens = if opens.is_empty() { String::new() } else { format!("opens = [\"{opens}\"]\n") };
-            std::fs::write(apps.join(format!("{id}.toml")), format!("title = \"{title}\"\nprogram = \"{}\"\n{opens}", program.display())).unwrap();
-        }
-        let held = dir.join("held");
-        (Explorer::with(files, Catalogue::at(apps), Choosing::Fixed(Defaults::default()), Holding::at(Some(&held))), dir)
-    }
-
-    /// Another window of the same session's, at `at`.
-    fn another(dir: &Path, at: &str) -> Explorer {
-        Explorer::with(dir.join("files").join(at), Catalogue::at(dir.join("apps")), Choosing::Fixed(Defaults::default()), Holding::at(Some(&dir.join("held"))))
-    }
-
-    /// Choices of what opens a type: the person's, and the machine's.
-    fn chosen(person: &[(&str, &str)], machine: &[(&str, &str)]) -> Choosing {
-        let of = |pairs: &[(&str, &str)]| pairs.iter().map(|(media, id)| (media.to_string(), id.to_string())).collect();
-        Choosing::Fixed(Defaults { person: of(person), machine: of(machine) })
-    }
-
-    /// The labels of the menu `id` in what is shown.
-    fn menu_labels(html: &str, id: &str) -> Vec<String> {
-        let menu = html.split(&format!("<menu id=\"{id}\" hidden>")).nth(1).unwrap().split("</menu>").next().unwrap();
-        menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).map(String::from).collect()
-    }
-
-    fn shown(explorer: &Explorer) -> String {
-        explorer.render(&Facts { views: 1, fields: &Fields::default() })
-    }
-
-    fn names(explorer: &Explorer) -> Vec<&str> {
-        explorer.entries.iter().map(|entry| entry.name.as_str()).collect()
-    }
-
-    /// What comes with an event: the values an element was written with.
-    fn said(values: &[(&str, &str)]) -> Value {
-        values.iter().map(|(name, value)| (name.to_string(), value.to_string())).collect()
-    }
-
-    fn about(name: &str) -> Value {
-        said(&[("name", name)])
-    }
-
-    #[test]
-    fn the_candidates_are_what_opens_the_type_by_title() {
-        let (explorer, dir) = explorer("candidates");
-        let titles = |name: &str| explorer.candidates(&explorer.entries[explorer.named(name).unwrap()]).iter().map(|a| a.title.as_str()).collect::<Vec<_>>();
-        assert_eq!(titles("notes.txt"), ["Alpha", "Beta"]);
-        assert_eq!(titles("Music"), ["Gexora"]);
-        let html = shown(&explorer);
-        // One menu for the directory, one for the two files, and one for
-        // where they all are.
-        assert_eq!(html.matches("<menu id=").count(), 3);
-        assert!(html.contains("fx-menu=\"menu-0\" fx-value-index=\"0\" fx-value-name=\"Music\""));
-        assert!(html.contains("fx-menu=\"menu-1\" fx-value-index=\"1\" fx-value-name=\"notes.txt\""));
-        assert!(html.contains("fx-menu=\"menu-1\" fx-value-index=\"2\" fx-value-name=\"other.txt\""));
-        assert!(html.contains(&format!("fx-value-path=\"{}\"", dir.join("files/notes.txt").display())));
-        let menu = html.split("<menu id=\"menu-1\" hidden>").nth(1).unwrap().split("</menu>").next().unwrap();
-        let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
-        assert_eq!(labels, ["Open", "Open with Alpha", "Open with Beta", "Cut", "Copy", "Rename", "Copy path", "Permissions…", "Delete"]);
-        assert!(menu.contains("fx-copy=\"path\""));
-        // The directory's own menu is the listing's, and opens it with
-        // what opens directories.
-        assert!(html.contains("<div class=\"listing\" id=\"listing\" fx-menu=\"menu-here\""));
-        let menu = html.split("<menu id=\"menu-here\" hidden>").nth(1).unwrap().split("</menu>").next().unwrap();
-        let labels: Vec<&str> = menu.split("</button>").filter_map(|item| item.rsplit('>').next()).filter(|label| !label.is_empty()).collect();
-        assert_eq!(labels, ["New folder", "New file", "Paste", "Open with Gexora"]);
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn what_opens_a_type_by_default_is_the_persons_choice_else_the_machines() {
-        fn titles(explorer: &Explorer, name: &str) -> Vec<String> {
-            explorer.candidates(&explorer.entries[explorer.named(name).unwrap()]).iter().map(|a| a.title.clone()).collect()
-        }
-        let (mut explorer, dir) = explorer("defaults");
-        // The machine's choice goes first, and opening uses it.
-        explorer.choosing = chosen(&[], &[("text/plain", "org.example.a")]);
-        explorer.reread();
-        assert_eq!(titles(&explorer, "notes.txt"), ["Beta", "Alpha"]);
-        assert_eq!(explorer.opening("text/plain").first().map(|a| a.id.as_str()), Some("org.example.a"));
-        assert_eq!(menu_labels(&shown(&explorer), "menu-1"), ["Open", "Open with Beta", "Open with Alpha", "Cut", "Copy", "Rename", "Copy path", "Permissions…", "Delete"]);
-        // The person's goes before it, even for every type of text.
-        explorer.choosing = chosen(&[("text/*", "org.example.b")], &[("text/plain", "org.example.a")]);
-        explorer.reread();
-        assert_eq!(titles(&explorer, "notes.txt"), ["Alpha", "Beta"]);
-        // A choice of something that does not open the type is passed over,
-        // and so is one of something not installed, and the rule is the
-        // titles' again.
-        explorer.choosing = chosen(&[("text/plain", "dev.peios.gexora")], &[("text/*", "org.example.gone")]);
-        explorer.reread();
-        assert_eq!(titles(&explorer, "notes.txt"), ["Alpha", "Beta"]);
-        assert_eq!(titles(&explorer, "Music"), ["Gexora"]);
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn the_choices_are_read_again_when_a_file_is_opened() {
-        let (mut explorer, dir) = explorer("chosen-now");
-        let mut fields = Fields::default();
-        assert!(explorer.defaults.person.is_empty());
-        // Chosen elsewhere since the directory was read. Opening a file of
-        // a type nothing opens starts nothing, and still reads them.
-        explorer.choosing = chosen(&[("text/plain", "org.example.a")], &[]);
-        explorer.event("visit", &said(&[("path", &dir.join("files/Music/Albums").to_string_lossy())]), &mut fields);
-        explorer.choosing = chosen(&[("text/plain", "org.example.b")], &[]);
-        explorer.event("open", &about("one.flac"), &mut fields);
-        assert_eq!(explorer.defaults.person.get("text/plain").map(String::as_str), Some("org.example.b"));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn a_files_rights_each_have_all_of_the_ones_after_them_that_they_can() {
-        let rights = file_rights(false);
-        let mask = |name: &str| rights.iter().find(|right| right.name == name).unwrap().mask;
-        let has = |more: &str, less: &str| mask(more) & mask(less) == mask(less);
-        assert!(rights.iter().all(|right| right.mask != 0));
-        assert_eq!(rights.iter().filter(|right| right.general).count(), 5);
-        // Each right on its own is one bit, and Full control has all of them.
-        let special: Vec<_> = rights.iter().filter(|right| !right.general).collect();
-        assert!(special.iter().all(|right| right.mask.count_ones() == 1 && has("Full control", &right.name)));
-        assert!(file_rights(true).iter().any(|right| right.name == "Delete subfolders and files"));
-        assert!(has("Full control", "Modify") && has("Modify", "Read & execute") && has("Read & execute", "Read") && has("Modify", "Write"));
-        assert!(!has("Read", "Write") && !has("Modify", "Full control"));
-        // As the kernel maps them, not as this guesses.
-        assert_eq!(mask("Full control"), AccessMask::GENERIC_ALL.resolve_generic(&File::generic_mapping()).bits());
-    }
-
-    #[test]
-    fn a_directory_is_opened_only_with_what_opens_directories() {
-        let (mut explorer, dir) = explorer("here");
-        let mut fields = Fields::default();
-        explorer.event("open-here", &said(&[("app", "org.example.a")]), &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("This directory cannot be opened with that."));
-        explorer.event("open-here", &said(&[("app", "org.example.nowhere")]), &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("This directory cannot be opened with that."));
-        // What says nothing of its type and does not read as text is
-        // opened by nothing.
-        std::fs::write(dir.join("files/thing"), b"\x7fELF\0\0").unwrap();
-        explorer.event("reread", &Value::Null, &mut fields);
-        explorer.event("open", &about("thing"), &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("Nothing installed says it opens files like this."));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn a_folder_or_a_file_is_made_by_the_name_typed_and_over_nothing() {
-        let (mut explorer, dir) = explorer("making");
-        let mut fields = Fields::default();
-        explorer.event("new-folder", &Value::Null, &mut fields);
-        assert_eq!(fields.get("name"), "New folder");
-        let html = shown(&explorer);
-        assert!(html.contains("<ul class=\"entries\"><li><form id=\"making\" class=\"directory renaming\" fx-submit=\"made\">"));
-        assert!(!html.contains("fx-key=\"Enter\""));
-        fields.set("name", "Pictures");
-        explorer.event("made", &Value::Null, &mut fields);
-        assert!(dir.join("files/Pictures").is_dir());
-        assert_eq!(names(&explorer), ["Music", "Pictures", "notes.txt", "other.txt"]);
-        assert_eq!(explorer.picked, explorer.named("Pictures"));
-
-        explorer.event("new-file", &Value::Null, &mut fields);
-        assert_eq!(fields.get("name"), "New file.txt");
-        fields.set("name", "notes.txt");
-        explorer.event("made", &Value::Null, &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("There is already something called notes.txt here."));
-        assert_eq!(std::fs::read_to_string(dir.join("files/notes.txt")).unwrap(), "notes");
-        explorer.event("new-file", &Value::Null, &mut fields);
-        fields.set("name", "a/b");
-        explorer.event("made", &Value::Null, &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("That is not a name a file can have."));
-        explorer.event("new-file", &Value::Null, &mut fields);
-        fields.set("name", "list.txt");
-        explorer.event("made", &Value::Null, &mut fields);
-        assert_eq!(std::fs::read_to_string(dir.join("files/list.txt")).unwrap(), "");
-        // Asked and then not: nothing is made.
-        explorer.event("new-folder", &Value::Null, &mut fields);
-        explorer.event("keep", &Value::Null, &mut fields);
-        fields.set("name", "Never");
-        explorer.event("made", &Value::Null, &mut fields);
-        assert!(!dir.join("files/Never").exists());
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn what_is_copied_in_one_window_is_pasted_in_another_and_over_nothing() {
-        let (mut explorer, dir) = explorer("copying");
-        let mut fields = Fields::default();
-        explorer.event("paste", &Value::Null, &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("Nothing has been cut or copied."));
-        explorer.event("copy", &about("notes.txt"), &mut fields);
-        assert!(!shown(&explorer).contains(" cut\""));
-        // Where it came from, it is a copy by name.
-        explorer.event("paste", &Value::Null, &mut fields);
-        assert_eq!(names(&explorer), ["Music", "notes (copy).txt", "notes.txt", "other.txt"]);
-        assert_eq!(explorer.picked, explorer.named("notes (copy).txt"));
-        // Still held, for another window to paste.
-        let mut other = another(&dir, "Music");
-        other.event("paste", &Value::Null, &mut fields);
-        other.event("paste", &Value::Null, &mut fields);
-        assert_eq!(names(&other), ["Albums", "notes (copy).txt", "notes.txt"]);
-        assert_eq!(std::fs::read_to_string(dir.join("files/Music/notes.txt")).unwrap(), "notes");
-
-        // A directory goes with everything in it, and not into itself.
-        explorer.event("copy", &about("Music"), &mut fields);
-        other.event("paste", &Value::Null, &mut fields);
-        assert_eq!(other.trouble.as_deref(), Some("Music cannot be put inside itself."));
-        let mut deeper = another(&dir, "Music/Albums");
-        deeper.event("paste", &Value::Null, &mut fields);
-        assert_eq!(deeper.trouble.as_deref(), Some("Music cannot be put inside itself."));
-        explorer.event("paste", &Value::Null, &mut fields);
-        assert_eq!(explorer.trouble, None);
-        assert!(dir.join("files/Music (copy)/Albums/one.flac").exists());
-
-        // What has gone since it was copied is said to have.
-        explorer.event("copy", &about("other.txt"), &mut fields);
-        std::fs::remove_file(dir.join("files/other.txt")).unwrap();
-        other.event("paste", &Value::Null, &mut fields);
-        assert_eq!(other.trouble.as_deref(), Some("other.txt is no longer where it was."));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn what_is_cut_is_moved_once_and_onto_nothing() {
-        let (mut explorer, dir) = explorer("cutting");
-        let mut fields = Fields::default();
-        std::fs::write(dir.join("files/Music/notes.txt"), "theirs").unwrap();
-        explorer.event("cut", &about("notes.txt"), &mut fields);
-        assert!(shown(&explorer).contains("class=\"file cut\""));
-        // Onto a name that is taken, it stays where it is and stays held.
-        let mut other = another(&dir, "Music");
-        other.event("paste", &Value::Null, &mut fields);
-        assert_eq!(other.trouble.as_deref(), Some("There is already something called notes.txt here."));
-        assert_eq!(std::fs::read_to_string(dir.join("files/Music/notes.txt")).unwrap(), "theirs");
-        assert_eq!(std::fs::read_to_string(dir.join("files/notes.txt")).unwrap(), "notes");
-        let mut deeper = another(&dir, "Music/Albums");
-        deeper.event("paste", &Value::Null, &mut fields);
-        assert_eq!(deeper.trouble, None);
-        assert_eq!(names(&deeper), ["notes.txt", "one.flac"]);
-        assert!(!dir.join("files/notes.txt").exists());
-        // Pasted once: there is nothing held any more.
-        deeper.event("paste", &Value::Null, &mut fields);
-        assert_eq!(deeper.trouble.as_deref(), Some("Nothing has been cut or copied."));
-        // Cut and pasted where it is, it stays, and is let go.
-        explorer.event("reread", &Value::Null, &mut fields);
-        explorer.event("cut", &about("other.txt"), &mut fields);
-        explorer.event("paste", &Value::Null, &mut fields);
-        assert_eq!((explorer.trouble.as_deref(), names(&explorer)), (None, vec!["Music", "other.txt"]));
-        assert!(!shown(&explorer).contains(" cut\""));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn only_a_candidate_opens_a_file_and_nothing_opens_what_nothing_says_it_opens() {
-        let (mut explorer, dir) = explorer("opening");
-        let mut fields = Fields::default();
-        // Gexora does not open text, whatever a page says.
-        explorer.event("open-with", &said(&[("name", "notes.txt"), ("app", "dev.peios.gexora")]), &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("notes.txt cannot be opened with that."));
-        explorer.event("visit", &said(&[("path", &dir.join("files/Music/Albums").to_string_lossy())]), &mut fields);
-        explorer.event("open", &about("one.flac"), &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("Nothing installed says it opens audio/flac files."));
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn a_new_name_is_typed_where_the_name_was_and_nothing_is_written_over() {
-        let (mut explorer, dir) = explorer("renaming");
-        let mut fields = Fields::default();
-        explorer.event("rename", &about("notes.txt"), &mut fields);
-        assert_eq!(fields.get("name"), "notes.txt");
-        let html = shown(&explorer);
-        assert!(html.contains("<form id=\"renaming-1\" class=\"file renaming\" fx-submit=\"renamed\""));
-        assert!(html.contains("<input name=\"name\" fx-autofocus"));
-        // Enter is the form's while a name is being typed, and Escape is the way out.
-        assert!(!html.contains("fx-key=\"Enter\""));
-        assert!(html.contains("fx-key=\"Escape\" fx-click=\"keep\""));
-        // A name something has already is refused, and both are as they were.
-        fields.set("name", "other.txt");
-        explorer.event("renamed", &Value::Null, &mut fields);
-        assert_eq!(explorer.trouble.as_deref(), Some("There is already something called other.txt here."));
-        assert_eq!(std::fs::read_to_string(dir.join("files/other.txt")).unwrap(), "other");
-        assert_eq!(names(&explorer), ["Music", "notes.txt", "other.txt"]);
-        // So is what is no name.
-        for not_a_name in ["", "  ", "..", "a/b"] {
-            explorer.event("rename", &about("notes.txt"), &mut fields);
-            fields.set("name", not_a_name);
-            explorer.event("renamed", &Value::Null, &mut fields);
-            assert_eq!(explorer.trouble.as_deref(), Some("That is not a name a file can have."), "{not_a_name:?}");
-        }
-        explorer.event("rename", &about("notes.txt"), &mut fields);
-        fields.set("name", " words.txt ");
-        explorer.event("renamed", &Value::Null, &mut fields);
-        assert_eq!(explorer.trouble, None);
-        assert_eq!(names(&explorer), ["Music", "other.txt", "words.txt"]);
-        assert_eq!(explorer.picked, explorer.named("words.txt"));
-        assert_eq!(std::fs::read_to_string(dir.join("files/words.txt")).unwrap(), "notes");
-        // Asked to rename and then not: nothing happens.
-        explorer.event("rename", &about("words.txt"), &mut fields);
-        explorer.event("keep", &Value::Null, &mut fields);
-        fields.set("name", "never.txt");
-        explorer.event("renamed", &Value::Null, &mut fields);
-        assert_eq!(names(&explorer), ["Music", "other.txt", "words.txt"]);
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn deleting_asks_first_and_deletes_only_what_was_asked_about() {
-        let (mut explorer, dir) = explorer("deleting");
-        let mut fields = Fields::default();
-        // Nothing is deleted that was not asked about.
-        explorer.event("deleted", &about("notes.txt"), &mut fields);
-        assert_eq!(names(&explorer), ["Music", "notes.txt", "other.txt"]);
-        explorer.event("delete", &about("notes.txt"), &mut fields);
-        let html = shown(&explorer);
-        assert!(html.contains("<p>Delete notes.txt? There is nowhere to get it back from.</p>"));
-        // Enter presses whichever button the keyboard is on, which starts on the way out.
-        assert!(!html.contains("fx-key=\"Enter\""));
-        assert!(html.contains("fx-click=\"keep\" fx-key=\"Escape\" fx-autofocus"));
-        // Asked about one and told of another: neither goes.
-        explorer.event("deleted", &about("other.txt"), &mut fields);
-        assert_eq!(names(&explorer), ["Music", "notes.txt", "other.txt"]);
-        assert!(explorer.asking.is_none());
-        explorer.event("delete", &about("notes.txt"), &mut fields);
-        explorer.event("keep", &Value::Null, &mut fields);
-        explorer.event("deleted", &about("notes.txt"), &mut fields);
-        assert_eq!(names(&explorer), ["Music", "notes.txt", "other.txt"]);
-        explorer.event("delete", &about("notes.txt"), &mut fields);
-        explorer.event("deleted", &about("notes.txt"), &mut fields);
-        assert_eq!(names(&explorer), ["Music", "other.txt"]);
-        // A directory goes with everything in it, and says so first.
-        explorer.event("delete", &about("Music"), &mut fields);
-        assert!(shown(&explorer).contains("<p>Delete Music and everything in it? There is nowhere to get it back from.</p>"));
-        explorer.event("deleted", &about("Music"), &mut fields);
-        assert_eq!(names(&explorer), ["other.txt"]);
-        assert!(!dir.join("files/Music").exists());
-        // A link is deleted as the link it is, and what it links to stays.
-        std::os::unix::fs::symlink(dir.join("apps"), dir.join("files/link")).unwrap();
-        explorer.event("reread", &Value::Null, &mut fields);
-        explorer.event("delete", &about("link"), &mut fields);
-        explorer.event("deleted", &about("link"), &mut fields);
-        assert_eq!(names(&explorer), ["other.txt"]);
-        assert!(dir.join("apps/dev.peios.gexora.toml").exists());
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-}
+#[path = "main_tests.rs"]
+mod tests;
 
 fn main() {
     let mut app = match App::connect() {
         Ok(app) => app,
         Err(e) => {
-            eprintln!("gexora: no desktop to open on: {e}");
+            eprintln!("gxwi-file-explorer: no desktop to open on: {e}");
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gexora.css", include_str!("gexora.css"));
+    app.stylesheet(
+        "/gxwi-file-explorer.css",
+        include_str!("gxwi-file-explorer.css"),
+    );
     // Where asked, or at home, or at the root if there is no home to be at.
-    let at = std::env::args().nth(1).map(PathBuf::from).or_else(|| std::env::var_os("HOME").map(PathBuf::from));
-    let at = at.filter(|at| at.is_dir()).unwrap_or_else(|| PathBuf::from("/"));
-    let window = app.live("Gexora", Explorer::new(at));
+    let at = std::env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from));
+    let at = at
+        .filter(|at| at.is_dir())
+        .unwrap_or_else(|| PathBuf::from("/"));
+    let window = app.live("File Explorer", Explorer::new(at));
     let aside = std::sync::Arc::downgrade(&window);
     window.update(|explorer, fields| {
         fields.set("path", &explorer.at.to_string_lossy());
         explorer.window = aside;
     });
     if let Err(e) = app.run() {
-        eprintln!("gexora: {e}");
+        eprintln!("gxwi-file-explorer: {e}");
         std::process::exit(1);
     }
 }

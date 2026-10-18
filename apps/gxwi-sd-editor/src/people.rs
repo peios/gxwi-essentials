@@ -5,9 +5,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use libauthd::claim::Values;
-use libauthd::ident::{Fields, Key, Kind, Value};
-use libauthd_client::ident::Ident;
+use auth_core::claim::Values;
+use auth_core::ident::{Fields, Key, Kind, Value};
+use auth_core::client::ident::Ident;
 use peios::security::{Sid, SidRef};
 
 use crate::eff::Person;
@@ -16,22 +16,36 @@ use crate::eff::Person;
 pub fn person(sid: &Sid, name: String) -> Result<Person, String> {
     let ident = Ident::new().with_timeout(Duration::from_secs(2));
     let record = ident
-        .lookup(Key::Sid(sid.as_bytes().to_vec()), Kind::Any, Fields::GROUPS.union(Fields::CLAIMS))
+        .lookup(
+            Key::Sid(sid.as_bytes().to_vec()),
+            Kind::Any,
+            Fields::GROUPS.union(Fields::CLAIMS),
+        )
         .map_err(|e| format!("What {name} belongs to could not be found out: {e}."))?
         .ok_or_else(|| format!("authd doesn't know {name}."))?;
     let mut sids: Vec<Sid> = vec![*sid];
     let mut claims = HashMap::new();
     for value in &record.values {
         match value {
-            Value::Groups(groups) => sids.extend(groups.iter().filter_map(|g| SidRef::from_bytes(&g.sid).map(SidRef::to_sid))),
+            Value::Groups(groups) => sids.extend(
+                groups
+                    .iter()
+                    .filter_map(|g| SidRef::from_bytes(&g.sid).map(SidRef::to_sid)),
+            ),
             Value::Claims(list) => {
                 for c in list {
                     let values: Vec<String> = match &c.values {
                         Values::Int64(v) => v.iter().map(i64::to_string).collect(),
                         Values::Uint64(v) => v.iter().map(u64::to_string).collect(),
-                        Values::Boolean(v) => v.iter().map(|b| if *b { "1".into() } else { "0".into() }).collect(),
+                        Values::Boolean(v) => v
+                            .iter()
+                            .map(|b| if *b { "1".into() } else { "0".into() })
+                            .collect(),
                         Values::String(v) => v.clone(),
-                        Values::Sid(v) => v.iter().filter_map(|s| SidRef::from_bytes(s).map(|s| s.to_string())).collect(),
+                        Values::Sid(v) => v
+                            .iter()
+                            .filter_map(|s| SidRef::from_bytes(s).map(|s| s.to_string()))
+                            .collect(),
                         Values::Octet(_) => continue,
                     };
                     claims.insert(format!("user.{}", c.name.to_lowercase()), values);
@@ -47,5 +61,12 @@ pub fn person(sid: &Sid, name: String) -> Result<Person, String> {
             sids.push(s);
         }
     }
-    Ok(Person { sid: *sid, name, sids, device: vec![], claims, integrity: 8192 })
+    Ok(Person {
+        sid: *sid,
+        name,
+        sids,
+        device: vec![],
+        claims,
+        integrity: 8192,
+    })
 }

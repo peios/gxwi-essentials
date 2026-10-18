@@ -46,7 +46,11 @@ impl Caller {
         if let Ok(token) = Token::open_self(false, TokenAccess::QUERY) {
             caller.user = token.user().ok();
             if let Ok(groups) = token.groups() {
-                caller.owner_groups = groups.iter().filter(|(_, attrs)| attrs & GROUP_OWNER != 0).map(|(sid, _)| *sid).collect();
+                caller.owner_groups = groups
+                    .iter()
+                    .filter(|(_, attrs)| attrs & GROUP_OWNER != 0)
+                    .map(|(sid, _)| *sid)
+                    .collect();
                 caller.sids = groups.into_iter().map(|(sid, _)| sid).collect();
             }
             caller.sids.extend(caller.user);

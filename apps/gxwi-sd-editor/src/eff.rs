@@ -93,19 +93,37 @@ fn claim_of(facts: &Facts, who: &Person, src: Src, name: &str, deny: bool) -> Op
             if !facts.sacl {
                 return None;
             }
-            let c = facts.simple.claims.iter().find(|c| c.claim.name.eq_ignore_ascii_case(name))?;
+            let c = facts
+                .simple
+                .claims
+                .iter()
+                .find(|c| c.claim.name.eq_ignore_ascii_case(name))?;
             let f = c.claim.flags;
-            if f & crate::claim::DISABLED != 0 || (f & crate::claim::DENY_ONLY != 0 && !deny) || c.claim.values.is_empty() {
+            if f & crate::claim::DISABLED != 0
+                || (f & crate::claim::DENY_ONLY != 0 && !deny)
+                || c.claim.values.is_empty()
+            {
                 return None;
             }
             Some(c.claim.values.clone())
         }
         Src::Local | Src::Device => None,
-        Src::User => who.claims.get(&format!("user.{}", name.to_lowercase())).cloned(),
+        Src::User => who
+            .claims
+            .get(&format!("user.{}", name.to_lowercase()))
+            .cloned(),
     }
 }
 
-fn eval_claim(facts: &Facts, who: &Person, src: Src, name: &str, op: Op, val: &Val, deny: bool) -> Three {
+fn eval_claim(
+    facts: &Facts,
+    who: &Person,
+    src: Src,
+    name: &str,
+    op: Op,
+    val: &Val,
+    deny: bool,
+) -> Three {
     let have = claim_of(facts, who, src, name, deny);
     if op == Op::NotExists {
         return if have.is_none() { Three::T } else { Three::F };
@@ -121,13 +139,24 @@ fn eval_claim(facts: &Facts, who: &Person, src: Src, name: &str, op: Op, val: &V
         },
         Val::Value(_) => values(op, val),
     };
-    let Some(first) = want.first() else { return Three::U };
+    let Some(first) = want.first() else {
+        return Three::U;
+    };
     let num = |v: &str| v.parse::<i64>().ok();
     let eq = |a: &str, b: &str| match (num(a), num(b)) {
         (Some(x), Some(y)) => x == y,
         _ => a.eq_ignore_ascii_case(b),
     };
-    let cmp = |f: fn(i64, i64) -> bool| if have.iter().any(|v| matches!((num(v), num(first)), (Some(a), Some(b)) if f(a, b))) { Three::T } else { Three::F };
+    let cmp = |f: fn(i64, i64) -> bool| {
+        if have
+            .iter()
+            .any(|v| matches!((num(v), num(first)), (Some(a), Some(b)) if f(a, b)))
+        {
+            Three::T
+        } else {
+            Three::F
+        }
+    };
     let yes = |b: bool| if b { Three::T } else { Three::F };
     match op {
         Op::Eq => yes(have.iter().any(|v| eq(v, first))),
@@ -146,8 +175,20 @@ pub fn eval(facts: &Facts, who: &Person, node: &Node, deny: bool) -> Three {
     match node {
         Node::Group(mode, items) => {
             let vals: Vec<Three> = items.iter().map(|n| eval(facts, who, n, deny)).collect();
-            let and = if vals.contains(&Three::F) { Three::F } else if vals.contains(&Three::U) { Three::U } else { Three::T };
-            let or = if vals.contains(&Three::T) { Three::T } else if vals.contains(&Three::U) { Three::U } else { Three::F };
+            let and = if vals.contains(&Three::F) {
+                Three::F
+            } else if vals.contains(&Three::U) {
+                Three::U
+            } else {
+                Three::T
+            };
+            let or = if vals.contains(&Three::T) {
+                Three::T
+            } else if vals.contains(&Three::U) {
+                Three::U
+            } else {
+                Three::F
+            };
             match mode {
                 Mode::All => and,
                 Mode::Any => or,
@@ -162,7 +203,11 @@ pub fn eval(facts: &Facts, who: &Person, node: &Node, deny: bool) -> Three {
                 MemberOp::Of | MemberOp::NotOf => sids.iter().all(|s| set.contains(s)),
             };
             let r = if hit { Three::T } else { Three::F };
-            if matches!(op, MemberOp::NotOf | MemberOp::NotOfAny) { r.not() } else { r }
+            if matches!(op, MemberOp::NotOf | MemberOp::NotOfAny) {
+                r.not()
+            } else {
+                r
+            }
         }
         Node::Claim { src, name, op, val } => eval_claim(facts, who, *src, name, *op, val, deny),
     }
@@ -175,8 +220,17 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
     let name = facts.name;
     let all = obj.all_rights() & !GENERIC & !ACCESS_SYSTEM_SECURITY & !MAXIMUM_ALLOWED;
     let listed = |m: u32| -> String {
-        let names: Vec<String> = obj.specific.iter().filter(|r| m & r.mask != 0).map(|r| r.name.to_lowercase()).collect();
-        if names.is_empty() { "nothing".into() } else { names.join(", ") }
+        let names: Vec<String> = obj
+            .specific
+            .iter()
+            .filter(|r| m & r.mask != 0)
+            .map(|r| r.name.to_lowercase())
+            .collect();
+        if names.is_empty() {
+            "nothing".into()
+        } else {
+            names.join(", ")
+        }
     };
     let mut by: HashMap<u32, (bool, String)> = HashMap::new();
     let (mut decided, mut granted) = (0u32, 0u32);
@@ -197,44 +251,119 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
     let exec = obj.generic.execute & !obj.generic.read & all;
     let write = all & !read & !exec;
     if who.integrity < label {
-        let blocked = (if policy & 1 != 0 { write } else { 0 }) | (if policy & 2 != 0 { read } else { 0 }) | (if policy & 4 != 0 { exec } else { 0 });
+        let blocked = (if policy & 1 != 0 { write } else { 0 })
+            | (if policy & 2 != 0 { read } else { 0 })
+            | (if policy & 4 != 0 { exec } else { 0 });
         decided |= blocked;
-        set(&mut by, blocked, false, &format!("Integrity: a {} label, and they run at {}", level(label), level(who.integrity)));
-        steps.push(Step { stage: "Integrity", lines: vec![(Mark::No, format!("Labelled {}; {} runs at {}, so {} is held back.", level(label), who.name, level(who.integrity), listed(blocked)))] });
+        set(
+            &mut by,
+            blocked,
+            false,
+            &format!(
+                "Integrity: a {} label, and they run at {}",
+                level(label),
+                level(who.integrity)
+            ),
+        );
+        steps.push(Step {
+            stage: "Integrity",
+            lines: vec![(
+                Mark::No,
+                format!(
+                    "Labelled {}; {} runs at {}, so {} is held back.",
+                    level(label),
+                    who.name,
+                    level(who.integrity),
+                    listed(blocked)
+                ),
+            )],
+        });
     } else {
-        let what = if s.label.is_some() { level(label) } else { "No label, so Medium".into() };
-        steps.push(Step { stage: "Integrity", lines: vec![(Mark::Skip, format!("{what}; {} runs at {}. Nothing held back.", who.name, level(who.integrity)))] });
+        let what = if s.label.is_some() {
+            level(label)
+        } else {
+            "No label, so Medium".into()
+        };
+        steps.push(Step {
+            stage: "Integrity",
+            lines: vec![(
+                Mark::Skip,
+                format!(
+                    "{what}; {} runs at {}. Nothing held back.",
+                    who.name,
+                    level(who.integrity)
+                ),
+            )],
+        });
     }
 
     // Process trust: an ordinary program is less trusted than any.
     if !facts.sacl {
-        steps.push(Step { stage: "Process Trust", lines: vec![(Mark::Skip, "Not known: it's in the SACL, which the program that opened this can't read.".into())] });
+        steps.push(Step {
+            stage: "Process Trust",
+            lines: vec![(
+                Mark::Skip,
+                "Not known: it's in the SACL, which the program that opened this can't read."
+                    .into(),
+            )],
+        });
     } else if let Some(t) = &s.trust {
         let blocked = all & !core(t.mask) & !decided;
         decided |= blocked;
         set(&mut by, blocked, false, "Process trust");
-        steps.push(Step { stage: "Process Trust", lines: vec![(Mark::No, format!("Protected at trust {}. An ordinary program may only do: {}.", t.trust, listed(core(t.mask))))] });
+        steps.push(Step {
+            stage: "Process Trust",
+            lines: vec![(
+                Mark::No,
+                format!(
+                    "Protected at trust {}. An ordinary program may only do: {}.",
+                    t.trust,
+                    listed(core(t.mask))
+                ),
+            )],
+        });
     } else {
-        steps.push(Step { stage: "Process Trust", lines: vec![(Mark::Skip, "Not protected.".into())] });
+        steps.push(Step {
+            stage: "Process Trust",
+            lines: vec![(Mark::Skip, "Not protected.".into())],
+        });
     }
 
     // The owner.
     let owner_rights: Sid = "S-1-3-4".parse().expect("Owner Rights");
     let is_owner = facts.owner.is_some_and(|o| who.sids.contains(&o));
-    let ruled = facts.dacl.unwrap_or(&[]).iter().any(|a| a.sid == Some(owner_rights) && a.applies() && matches!(a.way, Way::Allow | Way::Deny));
+    let ruled = facts.dacl.unwrap_or(&[]).iter().any(|a| {
+        a.sid == Some(owner_rights) && a.applies() && matches!(a.way, Way::Allow | Way::Deny)
+    });
     if is_owner && !ruled {
         let b = (READ_CONTROL | WRITE_DAC) & !decided & all;
         decided |= b;
         granted |= b;
         set(&mut by, b, true, "Owner");
-        steps.push(Step { stage: "Owner", lines: vec![(Mark::Yes, format!("{} owns it, so may always see and change its permissions.", who.name))] });
+        steps.push(Step {
+            stage: "Owner",
+            lines: vec![(
+                Mark::Yes,
+                format!(
+                    "{} owns it, so may always see and change its permissions.",
+                    who.name
+                ),
+            )],
+        });
     } else {
         let line = if is_owner {
             "Owns it, but an Owner Rights rule decides instead.".to_string()
         } else {
-            format!("{} owns it, not {}.", facts.owner.map_or("Nobody".into(), |o| name(&o)), who.name)
+            format!(
+                "{} owns it, not {}.",
+                facts.owner.map_or("Nobody".into(), |o| name(&o)),
+                who.name
+            )
         };
-        steps.push(Step { stage: "Owner", lines: vec![(Mark::Skip, line)] });
+        steps.push(Step {
+            stage: "Owner",
+            lines: vec![(Mark::Skip, line)],
+        });
     }
 
     // The access list, in its real order.
@@ -243,11 +372,22 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
             let b = all & !decided;
             granted |= b;
             set(&mut by, b, true, "No access list");
-            steps.push(Step { stage: "Access List", lines: vec![(Mark::Yes, "There's no access list, so everything not already held back is allowed.".into())] });
+            steps.push(Step {
+                stage: "Access List",
+                lines: vec![(
+                    Mark::Yes,
+                    "There's no access list, so everything not already held back is allowed."
+                        .into(),
+                )],
+            });
         }
         Some(aces) => {
             let mut lines = Vec::new();
-            let in_set = |object: &Guid| part.is_some_and(|p| *object == p || obj.part(&p).and_then(|d| d.set) == Some(*object));
+            let in_set = |object: &Guid| {
+                part.is_some_and(|p| {
+                    *object == p || obj.part(&p).and_then(|d| d.set) == Some(*object)
+                })
+            };
             for ace in aces {
                 if ace.way == Way::Unknown {
                     lines.push((Mark::Skip, format!("An entry of type 0x{:02x}: skipped, as KACS skips every type it doesn't act on.", ace.byte)));
@@ -261,8 +401,19 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
                 if !matches {
                     continue;
                 }
-                let part_name = ace.object.map(|o| obj.part(&o).map_or_else(|| "a part".to_string(), |d| d.name.clone()));
-                let mut label = format!("{} {}", if ace.way == Way::Allow { "Allow" } else { "Deny" }, name(&sid));
+                let part_name = ace.object.map(|o| {
+                    obj.part(&o)
+                        .map_or_else(|| "a part".to_string(), |d| d.name.clone())
+                });
+                let mut label = format!(
+                    "{} {}",
+                    if ace.way == Way::Allow {
+                        "Allow"
+                    } else {
+                        "Deny"
+                    },
+                    name(&sid)
+                );
                 if let Some(p) = &part_name {
                     label.push_str(&format!(" on {p}"));
                 }
@@ -272,7 +423,13 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
                 if let Some(o) = &ace.object
                     && !in_set(o)
                 {
-                    lines.push((Mark::Skip, format!("{label}: skipped, it's only for {}.", part_name.unwrap_or_default())));
+                    lines.push((
+                        Mark::Skip,
+                        format!(
+                            "{label}: skipped, it's only for {}.",
+                            part_name.unwrap_or_default()
+                        ),
+                    ));
                     continue;
                 }
                 if let Some(cond) = &ace.cond {
@@ -280,15 +437,28 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
                         Cond::Tree(node) => eval(facts, who, node, ace.way == Way::Deny),
                         Cond::Opaque(_) => Three::U,
                     };
-                    let skip = if ace.way == Way::Allow { v != Three::T } else { v == Three::F };
+                    let skip = if ace.way == Way::Allow {
+                        v != Three::T
+                    } else {
+                        v == Three::F
+                    };
                     if skip {
-                        lines.push((Mark::Skip, format!("{label}: skipped, the condition is {}.", if v == Three::F { "false" } else { "not known" })));
+                        lines.push((
+                            Mark::Skip,
+                            format!(
+                                "{label}: skipped, the condition is {}.",
+                                if v == Three::F { "false" } else { "not known" }
+                            ),
+                        ));
                         continue;
                     }
                 }
                 let b = core(obj.mapped(ace.mask)) & all & !decided;
                 if b == 0 {
-                    lines.push((Mark::Skip, format!("{label}: everything it covers was already decided.")));
+                    lines.push((
+                        Mark::Skip,
+                        format!("{label}: everything it covers was already decided."),
+                    ));
                     continue;
                 }
                 decided |= b;
@@ -297,12 +467,25 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
                     granted |= b;
                 }
                 set(&mut by, b, allow, &label);
-                lines.push((if allow { Mark::Yes } else { Mark::No }, format!("{label}: {} {}.", if allow { "gives" } else { "refuses" }, listed(b))));
+                lines.push((
+                    if allow { Mark::Yes } else { Mark::No },
+                    format!(
+                        "{label}: {} {}.",
+                        if allow { "gives" } else { "refuses" },
+                        listed(b)
+                    ),
+                ));
             }
             if lines.is_empty() {
-                lines.push((Mark::Skip, format!("No rule mentions {} or their groups.", who.name)));
+                lines.push((
+                    Mark::Skip,
+                    format!("No rule mentions {} or their groups.", who.name),
+                ));
             }
-            steps.push(Step { stage: "Access List", lines });
+            steps.push(Step {
+                stage: "Access List",
+                lines,
+            });
         }
     }
 
@@ -311,9 +494,19 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
     // Administrators, Local System and the owner keep their access, and
     // everyone else loses it.
     if !facts.sacl {
-        steps.push(Step { stage: "Central Policy", lines: vec![(Mark::Skip, "Not known: it's in the SACL, which the program that opened this can't read.".into())] });
+        steps.push(Step {
+            stage: "Central Policy",
+            lines: vec![(
+                Mark::Skip,
+                "Not known: it's in the SACL, which the program that opened this can't read."
+                    .into(),
+            )],
+        });
     } else if s.policies.is_empty() {
-        steps.push(Step { stage: "Central Policy", lines: vec![(Mark::Skip, "None named.".into())] });
+        steps.push(Step {
+            stage: "Central Policy",
+            lines: vec![(Mark::Skip, "None named.".into())],
+        });
     } else {
         let admins: Sid = "S-1-5-32-544".parse().expect("Administrators");
         let system: Sid = "S-1-5-18".parse().expect("Local System");
@@ -325,13 +518,23 @@ pub fn effective(facts: &Facts, who: &Person, part: Option<Guid>) -> Result {
             granted &= allow;
             set(&mut by, cut, false, "Central policy (recovery)");
             let line = if cut != 0 {
-                format!("{}: not defined on this machine, so KACS applies the recovery policy, which takes away {}.", p.sid, listed(cut))
+                format!(
+                    "{}: not defined on this machine, so KACS applies the recovery policy, which takes away {}.",
+                    p.sid,
+                    listed(cut)
+                )
             } else {
-                format!("{}: not defined on this machine, so KACS applies the recovery policy, which lets {} keep what the list gave.", p.sid, who.name)
+                format!(
+                    "{}: not defined on this machine, so KACS applies the recovery policy, which lets {} keep what the list gave.",
+                    p.sid, who.name
+                )
             };
             lines.push((if cut != 0 { Mark::No } else { Mark::Skip }, line));
         }
-        steps.push(Step { stage: "Central Policy", lines });
+        steps.push(Step {
+            stage: "Central Policy",
+            lines,
+        });
     }
     Result { granted, by, steps }
 }
@@ -351,7 +554,10 @@ mod tests {
             name: "alice".into(),
             sids,
             device: vec![],
-            claims: claims.iter().map(|(k, v)| (k.to_lowercase(), vec![v.to_string()])).collect(),
+            claims: claims
+                .iter()
+                .map(|(k, v)| (k.to_lowercase(), vec![v.to_string()]))
+                .collect(),
             integrity: 8192,
         }
     }
@@ -359,34 +565,68 @@ mod tests {
     fn check(text: &str, who: &Person) -> Result {
         let f = folder();
         let (sd, _, mut ids) = read(text);
-        let s = Simple::read(&f, sd.dacl.as_ref().map(|a| a.aces.as_slice()), sd.sacl.as_ref().map(|a| a.aces.as_slice()));
+        let s = Simple::read(
+            &f,
+            sd.dacl.as_ref().map(|a| a.aces.as_slice()),
+            sd.sacl.as_ref().map(|a| a.aces.as_slice()),
+        );
         let (dacl, _) = s.write(&f, &mut ids);
         let name = |s: &Sid| s.to_string();
-        let facts = Facts { obj: &f, simple: &s, dacl: dacl.as_deref(), owner: sd.owner, sacl: true, name: &name };
+        let facts = Facts {
+            obj: &f,
+            simple: &s,
+            dacl: dacl.as_deref(),
+            owner: sd.owner,
+            sacl: true,
+            name: &name,
+        };
         effective(&facts, who, None)
     }
 
     #[test]
     fn the_list_is_read_in_its_real_order() {
-        let alice = person("S-1-5-21-1-2-3-1002", &["S-1-5-21-1-2-3-1105", "S-1-5-21-1-2-3-1106"], &[]);
+        let alice = person(
+            "S-1-5-21-1-2-3-1002",
+            &["S-1-5-21-1-2-3-1105", "S-1-5-21-1-2-3-1106"],
+            &[],
+        );
         // Out of order, Finance's allow decides Write before the refusal.
-        let r = check("O:SYG:SYD:(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)", &alice);
+        let r = check(
+            "O:SYG:SYD:(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)",
+            &alice,
+        );
         assert_eq!(r.granted & 0x2, 0x2);
-        let r = check("O:SYG:SYD:(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)", &alice);
+        let r = check(
+            "O:SYG:SYD:(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)",
+            &alice,
+        );
         assert_eq!(r.granted & 0x2, 0);
         assert!(!r.by[&0x2].0);
     }
 
     #[test]
     fn a_condition_that_is_not_known_does_not_allow() {
-        let dana = person("S-1-5-21-1-2-3-1001", &[], &[("User.Department", "Finance")]);
-        let r = check("O:SYG:SYD:(XA;;0x1;;;WD;(@User.Department == \"Finance\"))S:", &dana);
+        let dana = person(
+            "S-1-5-21-1-2-3-1001",
+            &[],
+            &[("User.Department", "Finance")],
+        );
+        let r = check(
+            "O:SYG:SYD:(XA;;0x1;;;WD;(@User.Department == \"Finance\"))S:",
+            &dana,
+        );
         assert_eq!(r.granted & 1, 1);
         let kim = person("S-1-5-21-1-2-3-1004", &[], &[]);
-        let r = check("O:SYG:SYD:(XA;;0x1;;;WD;(@User.Department == \"Finance\"))S:", &kim);
+        let r = check(
+            "O:SYG:SYD:(XA;;0x1;;;WD;(@User.Department == \"Finance\"))S:",
+            &kim,
+        );
         assert_eq!(r.granted & 1, 0);
         // A refusal whose condition isn't known still refuses.
-        let r = check("O:SYG:SYD:(XD;;0x1;;;WD;(@User.Department == \"Finance\"))(A;;0x1;;;WD)S:", &kim);
+        let r = check(
+            "O:SYG:SYD:(XD;;0x1;;;WD;(@User.Department == \"Finance\"))(A;;0x1;;;WD)S:",
+            &kim,
+        );
         assert_eq!(r.granted & 1, 0);
     }
 
@@ -394,9 +634,16 @@ mod tests {
     fn the_owner_may_always_change_permissions_and_a_label_holds_back_writes() {
         let owner = person("S-1-5-18", &[], &[]);
         let r = check("O:SYG:SYD:S:(ML;;NW;;;HI)", &owner);
-        assert_eq!(r.granted & WRITE_DAC, 0, "WRITE_DAC is a write, held back by the High label");
+        assert_eq!(
+            r.granted & WRITE_DAC,
+            0,
+            "WRITE_DAC is a write, held back by the High label"
+        );
         assert_eq!(r.granted & READ_CONTROL, READ_CONTROL);
         let r = check("O:SYG:SYD:", &owner);
-        assert_eq!(r.granted & (READ_CONTROL | WRITE_DAC), READ_CONTROL | WRITE_DAC);
+        assert_eq!(
+            r.granted & (READ_CONTROL | WRITE_DAC),
+            READ_CONTROL | WRITE_DAC
+        );
     }
 }

@@ -8,8 +8,8 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use libauthd_client::admin::Admin;
-use libauthd_client::ident::Ident;
+use auth_core::client::admin::Admin;
+use auth_core::client::ident::Ident;
 use libgxwi::{App, Surface};
 
 mod accounts;
@@ -37,9 +37,16 @@ const LOOK_AGAIN: Duration = Duration::from_secs(5);
 fn look_again(window: Weak<Surface<Manager>>) {
     loop {
         std::thread::sleep(LOOK_AGAIN);
-        let Some(shown) = window.upgrade() else { return };
+        let Some(shown) = window.upgrade() else {
+            return;
+        };
         let (ident, admin, picked, user) = shown.look(|manager, _, _| {
-            (manager.ident().clone(), manager.admin().clone(), manager.picked().map(str::to_string), manager.local_user())
+            (
+                manager.ident().clone(),
+                manager.admin().clone(),
+                manager.picked().map(str::to_string),
+                manager.local_user(),
+            )
         });
         drop(shown);
         let heard = Heard {
@@ -48,10 +55,12 @@ fn look_again(window: Weak<Surface<Manager>>) {
             // Keys and how they sign in are lpsd's, asked of it only where
             // this person may administer it.
             credentials: user.map(|name| admin.keys(&name).map_err(|refusal| refusal.reason)),
-            policy: libauthd_policy::Policy::read(),
+            policy: auth_policy::Policy::read(),
             picked,
         };
-        let Some(shown) = window.upgrade() else { return };
+        let Some(shown) = window.upgrade() else {
+            return;
+        };
         // An update shows every page the window again, so only one that
         // changes something is made.
         if shown.look(|manager, _, _| manager.differs(&heard)) {
@@ -73,8 +82,14 @@ fn main() {
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gxwi-principals-manager.css", include_str!("gxwi-principals-manager.css"));
-    let window = app.live("Principals Manager", Manager::new(Ident::new(), Admin::new()));
+    app.stylesheet(
+        "/gxwi-principals-manager.css",
+        include_str!("gxwi-principals-manager.css"),
+    );
+    let window = app.live(
+        "Principals Manager",
+        Manager::new(Ident::new(), Admin::new()),
+    );
     let aside = Arc::downgrade(&window);
     window.update(|manager, _| manager.window = aside.clone());
     std::thread::spawn(move || look_again(aside));

@@ -31,12 +31,25 @@ pub fn page(m: &Manager) -> String {
         Ok(n) => n.refusal.as_deref().map(|r| alert("warn", "warn", &format!("<b>netd refused the newest rules:</b> {}. The last ones that worked still apply.", h(r)))).unwrap_or_default(),
         Err(e) => alert("bad", "warn", &format!("netd isn't answering: {}", h(e))),
     };
-    let extra = format!(r#"<button class="btn primary" fx-click="rule-new"{}{}>{}New rule</button>"#, values(&[("layer", "Interface")]), if m.may_rules() { "" } else { " disabled" }, svg("plus"));
+    let extra = format!(
+        r#"<button class="btn primary" fx-click="rule-new"{}{}>{}New rule</button>"#,
+        values(&[("layer", "Interface")]),
+        if m.may_rules() { "" } else { " disabled" },
+        svg("plus")
+    );
     format!(
         r#"{}{}{refusal}<div class="sect"><h2>Now</h2><div class="panel pad"><div class="assign">{}</div></div></div><div class="sect"><h2>Rules</h2>{}<div class="footnote">Interfaces no rule matches are left unmanaged.</div></div>"#,
-        phead("Profile rules", "Which profile each interface uses. The most specific rule that matches applies; priority breaks ties.", &extra),
+        phead(
+            "Profile rules",
+            "Which profile each interface uses. The most specific rule that matches applies; priority breaks ties.",
+            &extra
+        ),
         locked(m.config.may.rules, LOCKED),
-        if rows.is_empty() { r#"<span class="muted">No interfaces.</span>"#.to_string() } else { rows },
+        if rows.is_empty() {
+            r#"<span class="muted">No interfaces.</span>"#.to_string()
+        } else {
+            rows
+        },
         rule_table(m, &m.config.policy.interface, Layer::Interface)
     )
 }

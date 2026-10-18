@@ -14,7 +14,9 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use libgxwi::Surface;
-use libtrust::{ADD_KEY, CERTIFICATE_VALUE, CERTIFICATES_KEY, Request, Root, SHARE_BUNDLE, SOCKET_PATH, Status};
+use libtrust::{
+    ADD_KEY, CERTIFICATE_VALUE, CERTIFICATES_KEY, Request, Root, SHARE_BUNDLE, SOCKET_PATH, Status,
+};
 use peios::registry::{Key, KeyAccess, OpenFlags};
 use trust::{Details, cert};
 
@@ -37,7 +39,10 @@ impl Cert {
 
     /// Its organisation, where that says more than its name does.
     pub fn organisation(&self) -> Option<&str> {
-        self.details.organisation.as_deref().filter(|o| *o != self.name())
+        self.details
+            .organisation
+            .as_deref()
+            .filter(|o| *o != self.name())
     }
 
     /// Whether `words` (already lower case) is found in anything shown of it.
@@ -48,7 +53,10 @@ impl Cert {
             || self.details.unit.as_deref().is_some_and(found)
             || found(&self.details.subject)
             || self.root.name.as_deref().is_some_and(found)
-            || self.root.fingerprint.starts_with(&trust::normalise_fingerprint(words))
+            || self
+                .root
+                .fingerprint
+                .starts_with(&trust::normalise_fingerprint(words))
     }
 }
 
@@ -80,16 +88,27 @@ pub struct Store {
 
 impl Store {
     pub fn certificate(&self, fingerprint: &str) -> Option<&Cert> {
-        self.roots.as_ref().ok()?.iter().find(|c| c.root.fingerprint == fingerprint)
+        self.roots
+            .as_ref()
+            .ok()?
+            .iter()
+            .find(|c| c.root.fingerprint == fingerprint)
     }
 
     pub fn refused(&self, fingerprint: &str) -> Option<&Refused> {
-        self.distrusted.as_ref().ok()?.iter().find(|r| r.fingerprint == fingerprint)
+        self.distrusted
+            .as_ref()
+            .ok()?
+            .iter()
+            .find(|r| r.fingerprint == fingerprint)
     }
 
     /// The additions' names, to refuse a second under one of them.
     pub fn added_names(&self) -> Vec<String> {
-        self.roots.as_ref().map(|roots| roots.iter().filter_map(|c| c.root.name.clone()).collect()).unwrap_or_default()
+        self.roots
+            .as_ref()
+            .map(|roots| roots.iter().filter_map(|c| c.root.name.clone()).collect())
+            .unwrap_or_default()
     }
 }
 
@@ -114,7 +133,10 @@ impl Known {
     }
 
     fn name(&self, fingerprint: &str, added: &HashMap<String, Details>) -> Option<Details> {
-        self.shipped.get(fingerprint).or_else(|| added.get(fingerprint)).cloned()
+        self.shipped
+            .get(fingerprint)
+            .or_else(|| added.get(fingerprint))
+            .cloned()
     }
 }
 
@@ -122,12 +144,21 @@ impl Known {
 fn added() -> HashMap<String, Details> {
     let mut out = HashMap::new();
     let path = format!("{CERTIFICATES_KEY}\\{ADD_KEY}");
-    let Ok(add) = Key::open(None, &path, KeyAccess::READ, OpenFlags::empty()) else { return out };
+    let Ok(add) = Key::open(None, &path, KeyAccess::READ, OpenFlags::empty()) else {
+        return out;
+    };
     for name in add.subkeys(None).flatten() {
-        let Ok(entry) = Key::open(Some(&add), &String::from_utf8_lossy(&name.name), KeyAccess::QUERY_VALUE, OpenFlags::empty()) else {
+        let Ok(entry) = Key::open(
+            Some(&add),
+            &String::from_utf8_lossy(&name.name),
+            KeyAccess::QUERY_VALUE,
+            OpenFlags::empty(),
+        ) else {
             continue;
         };
-        let Ok(value) = entry.query_value(CERTIFICATE_VALUE.as_bytes(), None) else { continue };
+        let Ok(value) = entry.query_value(CERTIFICATE_VALUE.as_bytes(), None) else {
+            continue;
+        };
         if let Ok(details) = cert::describe(&value.data) {
             out.insert(cert::fingerprint(&value.data), details);
         }
@@ -141,7 +172,10 @@ fn roots() -> Result<Vec<Cert>, String> {
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|mut root| {
-            let details = cert::describe(&root.der).unwrap_or_else(|_| Details { subject: root.subject.clone(), ..Details::default() });
+            let details = cert::describe(&root.der).unwrap_or_else(|_| Details {
+                subject: root.subject.clone(),
+                ..Details::default()
+            });
             // The window keeps the certificate for Export; the rest of what
             // it shows is in the details.
             root.der.shrink_to_fit();
@@ -170,14 +204,25 @@ pub fn read_all(known: &Known) -> Store {
 
 fn read_with(known: &Known, roots: Result<Vec<Cert>, String>) -> Store {
     let added = added();
-    let distrusted = trust::distrusted().map_err(|e| e.to_string()).map(|entries| {
-        let mut refused: Vec<Refused> = entries
-            .into_iter()
-            .map(|d| Refused { known: known.name(&d.fingerprint, &added), fingerprint: d.fingerprint, reason: d.reason })
-            .collect();
-        refused.sort_by_cached_key(|r| (r.known.is_none(), r.known.as_ref().map(|d| d.name().to_lowercase())));
-        refused
-    });
+    let distrusted = trust::distrusted()
+        .map_err(|e| e.to_string())
+        .map(|entries| {
+            let mut refused: Vec<Refused> = entries
+                .into_iter()
+                .map(|d| Refused {
+                    known: known.name(&d.fingerprint, &added),
+                    fingerprint: d.fingerprint,
+                    reason: d.reason,
+                })
+                .collect();
+            refused.sort_by_cached_key(|r| {
+                (
+                    r.known.is_none(),
+                    r.known.as_ref().map(|d| d.name().to_lowercase()),
+                )
+            });
+            refused
+        });
     Store {
         roots,
         status: trust::status().ok(),
@@ -200,11 +245,17 @@ pub fn follow(window: Weak<Surface<Policy>>, known: Arc<Known>) {
     loop {
         let subscribed = UnixStream::connect(SOCKET_PATH).and_then(|mut stream| {
             stream.set_read_timeout(Some(QUIET))?;
-            libtrust::send(&mut stream, &Request::Subscribe { with_der: false }.encode()).map_err(std::io::Error::other)?;
+            libtrust::send(
+                &mut stream,
+                &Request::Subscribe { with_der: false }.encode(),
+            )
+            .map_err(std::io::Error::other)?;
             Ok(stream)
         });
         // A subscriber is sent the set as it is at once; that is not news.
-        let Ok(mut stream) = subscribed.and_then(|mut stream| next_set(&mut stream).map(|()| stream)) else {
+        let Ok(mut stream) =
+            subscribed.and_then(|mut stream| next_set(&mut stream).map(|()| stream))
+        else {
             std::thread::sleep(QUIET);
             if !tell(&window, read(&known, None)) {
                 return;
@@ -222,7 +273,9 @@ pub fn follow(window: Weak<Surface<Policy>>, known: Arc<Known>) {
                 // subscription is made afresh, since a wait that ran out
                 // may have ended part way through a message.
                 Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                    let before = window.upgrade().map(|shown| shown.look(|policy, _, _| policy.store().clone()));
+                    let before = window
+                        .upgrade()
+                        .map(|shown| shown.look(|policy, _, _| policy.store().clone()));
                     let Some(before) = before else { return };
                     if !tell(&window, read(&known, Some(&before))) {
                         return;
@@ -261,7 +314,9 @@ fn next_set(stream: &mut UnixStream) -> std::io::Result<()> {
 /// Gives the window what was read, if it differs. False once the window
 /// has gone.
 fn tell(window: &Weak<Surface<Policy>>, read: Store) -> bool {
-    let Some(shown) = window.upgrade() else { return false };
+    let Some(shown) = window.upgrade() else {
+        return false;
+    };
     if shown.look(|policy, _, _| *policy.store() != read) {
         shown.update(|policy, fields| policy.heard(read, fields));
     }

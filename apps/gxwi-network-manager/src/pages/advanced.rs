@@ -7,11 +7,28 @@ use crate::ui::{h, phead, values};
 
 /// Who a control descriptor lets query and control, in a line.
 fn access(m: &Manager, sd: Option<&[u8]>) -> String {
-    let Some(sd) = sd else { return "Everyone may look. SYSTEM and Administrators may change. (The built-in default.)".into() };
-    let name = |sid: &str| m.config.names.get(sid).cloned().unwrap_or_else(|| sid.to_string());
+    let Some(sd) = sd else {
+        return "Everyone may look. SYSTEM and Administrators may change. (The built-in default.)"
+            .into();
+    };
+    let name = |sid: &str| {
+        m.config
+            .names
+            .get(sid)
+            .cloned()
+            .unwrap_or_else(|| sid.to_string())
+    };
     let holders = |right: u32| -> String {
-        let list: Vec<String> = machine::grants(sd).into_iter().filter(|(_, allows, mask)| *allows && mask & right != 0).map(|(sid, _, _)| name(&sid)).collect();
-        if list.is_empty() { "no one".into() } else { list.join(", ") }
+        let list: Vec<String> = machine::grants(sd)
+            .into_iter()
+            .filter(|(_, allows, mask)| *allows && mask & right != 0)
+            .map(|(sid, _, _)| name(&sid))
+            .collect();
+        if list.is_empty() {
+            "no one".into()
+        } else {
+            list.join(", ")
+        }
     };
     format!("May look: {}. May change: {}.", holders(0x1), holders(0x2))
 }
@@ -35,7 +52,11 @@ pub fn page(m: &Manager) -> String {
         .collect();
     let hostname = match &m.state.netd {
         Ok(n) if !n.hostname.is_empty() => n.hostname.clone(),
-        _ => m.config.hostname.clone().unwrap_or_else(|| "Not set".into()),
+        _ => m
+            .config
+            .hostname
+            .clone()
+            .unwrap_or_else(|| "Not set".into()),
     };
     format!(
         r#"{}<div class="sect"><h2>DHCP identity</h2><div class="panel"><div class="row"><div class="lbl"><b>DUID</b><small>Identifies this machine to DHCP servers</small></div><span class="mono">{}</span></div>{ids}</div></div><div class="sect"><h2>Access</h2><div class="panel"><div class="row"><div class="lbl"><b>Network configuration (netd)</b><small>{}</small></div><button class="btn sm" fx-click="perm"{}>Permissions…</button></div><div class="row"><div class="lbl"><b>Name resolution (resolvd)</b><small>{}</small></div><button class="btn sm" fx-click="perm"{}>Permissions…</button></div><div class="row"><div class="lbl"><b>Hostname</b><small>Changed in System Settings</small></div><span class="mono">{}</span></div></div></div>"#,

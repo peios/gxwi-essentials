@@ -1,4 +1,4 @@
-//! peiterm: a terminal on a GXWI desktop.
+//! gxwi-terminal: a terminal on a GXWI desktop.
 //!
 //! A window with the person's shell in it, on a pseudoterminal of this
 //! process's. Anything after the program's name is run in place of the
@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use libgxwi::App;
 
+mod input;
 mod page;
 mod pty;
 mod screen;
@@ -33,15 +34,18 @@ use pty::{Pty, Size};
 use terminal::Terminal;
 
 // What this program looks like, to whatever lists it. The icon itself is
-// `peiterm.svg`, installed as the base theme's `dev.peios.peiterm.svg`.
-libgxwi::icon!(b"dev.peios.peiterm");
+// `gxwi-terminal.svg`, installed as the base theme's `dev.peios.gxwi-terminal.svg`.
+libgxwi::icon!(b"dev.peios.gxwi-terminal");
 
 /// What the emulator in the page is, to the programs that ask.
 const TERM: &str = "xterm-256color";
 
 fn main() {
     let mut run: Vec<String> = std::env::args().skip(1).collect();
-    let home = std::env::var_os("HOME").map(PathBuf::from).filter(|home| home.is_dir()).unwrap_or_else(|| "/".into());
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|home| home.is_dir())
+        .unwrap_or_else(|| "/".into());
     let home = match within(&run) {
         Some(directory) => {
             run.clear();
@@ -50,24 +54,37 @@ fn main() {
         None => home,
     };
     if run.is_empty() {
-        run.push(std::env::var("SHELL").ok().filter(|shell| shell.starts_with('/')).unwrap_or_else(|| "/bin/sh".into()));
+        run.push(
+            std::env::var("SHELL")
+                .ok()
+                .filter(|shell| shell.starts_with('/'))
+                .unwrap_or_else(|| "/bin/sh".into()),
+        );
     }
 
     let mut app = App::connect().unwrap_or_else(|e| die(&format!("the display: {e}")));
     let environment = [("TERM", TERM), ("COLORTERM", "truecolor")];
     let (pty, mut child) = Pty::start(run[0].as_ref(), &run[1..], &home, &environment, Size::USUAL)
         .unwrap_or_else(|e| die(&format!("starting {}: {e}", run[0])));
-    let terminal = Terminal::new(pty, Size::USUAL).unwrap_or_else(|e| die(&format!("the terminal: {e}")));
+    let terminal =
+        Terminal::new(pty, Size::USUAL).unwrap_or_else(|e| die(&format!("the terminal: {e}")));
 
     app.routes(page::routes(terminal.clone()));
     let window = app.raw_page("Terminal", page::PATH);
     std::thread::spawn(move || {
         // Called what the shell calls it, and Terminal when that is nothing.
-        terminal.follow(|title| window.retitle(if title.trim().is_empty() { "Terminal" } else { title }));
+        terminal.follow(|title| {
+            window.retitle(if title.trim().is_empty() {
+                "Terminal"
+            } else {
+                title
+            })
+        });
         let _ = child.wait();
         window.close();
     });
-    app.run().unwrap_or_else(|e| die(&format!("the display: {e}")));
+    app.run()
+        .unwrap_or_else(|e| die(&format!("the display: {e}")));
 }
 
 /// The directory to open the shell in, when that is what was asked: one
@@ -80,13 +97,20 @@ fn within(arguments: &[String]) -> Option<PathBuf> {
     }
 }
 
+fn die(message: &str) -> ! {
+    eprintln!("gxwi-terminal: {message}");
+    std::process::exit(1);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn one_argument_that_is_a_directory_is_where_the_shell_opens() {
-        let said = |arguments: &[&str]| within(&arguments.iter().map(|a| a.to_string()).collect::<Vec<_>>());
+        let said = |arguments: &[&str]| {
+            within(&arguments.iter().map(|a| a.to_string()).collect::<Vec<_>>())
+        };
         assert_eq!(said(&["/"]), Some(PathBuf::from("/")));
         assert_eq!(said(&[]), None);
         // A program, a directory that is not there, one not said from the
@@ -96,9 +120,4 @@ mod tests {
         assert_eq!(said(&["."]), None);
         assert_eq!(said(&["/", "-l"]), None);
     }
-}
-
-fn die(message: &str) -> ! {
-    eprintln!("peiterm: {message}");
-    std::process::exit(1);
 }

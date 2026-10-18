@@ -22,7 +22,13 @@ use crate::cond::Cond;
 use crate::sd::*;
 
 /// The integrity levels the simple view names, by RID.
-pub const INTEGRITY: &[(&str, u32)] = &[("Untrusted", 0), ("Low", 4096), ("Medium", 8192), ("High", 12288), ("System", 16384)];
+pub const INTEGRITY: &[(&str, u32)] = &[
+    ("Untrusted", 0),
+    ("Low", 4096),
+    ("Medium", 8192),
+    ("High", 12288),
+    ("System", 16384),
+];
 
 pub fn level_name(rid: u32) -> Option<&'static str> {
     INTEGRITY.iter().find(|(_, n)| *n == rid).map(|(k, _)| *k)
@@ -73,7 +79,11 @@ impl Obj {
     /// directory's parts take.
     pub fn part_rights(&self) -> Vec<(String, u32)> {
         if self.part_rights.is_empty() {
-            return vec![("Read".into(), 0x10), ("Write".into(), 0x20), ("Use (actions)".into(), 0x100)];
+            return vec![
+                ("Read".into(), 0x10),
+                ("Write".into(), 0x20),
+                ("Use (actions)".into(), 0x100),
+            ];
         }
         self.part_rights.clone()
     }
@@ -92,7 +102,12 @@ impl Obj {
         }
         let guid = named_guid(&naming.namespace, name);
         if self.part(&guid).is_none() {
-            self.parts.push(PartDef { guid, name: name.to_string(), kind: PartKind::Property, set: None });
+            self.parts.push(PartDef {
+                guid,
+                name: name.to_string(),
+                kind: PartKind::Property,
+                set: None,
+            });
         }
         Some(guid)
     }
@@ -139,8 +154,16 @@ impl Obj {
 
     pub fn scope_label(&self, flags: u8) -> String {
         let base = flags & !NP;
-        let label = self.scopes().into_iter().find(|(f, _)| *f == base).map_or_else(|| "Custom".to_string(), |(_, l)| l);
-        if flags & NP != 0 && passes(flags) { format!("{label}, one level down") } else { label }
+        let label = self
+            .scopes()
+            .into_iter()
+            .find(|(f, _)| *f == base)
+            .map_or_else(|| "Custom".to_string(), |(_, l)| l);
+        if flags & NP != 0 && passes(flags) {
+            format!("{label}, one level down")
+        } else {
+            label
+        }
     }
 
     /// Whether the scope picker has a choice for these shape flags.
@@ -153,14 +176,23 @@ impl Obj {
 
     /// The flags a label, trust label, claim or policy is passed on with.
     pub fn sacl_flags(&self, inherit: bool) -> u8 {
-        if inherit && self.container { self.home() & !IO } else { 0 }
+        if inherit && self.container {
+            self.home() & !IO
+        } else {
+            0
+        }
     }
 
     /// `mask` with its generic rights as the rights they stand for here.
     pub fn mapped(&self, mask: u32) -> u32 {
         let g = &self.generic;
         let mut out = mask & !GENERIC;
-        for (bit, means) in [(GENERIC_READ, g.read), (GENERIC_WRITE, g.write), (GENERIC_EXECUTE, g.execute), (GENERIC_ALL, g.all)] {
+        for (bit, means) in [
+            (GENERIC_READ, g.read),
+            (GENERIC_WRITE, g.write),
+            (GENERIC_EXECUTE, g.execute),
+            (GENERIC_ALL, g.all),
+        ] {
             if mask & bit != 0 {
                 out |= means;
             }
@@ -171,7 +203,11 @@ impl Obj {
     /// Whether the general rights can say all of `mask` between them.
     pub fn fits_general(&self, mask: u32) -> bool {
         let m = core(self.mapped(mask));
-        let covered = self.general.iter().filter(|r| m & core(r.mask) == core(r.mask)).fold(0, |a, r| a | core(r.mask));
+        let covered = self
+            .general
+            .iter()
+            .filter(|r| m & core(r.mask) == core(r.mask))
+            .fold(0, |a, r| a | core(r.mask));
         m == covered
     }
 
@@ -186,17 +222,26 @@ impl Obj {
     }
 
     pub fn kind_name(&self, guid: &Guid) -> Option<&str> {
-        self.kinds.iter().find(|(g, _)| g == guid).map(|(_, n)| n.as_str())
+        self.kinds
+            .iter()
+            .find(|(g, _)| g == guid)
+            .map(|(_, n)| n.as_str())
     }
 
     /// The general right a mask is exactly, by name.
     pub fn level_name(&self, mask: u32) -> Option<&str> {
-        self.general.iter().find(|r| core(r.mask) == core(self.mapped(mask))).map(|r| r.name.as_str())
+        self.general
+            .iter()
+            .find(|r| core(r.mask) == core(self.mapped(mask)))
+            .map(|r| r.name.as_str())
     }
 
     /// Every right it names, specific first.
     pub fn all_rights(&self) -> u32 {
-        self.specific.iter().chain(&self.general).fold(0, |a, r| a | r.mask)
+        self.specific
+            .iter()
+            .chain(&self.general)
+            .fold(0, |a, r| a | r.mask)
     }
 }
 
@@ -340,12 +385,20 @@ pub fn everyone() -> Sid {
 /// and `trusted` say whether a label or trust label came before it.
 pub fn kept_why(obj: &Obj, ace: &Ace, list: List, labelled: bool, trusted: bool) -> Option<String> {
     if ace.way == Way::Unknown {
-        let name = crate::sd::unacted(ace.byte).map(|n| format!(" ({n})")).unwrap_or_default();
-        return Some(format!("KACS doesn't act on entries of type 0x{:02x}{name}. It skips it when it checks access, and it's kept exactly as found.", ace.byte));
+        let name = crate::sd::unacted(ace.byte)
+            .map(|n| format!(" ({n})"))
+            .unwrap_or_default();
+        return Some(format!(
+            "KACS doesn't act on entries of type 0x{:02x}{name}. It skips it when it checks access, and it's kept exactly as found.",
+            ace.byte
+        ));
     }
     let shape = ace.flags & SHAPE;
     if ace.flags & IO != 0 && !passes(ace.flags) {
-        return Some("It's only for what's inside, but it isn't passed down, so it never applies anywhere.".into());
+        return Some(
+            "It's only for what's inside, but it isn't passed down, so it never applies anywhere."
+                .into(),
+        );
     }
     if list == List::Dacl && !matches!(ace.way, Way::Allow | Way::Deny) {
         return Some("It's an entry of the SACL's, which does nothing in an access list.".into());
@@ -363,8 +416,13 @@ pub fn kept_why(obj: &Obj, ace: &Ace, list: List, labelled: bool, trusted: bool)
         if ace.inherited_object.is_some() && ace.object.is_none() {
             return Some("It's passed to one kind of item only but covers all of it, which the simple view can only do for particular parts.".into());
         }
-        if ace.inherited_object.is_some_and(|k| obj.kind_name(&k).is_none()) {
-            return Some("It's passed to a kind of item the program that opened this doesn't name.".into());
+        if ace
+            .inherited_object
+            .is_some_and(|k| obj.kind_name(&k).is_none())
+        {
+            return Some(
+                "It's passed to a kind of item the program that opened this doesn't name.".into(),
+            );
         }
         if matches!(ace.cond, Some(Cond::Opaque(_))) {
             return Some("Its condition is one the simple view can't show.".into());
@@ -380,9 +438,16 @@ pub fn kept_why(obj: &Obj, ace: &Ace, list: List, labelled: bool, trusted: bool)
     match ace.way {
         Way::Label => {
             if labelled {
-                return Some("Only the first integrity label counts, so KACS ignores this one.".into());
+                return Some(
+                    "Only the first integrity label counts, so KACS ignores this one.".into(),
+                );
             }
-            if ace.sid.and_then(|s| sid_level(&s)).and_then(level_name).is_none() {
+            if ace
+                .sid
+                .and_then(|s| sid_level(&s))
+                .and_then(level_name)
+                .is_none()
+            {
                 return Some("It sets an integrity level the simple view doesn't name.".into());
             }
             if ace.mask & !7 != 0 {
@@ -391,16 +456,21 @@ pub fn kept_why(obj: &Obj, ace: &Ace, list: List, labelled: bool, trusted: bool)
         }
         Way::Trust => {
             if trusted {
-                return Some("Only the first process trust label counts, so KACS ignores this one.".into());
+                return Some(
+                    "Only the first process trust label counts, so KACS ignores this one.".into(),
+                );
             }
             if ace.sid.and_then(|s| sid_trust(&s)).is_none() {
                 return Some("Its SID isn't a process trust SID.".into());
             }
         }
-        Way::Claim => {
-            if ace.claim.as_ref().is_some_and(|c| c.flags & !claim::SHOWN != 0) {
-                return Some("It has claim flags the simple view doesn't show.".into());
-            }
+        Way::Claim
+            if ace
+                .claim
+                .as_ref()
+                .is_some_and(|c| c.flags & !claim::SHOWN != 0) =>
+        {
+            return Some("It has claim flags the simple view doesn't show.".into());
         }
         _ => {}
     }
@@ -437,7 +507,10 @@ fn dacl_from(obj: &Obj, aces: &[Ace], kept: &[(u32, String)]) -> (Vec<Entry>, Ve
     let mut last_part = false;
     for (at, ace) in aces.iter().enumerate() {
         if let Some((_, why)) = kept.iter().find(|(id, _)| *id == ace.id) {
-            entries.push(Entry { ace: ace.clone(), kept: Some(why.clone()) });
+            entries.push(Entry {
+                ace: ace.clone(),
+                kept: Some(why.clone()),
+            });
             last_part = false;
             continue;
         }
@@ -445,7 +518,16 @@ fn dacl_from(obj: &Obj, aces: &[Ace], kept: &[(u32, String)]) -> (Vec<Entry>, Ve
             let allow = ace.way == Way::Allow;
             let joins = last_part
                 && runs.last().is_some_and(|r| {
-                    r.sid == sid && r.flags == ace.flags && r.kind == ace.inherited_object && r.cond == ace.cond && (if allow { r.allow == ace.mask && r.deny == 0 } else { r.deny == ace.mask && r.allow == 0 }) && !r.parts.contains(&part)
+                    r.sid == sid
+                        && r.flags == ace.flags
+                        && r.kind == ace.inherited_object
+                        && r.cond == ace.cond
+                        && (if allow {
+                            r.allow == ace.mask && r.deny == 0
+                        } else {
+                            r.deny == ace.mask && r.allow == 0
+                        })
+                        && !r.parts.contains(&part)
                 });
             if joins {
                 let r = runs.last_mut().expect("a run");
@@ -469,15 +551,27 @@ fn dacl_from(obj: &Obj, aces: &[Ace], kept: &[(u32, String)]) -> (Vec<Entry>, Ve
             continue;
         }
         last_part = false;
-        entries.push(Entry { ace: ace.clone(), kept: None });
+        entries.push(Entry {
+            ace: ace.clone(),
+            kept: None,
+        });
     }
     // A refusal and an allow for the same parts, said the same way, are one
     // rule, as the person made it.
     let mut rules: Vec<PartRule> = Vec::new();
     for run in runs {
         let pair = rules.iter_mut().find(|r| {
-            let opposite = if run.allow != 0 { r.deny != 0 && r.allow == 0 } else { r.allow != 0 && r.deny == 0 };
-            opposite && r.sid == run.sid && r.parts == run.parts && r.flags == run.flags && r.kind == run.kind && r.cond == run.cond
+            let opposite = if run.allow != 0 {
+                r.deny != 0 && r.allow == 0
+            } else {
+                r.allow != 0 && r.deny == 0
+            };
+            opposite
+                && r.sid == run.sid
+                && r.parts == run.parts
+                && r.flags == run.flags
+                && r.kind == run.kind
+                && r.cond == run.cond
         });
         match pair {
             Some(r) if run.allow != 0 => {
@@ -489,7 +583,7 @@ fn dacl_from(obj: &Obj, aces: &[Ace], kept: &[(u32, String)]) -> (Vec<Entry>, Ve
                 r.deny = run.deny;
                 r.deny_at = run.deny_at;
                 let mut ids = run.ids;
-                ids.extend(r.ids.drain(..));
+                ids.append(&mut r.ids);
                 r.ids = ids;
             }
             None => rules.push(run),
@@ -510,7 +604,12 @@ fn part_aces(r: &PartRule, ids: &mut Ids) -> (Vec<Ace>, Vec<Ace>) {
             .iter()
             .map(|part| {
                 let id = taken.next().unwrap_or_else(|| ids.next());
-                Ace { object: Some(*part), inherited_object: r.kind, cond: r.cond.clone(), ..Ace::new(id, way, r.flags, mask, r.sid) }
+                Ace {
+                    object: Some(*part),
+                    inherited_object: r.kind,
+                    cond: r.cond.clone(),
+                    ..Ace::new(id, way, r.flags, mask, r.sid)
+                }
             })
             .collect()
     };
@@ -558,7 +657,9 @@ fn write_dacl(entries: &[Entry], rules: &[PartRule], ids: &mut Ids) -> Vec<Ace> 
 /// the ones out of place are kept.
 fn misplaced_parts(obj: &Obj, aces: &[Ace], kept: &HashSet<u32>) -> Vec<u32> {
     let mut out: HashSet<u32> = kept.clone();
-    let as_kept = |out: &HashSet<u32>| -> Vec<(u32, String)> { out.iter().map(|id| (*id, String::new())).collect() };
+    let as_kept = |out: &HashSet<u32>| -> Vec<(u32, String)> {
+        out.iter().map(|id| (*id, String::new())).collect()
+    };
     for _ in 0..=aces.len() {
         let (entries, rules) = dacl_from(obj, aces, &as_kept(&out));
         let got = write_dacl(&entries, &rules, &mut Ids::default());
@@ -571,35 +672,84 @@ fn misplaced_parts(obj: &Obj, aces: &[Ace], kept: &HashSet<u32>) -> Vec<u32> {
         };
         // Either the entry found here moved away, or one from further down
         // moved up into its place: keep whichever is the part's.
-        let here = aces.get(i).filter(|a| a.object.is_some() && !out.contains(&a.id));
-        let moved = || got.get(i).and_then(|g| aces[i..].iter().find(|a| a.object.is_some() && !out.contains(&a.id) && a.same(g)));
+        let here = aces
+            .get(i)
+            .filter(|a| a.object.is_some() && !out.contains(&a.id));
+        let moved = || {
+            got.get(i).and_then(|g| {
+                aces[i..]
+                    .iter()
+                    .find(|a| a.object.is_some() && !out.contains(&a.id) && a.same(g))
+            })
+        };
         let Some(x) = here.or_else(moved) else { break };
         out.insert(x.id);
     }
-    aces.iter().filter(|a| a.object.is_some() && !kept.contains(&a.id)).map(|a| a.id).collect()
+    aces.iter()
+        .filter(|a| a.object.is_some() && !kept.contains(&a.id))
+        .map(|a| a.id)
+        .collect()
 }
 
 impl Simple {
     /// The simple view of a descriptor's lists.
     pub fn read(obj: &Obj, dacl: Option<&[Ace]>, sacl: Option<&[Ace]>) -> Simple {
-        let mut s = Simple { dacl: None, parts: vec![], sacl: sacl.is_some(), audits: vec![], label: None, trust: None, claims: vec![], policies: vec![], skept: vec![] };
+        let mut s = Simple {
+            dacl: None,
+            parts: vec![],
+            sacl: sacl.is_some(),
+            audits: vec![],
+            label: None,
+            trust: None,
+            claims: vec![],
+            policies: vec![],
+            skept: vec![],
+        };
         if let Some(sacl) = sacl {
             let kept = kept_in(obj, sacl, List::Sacl);
             for ace in sacl {
                 if let Some((_, why)) = kept.iter().find(|(id, _)| *id == ace.id) {
-                    s.skept.push(Entry { ace: ace.clone(), kept: Some(why.clone()) });
+                    s.skept.push(Entry {
+                        ace: ace.clone(),
+                        kept: Some(why.clone()),
+                    });
                     continue;
                 }
                 let (inherit, inherited) = (ace.passes(), ace.inherited());
                 let sid = ace.sid.expect("a known entry names someone");
                 match ace.way {
-                    Way::Label => s.label = Some(Label { id: ace.id, level: sid_level(&sid).unwrap_or(8192), policy: ace.mask, inherit, inherited }),
+                    Way::Label => {
+                        s.label = Some(Label {
+                            id: ace.id,
+                            level: sid_level(&sid).unwrap_or(8192),
+                            policy: ace.mask,
+                            inherit,
+                            inherited,
+                        })
+                    }
                     Way::Trust => {
                         let (pip_type, trust) = sid_trust(&sid).unwrap_or((0, 0));
-                        s.trust = Some(Trust { id: ace.id, pip_type, trust, mask: ace.mask, inherit, inherited });
+                        s.trust = Some(Trust {
+                            id: ace.id,
+                            pip_type,
+                            trust,
+                            mask: ace.mask,
+                            inherit,
+                            inherited,
+                        });
                     }
-                    Way::Claim => s.claims.push(ClaimItem { id: ace.id, claim: ace.claim.clone().expect("a claim entry has its claim"), inherit, inherited }),
-                    Way::Policy => s.policies.push(Policy { id: ace.id, sid, inherit, inherited }),
+                    Way::Claim => s.claims.push(ClaimItem {
+                        id: ace.id,
+                        claim: ace.claim.clone().expect("a claim entry has its claim"),
+                        inherit,
+                        inherited,
+                    }),
+                    Way::Policy => s.policies.push(Policy {
+                        id: ace.id,
+                        sid,
+                        inherit,
+                        inherited,
+                    }),
                     _ => {
                         // Auditing: entries that differ only in their parts,
                         // or that record successes and failures of one
@@ -616,12 +766,38 @@ impl Simple {
                             every: ace.way == Way::Alarm,
                             inherited,
                         };
-                        let like = s.audits.last().filter(|l| l.sid == a.sid && l.flags == a.flags && l.kind == a.kind && l.every == a.every && l.inherited == a.inherited && l.cond == a.cond);
-                        let joins_parts = like.is_some_and(|l| l.parts.is_some() && a.parts.is_some() && l.ok == a.ok && l.fail == a.fail && !l.parts.as_ref().expect("parts").contains(&a.parts.as_ref().expect("parts")[0]));
-                        let joins_fail = like.is_some_and(|l| l.parts == a.parts && l.ok != 0 && l.fail == 0 && a.ok == 0 && a.fail != 0);
+                        let like = s.audits.last().filter(|l| {
+                            l.sid == a.sid
+                                && l.flags == a.flags
+                                && l.kind == a.kind
+                                && l.every == a.every
+                                && l.inherited == a.inherited
+                                && l.cond == a.cond
+                        });
+                        let joins_parts = like.is_some_and(|l| {
+                            l.parts.is_some()
+                                && a.parts.is_some()
+                                && l.ok == a.ok
+                                && l.fail == a.fail
+                                && !l
+                                    .parts
+                                    .as_ref()
+                                    .expect("parts")
+                                    .contains(&a.parts.as_ref().expect("parts")[0])
+                        });
+                        let joins_fail = like.is_some_and(|l| {
+                            l.parts == a.parts
+                                && l.ok != 0
+                                && l.fail == 0
+                                && a.ok == 0
+                                && a.fail != 0
+                        });
                         if joins_parts {
                             let l = s.audits.last_mut().expect("a rule");
-                            l.parts.as_mut().expect("parts").push(a.parts.expect("parts")[0]);
+                            l.parts
+                                .as_mut()
+                                .expect("parts")
+                                .push(a.parts.expect("parts")[0]);
                             l.ids.push(ace.id);
                         } else if joins_fail {
                             let l = s.audits.last_mut().expect("a rule");
@@ -647,16 +823,33 @@ impl Simple {
     /// label, trust, auditing, claims, policies, then the rest, since its
     /// order changes nothing.
     pub fn write(&self, obj: &Obj, ids: &mut Ids) -> (Option<Vec<Ace>>, Option<Vec<Ace>>) {
-        let dacl = self.dacl.as_ref().map(|entries| write_dacl(entries, &self.parts, ids));
-        let flags = |inherit: bool, inherited: bool| obj.sacl_flags(inherit) | if inherited { ID } else { 0 };
+        let dacl = self
+            .dacl
+            .as_ref()
+            .map(|entries| write_dacl(entries, &self.parts, ids));
+        let flags = |inherit: bool, inherited: bool| {
+            obj.sacl_flags(inherit) | if inherited { ID } else { 0 }
+        };
         let mut sacl = Vec::new();
         if let Some(l) = &self.label {
-            sacl.push(Ace::new(l.id, Way::Label, flags(l.inherit, l.inherited), l.policy, level_sid(l.level)));
+            sacl.push(Ace::new(
+                l.id,
+                Way::Label,
+                flags(l.inherit, l.inherited),
+                l.policy,
+                level_sid(l.level),
+            ));
         }
         if let Some(t) = &self.trust
             && let Some(sid) = trust_sid(t.pip_type, t.trust)
         {
-            sacl.push(Ace::new(t.id, Way::Trust, flags(t.inherit, t.inherited), t.mask, sid));
+            sacl.push(Ace::new(
+                t.id,
+                Way::Trust,
+                flags(t.inherit, t.inherited),
+                t.mask,
+                sid,
+            ));
         }
         for a in &self.audits {
             let mut taken = a.ids.iter().copied();
@@ -669,7 +862,12 @@ impl Simple {
             for part in parts {
                 let mut push = |extra: u8, mask: u32| {
                     let id = taken.next().unwrap_or_else(|| ids.next());
-                    sacl.push(Ace { object: part, inherited_object: if part.is_some() { a.kind } else { None }, cond: a.cond.clone(), ..Ace::new(id, way, base | extra, mask, a.sid) });
+                    sacl.push(Ace {
+                        object: part,
+                        inherited_object: if part.is_some() { a.kind } else { None },
+                        cond: a.cond.clone(),
+                        ..Ace::new(id, way, base | extra, mask, a.sid)
+                    });
                 };
                 if a.ok != 0 && a.ok == a.fail {
                     push(SA | FA, a.ok);
@@ -684,10 +882,25 @@ impl Simple {
             }
         }
         for c in &self.claims {
-            sacl.push(Ace { claim: Some(c.claim.clone()), ..Ace::new(c.id, Way::Claim, flags(c.inherit, c.inherited), 0, everyone()) });
+            sacl.push(Ace {
+                claim: Some(c.claim.clone()),
+                ..Ace::new(
+                    c.id,
+                    Way::Claim,
+                    flags(c.inherit, c.inherited),
+                    0,
+                    everyone(),
+                )
+            });
         }
         for p in &self.policies {
-            sacl.push(Ace::new(p.id, Way::Policy, flags(p.inherit, p.inherited), 0, p.sid));
+            sacl.push(Ace::new(
+                p.id,
+                Way::Policy,
+                flags(p.inherit, p.inherited),
+                0,
+                p.sid,
+            ));
         }
         sacl.extend(self.skept.iter().map(|e| e.ace.clone()));
         let sacl = (self.sacl || !sacl.is_empty()).then_some(sacl);
@@ -731,17 +944,40 @@ pub mod tests {
     use peios::security::sddl;
 
     pub fn folder() -> Obj {
-        let r = |name: &str, mask| Right { name: name.into(), mask, general: true };
-        let s = |name: &str, mask| Right { name: name.into(), mask, general: false };
+        let r = |name: &str, mask| Right {
+            name: name.into(),
+            mask,
+            general: true,
+        };
+        let s = |name: &str, mask| Right {
+            name: name.into(),
+            mask,
+            general: false,
+        };
         Obj {
             name: "finance".into(),
             kind: "Folder".into(),
             container: true,
             children: Children::All,
             from: Some("/srv".into()),
-            general: vec![r("Full control", 0x1f01ff), r("Modify", 0x1301bf), r("Read & execute", 0x1200a9), r("Read", 0x120089), r("Write", 0x100116)],
-            specific: vec![s("List folder / read data", 0x1), s("Create files / write data", 0x2), s("Delete", 0x10000)],
-            generic: Generic { read: 0x120089, write: 0x100116, execute: 0x1200a0, all: 0x1f01ff },
+            general: vec![
+                r("Full control", 0x1f01ff),
+                r("Modify", 0x1301bf),
+                r("Read & execute", 0x1200a9),
+                r("Read", 0x120089),
+                r("Write", 0x100116),
+            ],
+            specific: vec![
+                s("List folder / read data", 0x1),
+                s("Create files / write data", 0x2),
+                s("Delete", 0x10000),
+            ],
+            generic: Generic {
+                read: 0x120089,
+                write: 0x100116,
+                execute: 0x1200a0,
+                all: 0x1f01ff,
+            },
             parts: vec![],
             kinds: vec![],
             part_rights: vec![],
@@ -750,17 +986,43 @@ pub mod tests {
     }
 
     pub fn container_of_accounts() -> Obj {
-        let part = |guid: &str, name: &str, kind| PartDef { guid: guid_parse(guid).unwrap(), name: name.into(), kind, set: None };
+        let part = |guid: &str, name: &str, kind| PartDef {
+            guid: guid_parse(guid).unwrap(),
+            name: name.into(),
+            kind,
+            set: None,
+        };
         Obj {
             name: "people".into(),
             kind: "Container".into(),
             children: Children::Containers,
             parts: vec![
-                part("00299570-246d-11d0-a768-00aa006e0529", "Reset password", PartKind::Right),
-                part("bc0ac240-79a9-11d0-9020-00c04fc2d4cf", "Group membership", PartKind::Set),
-                part("5805bc62-bdc9-4428-a5e2-856a0f4c185e", "Sign-in details", PartKind::Set),
+                part(
+                    "00299570-246d-11d0-a768-00aa006e0529",
+                    "Reset password",
+                    PartKind::Right,
+                ),
+                part(
+                    "bc0ac240-79a9-11d0-9020-00c04fc2d4cf",
+                    "Group membership",
+                    PartKind::Set,
+                ),
+                part(
+                    "5805bc62-bdc9-4428-a5e2-856a0f4c185e",
+                    "Sign-in details",
+                    PartKind::Set,
+                ),
             ],
-            kinds: vec![(guid_parse("bf967aba-0de6-11d0-a285-00aa003049e2").unwrap(), "Accounts".into()), (guid_parse("bf967a9c-0de6-11d0-a285-00aa003049e2").unwrap(), "Groups".into())],
+            kinds: vec![
+                (
+                    guid_parse("bf967aba-0de6-11d0-a285-00aa003049e2").unwrap(),
+                    "Accounts".into(),
+                ),
+                (
+                    guid_parse("bf967a9c-0de6-11d0-a285-00aa003049e2").unwrap(),
+                    "Groups".into(),
+                ),
+            ],
             ..folder()
         }
     }
@@ -774,7 +1036,11 @@ pub mod tests {
 
     fn round(obj: &Obj, text: &str) -> Simple {
         let (sd, _, mut ids) = read(text);
-        let s = Simple::read(obj, sd.dacl.as_ref().map(|a| a.aces.as_slice()), sd.sacl.as_ref().map(|a| a.aces.as_slice()));
+        let s = Simple::read(
+            obj,
+            sd.dacl.as_ref().map(|a| a.aces.as_slice()),
+            sd.sacl.as_ref().map(|a| a.aces.as_slice()),
+        );
         let (dacl, sacl) = s.write(obj, &mut ids);
         assert_eq!(dacl.as_ref(), sd.dacl.as_ref().map(|a| &a.aces), "{text}");
         if let (Some(got), Some(was)) = (&sacl, &sd.sacl) {
@@ -790,14 +1056,28 @@ pub mod tests {
     #[test]
     fn reading_and_writing_an_unchanged_list_gives_it_back() {
         let f = folder();
-        let s = round(&f, "O:SYG:BAD:(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)(XA;OICI;0x1200a9;;;S-1-5-21-1-2-3-1107;(@Device.Compliance == \"Compliant\" || Device_Member_of_Any {SID(S-1-5-21-1-2-3-2002)}))(A;;0x1200a9;;;AU)(A;OICIIO;GA;;;CO)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)S:(ML;OICI;NW;;;ME)(AU;OICISAFA;0x120089;;;S-1-5-21-1-2-3-1106)(AU;OICIFA;0x10156;;;WD)(RA;OICI;;;;WD;(\"Department\",TS,0x0,\"Finance\"))");
+        let s = round(
+            &f,
+            "O:SYG:BAD:(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)(XA;OICI;0x1200a9;;;S-1-5-21-1-2-3-1107;(@Device.Compliance == \"Compliant\" || Device_Member_of_Any {SID(S-1-5-21-1-2-3-2002)}))(A;;0x1200a9;;;AU)(A;OICIIO;GA;;;CO)(A;OICIID;FA;;;SY)(A;OICIID;FA;;;BA)S:(ML;OICI;NW;;;ME)(AU;OICISAFA;0x120089;;;S-1-5-21-1-2-3-1106)(AU;OICIFA;0x10156;;;WD)(RA;OICI;;;;WD;(\"Department\",TS,0x0,\"Finance\"))",
+        );
         assert!(s.entries().iter().all(|e| e.kept.is_none()));
-        assert_eq!(s.label.as_ref().map(|l| (l.level, l.inherit)), Some((8192, true)));
+        assert_eq!(
+            s.label.as_ref().map(|l| (l.level, l.inherit)),
+            Some((8192, true))
+        );
         assert_eq!(s.audits.len(), 2);
         assert_eq!(s.claims[0].claim.values, ["Finance"]);
         // Out of order, and with entries only Advanced mode can show.
-        let s = round(&f, "O:SYG:BAD:(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)(A;IO;0x1200a9;;;S-1-5-21-1-2-3-1003)(A;CIOI;0x1;;;WD)");
-        let kept: Vec<_> = s.entries().iter().filter(|e| e.kept.is_some()).map(|e| e.ace.sid.unwrap().to_string()).collect();
+        let s = round(
+            &f,
+            "O:SYG:BAD:(A;OICI;0x1301bf;;;S-1-5-21-1-2-3-1105)(D;OICI;0x10156;;;S-1-5-21-1-2-3-1106)(A;IO;0x1200a9;;;S-1-5-21-1-2-3-1003)(A;CIOI;0x1;;;WD)",
+        );
+        let kept: Vec<_> = s
+            .entries()
+            .iter()
+            .filter(|e| e.kept.is_some())
+            .map(|e| e.ace.sid.unwrap().to_string())
+            .collect();
         assert_eq!(kept, ["S-1-5-21-1-2-3-1003"]);
     }
 
@@ -806,12 +1086,23 @@ pub mod tests {
         let c = container_of_accounts();
         // rowan's rule and Auditors' are where the simple view puts them;
         // Contractors' refusal comes after an allow, so it alone is kept.
-        let s = round(&c, "O:BAG:BAD:(A;CI;0x20094;;;AU)(OD;CIIO;0x100;00299570-246d-11d0-a768-00aa006e0529;bf967aba-0de6-11d0-a285-00aa003049e2;S-1-5-21-1-2-3-1106)(OA;CIIO;0x100;00299570-246d-11d0-a768-00aa006e0529;bf967aba-0de6-11d0-a285-00aa003049e2;S-1-5-21-1-2-3-1000)(OA;CIIO;0x10;bc0ac240-79a9-11d0-9020-00c04fc2d4cf;bf967a9c-0de6-11d0-a285-00aa003049e2;S-1-5-21-1-2-3-1107)(A;CIID;0xf01ff;;;BA)");
+        let s = round(
+            &c,
+            "O:BAG:BAD:(A;CI;0x20094;;;AU)(OD;CIIO;0x100;00299570-246d-11d0-a768-00aa006e0529;bf967aba-0de6-11d0-a285-00aa003049e2;S-1-5-21-1-2-3-1106)(OA;CIIO;0x100;00299570-246d-11d0-a768-00aa006e0529;bf967aba-0de6-11d0-a285-00aa003049e2;S-1-5-21-1-2-3-1000)(OA;CIIO;0x10;bc0ac240-79a9-11d0-9020-00c04fc2d4cf;bf967a9c-0de6-11d0-a285-00aa003049e2;S-1-5-21-1-2-3-1107)(A;CIID;0xf01ff;;;BA)",
+        );
         assert_eq!(s.parts.len(), 2);
-        let kept: Vec<_> = s.entries().iter().filter(|e| e.kept.is_some()).map(|e| e.ace.sid.unwrap().to_string()).collect();
+        let kept: Vec<_> = s
+            .entries()
+            .iter()
+            .filter(|e| e.kept.is_some())
+            .map(|e| e.ace.sid.unwrap().to_string())
+            .collect();
         assert_eq!(kept, ["S-1-5-21-1-2-3-1106"]);
         // A refusal and an allow for the same parts are one rule.
-        let s = round(&c, "O:BAG:BAD:(OD;;0x20;5805bc62-bdc9-4428-a5e2-856a0f4c185e;;S-1-5-21-1-2-3-1106)(A;;0x20094;;;AU)(OA;;0x10;5805bc62-bdc9-4428-a5e2-856a0f4c185e;;S-1-5-21-1-2-3-1106)");
+        let s = round(
+            &c,
+            "O:BAG:BAD:(OD;;0x20;5805bc62-bdc9-4428-a5e2-856a0f4c185e;;S-1-5-21-1-2-3-1106)(A;;0x20094;;;AU)(OA;;0x10;5805bc62-bdc9-4428-a5e2-856a0f4c185e;;S-1-5-21-1-2-3-1106)",
+        );
         assert_eq!(s.parts.len(), 1);
         assert_eq!((s.parts[0].allow, s.parts[0].deny), (0x10, 0x20));
     }
@@ -819,12 +1110,26 @@ pub mod tests {
     #[test]
     fn what_the_simple_view_cannot_say_is_kept_and_why() {
         let f = folder();
-        let s = round(&f, "O:SYG:SYD:(AU;SA;0x1;;;WD)(A;OICISA;0x1;;;WD)(A;OIIO;0x1;;;WD)(XA;OICI;0x1;;;WD;(1 == @User.X))S:(ML;;NW;;;ME)(ML;;NR;;;LW)(ML;;NW;;;S-1-16-5000)");
+        let s = round(
+            &f,
+            "O:SYG:SYD:(AU;SA;0x1;;;WD)(A;OICISA;0x1;;;WD)(A;OIIO;0x1;;;WD)(XA;OICI;0x1;;;WD;(1 == @User.X))S:(ML;;NW;;;ME)(ML;;NR;;;LW)(ML;;NW;;;S-1-16-5000)",
+        );
         let whys: Vec<_> = s.entries().iter().filter_map(|e| e.kept.clone()).collect();
         assert_eq!(whys.len(), 3, "{whys:?}");
-        assert!(whys[0].contains("SACL's") && whys[1].contains("auditing flags") && whys[2].contains("condition"), "{whys:?}");
+        assert!(
+            whys[0].contains("SACL's")
+                && whys[1].contains("auditing flags")
+                && whys[2].contains("condition"),
+            "{whys:?}"
+        );
         // OIIO is a folder's "Files only", which the picker has.
         assert_eq!(s.skept.len(), 2);
-        assert!(s.skept[0].kept.as_ref().unwrap().contains("Only the first integrity label"));
+        assert!(
+            s.skept[0]
+                .kept
+                .as_ref()
+                .unwrap()
+                .contains("Only the first integrity label")
+        );
     }
 }

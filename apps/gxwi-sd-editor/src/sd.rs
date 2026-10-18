@@ -94,26 +94,166 @@ pub struct Type {
 }
 
 pub const TYPES: &[Type] = &[
-    Type { byte: 0x00, code: "A", way: Way::Allow, object: false, callback: false, name: "ACCESS_ALLOWED_ACE" },
-    Type { byte: 0x01, code: "D", way: Way::Deny, object: false, callback: false, name: "ACCESS_DENIED_ACE" },
-    Type { byte: 0x02, code: "AU", way: Way::Audit, object: false, callback: false, name: "SYSTEM_AUDIT_ACE" },
-    Type { byte: 0x03, code: "AL", way: Way::Alarm, object: false, callback: false, name: "SYSTEM_ALARM_ACE" },
-    Type { byte: 0x05, code: "OA", way: Way::Allow, object: true, callback: false, name: "ACCESS_ALLOWED_OBJECT_ACE" },
-    Type { byte: 0x06, code: "OD", way: Way::Deny, object: true, callback: false, name: "ACCESS_DENIED_OBJECT_ACE" },
-    Type { byte: 0x07, code: "OU", way: Way::Audit, object: true, callback: false, name: "SYSTEM_AUDIT_OBJECT_ACE" },
-    Type { byte: 0x08, code: "OL", way: Way::Alarm, object: true, callback: false, name: "SYSTEM_ALARM_OBJECT_ACE" },
-    Type { byte: 0x09, code: "XA", way: Way::Allow, object: false, callback: true, name: "ACCESS_ALLOWED_CALLBACK_ACE" },
-    Type { byte: 0x0a, code: "XD", way: Way::Deny, object: false, callback: true, name: "ACCESS_DENIED_CALLBACK_ACE" },
-    Type { byte: 0x0b, code: "ZA", way: Way::Allow, object: true, callback: true, name: "ACCESS_ALLOWED_CALLBACK_OBJECT_ACE" },
-    Type { byte: 0x0c, code: "ZD", way: Way::Deny, object: true, callback: true, name: "ACCESS_DENIED_CALLBACK_OBJECT_ACE" },
-    Type { byte: 0x0d, code: "XU", way: Way::Audit, object: false, callback: true, name: "SYSTEM_AUDIT_CALLBACK_ACE" },
-    Type { byte: 0x0e, code: "XL", way: Way::Alarm, object: false, callback: true, name: "SYSTEM_ALARM_CALLBACK_ACE" },
-    Type { byte: 0x0f, code: "ZU", way: Way::Audit, object: true, callback: true, name: "SYSTEM_AUDIT_CALLBACK_OBJECT_ACE" },
-    Type { byte: 0x10, code: "ZL", way: Way::Alarm, object: true, callback: true, name: "SYSTEM_ALARM_CALLBACK_OBJECT_ACE" },
-    Type { byte: 0x11, code: "ML", way: Way::Label, object: false, callback: false, name: "SYSTEM_MANDATORY_LABEL_ACE" },
-    Type { byte: 0x12, code: "RA", way: Way::Claim, object: false, callback: false, name: "SYSTEM_RESOURCE_ATTRIBUTE_ACE" },
-    Type { byte: 0x13, code: "SP", way: Way::Policy, object: false, callback: false, name: "SYSTEM_SCOPED_POLICY_ID_ACE" },
-    Type { byte: 0x14, code: "TL", way: Way::Trust, object: false, callback: false, name: "SYSTEM_PROCESS_TRUST_LABEL_ACE" },
+    Type {
+        byte: 0x00,
+        code: "A",
+        way: Way::Allow,
+        object: false,
+        callback: false,
+        name: "ACCESS_ALLOWED_ACE",
+    },
+    Type {
+        byte: 0x01,
+        code: "D",
+        way: Way::Deny,
+        object: false,
+        callback: false,
+        name: "ACCESS_DENIED_ACE",
+    },
+    Type {
+        byte: 0x02,
+        code: "AU",
+        way: Way::Audit,
+        object: false,
+        callback: false,
+        name: "SYSTEM_AUDIT_ACE",
+    },
+    Type {
+        byte: 0x03,
+        code: "AL",
+        way: Way::Alarm,
+        object: false,
+        callback: false,
+        name: "SYSTEM_ALARM_ACE",
+    },
+    Type {
+        byte: 0x05,
+        code: "OA",
+        way: Way::Allow,
+        object: true,
+        callback: false,
+        name: "ACCESS_ALLOWED_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x06,
+        code: "OD",
+        way: Way::Deny,
+        object: true,
+        callback: false,
+        name: "ACCESS_DENIED_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x07,
+        code: "OU",
+        way: Way::Audit,
+        object: true,
+        callback: false,
+        name: "SYSTEM_AUDIT_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x08,
+        code: "OL",
+        way: Way::Alarm,
+        object: true,
+        callback: false,
+        name: "SYSTEM_ALARM_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x09,
+        code: "XA",
+        way: Way::Allow,
+        object: false,
+        callback: true,
+        name: "ACCESS_ALLOWED_CALLBACK_ACE",
+    },
+    Type {
+        byte: 0x0a,
+        code: "XD",
+        way: Way::Deny,
+        object: false,
+        callback: true,
+        name: "ACCESS_DENIED_CALLBACK_ACE",
+    },
+    Type {
+        byte: 0x0b,
+        code: "ZA",
+        way: Way::Allow,
+        object: true,
+        callback: true,
+        name: "ACCESS_ALLOWED_CALLBACK_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x0c,
+        code: "ZD",
+        way: Way::Deny,
+        object: true,
+        callback: true,
+        name: "ACCESS_DENIED_CALLBACK_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x0d,
+        code: "XU",
+        way: Way::Audit,
+        object: false,
+        callback: true,
+        name: "SYSTEM_AUDIT_CALLBACK_ACE",
+    },
+    Type {
+        byte: 0x0e,
+        code: "XL",
+        way: Way::Alarm,
+        object: false,
+        callback: true,
+        name: "SYSTEM_ALARM_CALLBACK_ACE",
+    },
+    Type {
+        byte: 0x0f,
+        code: "ZU",
+        way: Way::Audit,
+        object: true,
+        callback: true,
+        name: "SYSTEM_AUDIT_CALLBACK_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x10,
+        code: "ZL",
+        way: Way::Alarm,
+        object: true,
+        callback: true,
+        name: "SYSTEM_ALARM_CALLBACK_OBJECT_ACE",
+    },
+    Type {
+        byte: 0x11,
+        code: "ML",
+        way: Way::Label,
+        object: false,
+        callback: false,
+        name: "SYSTEM_MANDATORY_LABEL_ACE",
+    },
+    Type {
+        byte: 0x12,
+        code: "RA",
+        way: Way::Claim,
+        object: false,
+        callback: false,
+        name: "SYSTEM_RESOURCE_ATTRIBUTE_ACE",
+    },
+    Type {
+        byte: 0x13,
+        code: "SP",
+        way: Way::Policy,
+        object: false,
+        callback: false,
+        name: "SYSTEM_SCOPED_POLICY_ID_ACE",
+    },
+    Type {
+        byte: 0x14,
+        code: "TL",
+        way: Way::Trust,
+        object: false,
+        callback: false,
+        name: "SYSTEM_PROCESS_TRUST_LABEL_ACE",
+    },
 ];
 
 /// Types KACS names but does not act on. Like every unknown type, it skips
@@ -156,7 +296,19 @@ pub struct Ace {
 
 impl Ace {
     pub fn new(id: u32, way: Way, flags: u8, mask: u32, sid: Sid) -> Ace {
-        Ace { id, way, flags, mask, sid: Some(sid), object: None, inherited_object: None, cond: None, claim: None, bytes: Vec::new(), byte: 0 }
+        Ace {
+            id,
+            way,
+            flags,
+            mask,
+            sid: Some(sid),
+            object: None,
+            inherited_object: None,
+            cond: None,
+            claim: None,
+            bytes: Vec::new(),
+            byte: 0,
+        }
     }
 
     pub fn inherited(&self) -> bool {
@@ -178,9 +330,12 @@ impl Ace {
         if self.way == Way::Unknown {
             return None;
         }
-        let object = self.way.accessy() && (self.object.is_some() || self.inherited_object.is_some());
+        let object =
+            self.way.accessy() && (self.object.is_some() || self.inherited_object.is_some());
         let callback = self.way.accessy() && self.cond.is_some();
-        TYPES.iter().find(|t| t.way == self.way && t.object == object && t.callback == callback)
+        TYPES
+            .iter()
+            .find(|t| t.way == self.way && t.object == object && t.callback == callback)
     }
 
     /// The type byte it is written with.
@@ -190,7 +345,13 @@ impl Ace {
 
     /// The same entry, by everything but which one it is.
     pub fn same(&self, other: &Ace) -> bool {
-        Ace { id: 0, ..self.clone() } == Ace { id: 0, ..other.clone() }
+        Ace {
+            id: 0,
+            ..self.clone()
+        } == Ace {
+            id: 0,
+            ..other.clone()
+        }
     }
 }
 
@@ -227,7 +388,10 @@ pub struct Found(HashMap<u32, (Ace, Vec<u8>)>);
 impl Found {
     /// The bytes `ace` was read as, while it is as it was read.
     fn bytes(&self, ace: &Ace) -> Option<&[u8]> {
-        self.0.get(&ace.id).filter(|(was, _)| was.same(ace)).map(|(_, bytes)| bytes.as_slice())
+        self.0
+            .get(&ace.id)
+            .filter(|(was, _)| was.same(ace))
+            .map(|(_, bytes)| bytes.as_slice())
     }
 
     /// The entry `id` as it was read.
@@ -275,7 +439,13 @@ impl Descriptor {
         let control = u16_at(bytes, 2).ok_or_else(bad)?;
         let at = |n: usize| u32_at(bytes, 4 + 4 * n).map(|v| v as usize).ok_or_else(bad);
         let (owner, group, sacl, dacl) = (at(0)?, at(1)?, at(2)?, at(3)?);
-        let sid = |off: usize| -> Result<Option<Sid>, String> { if off == 0 { Ok(None) } else { sid_at(bytes, off).map(|(s, _)| Some(s)).ok_or_else(bad) } };
+        let sid = |off: usize| -> Result<Option<Sid>, String> {
+            if off == 0 {
+                Ok(None)
+            } else {
+                sid_at(bytes, off).map(|(s, _)| Some(s)).ok_or_else(bad)
+            }
+        };
         let mut list = |present: bool, off: usize| -> Result<Option<Acl>, String> {
             if !present || off == 0 {
                 return Ok(None);
@@ -320,7 +490,10 @@ impl Descriptor {
 
     /// The control bits as written, with the lists' presence.
     pub fn control_bits(&self) -> u16 {
-        self.control | SR | if self.dacl.is_some() { DP } else { 0 } | if self.sacl.is_some() { SP } else { 0 }
+        self.control
+            | SR
+            | if self.dacl.is_some() { DP } else { 0 }
+            | if self.sacl.is_some() { SP } else { 0 }
     }
 }
 
@@ -349,7 +522,19 @@ pub fn parse_ace(b: &[u8], id: u32) -> Option<Ace> {
     let byte = b[0];
     let flags = b[1];
     let Some(kind) = type_by_byte(byte) else {
-        return Some(Ace { id, way: Way::Unknown, flags, mask: 0, sid: None, object: None, inherited_object: None, cond: None, claim: None, bytes: b.to_vec(), byte });
+        return Some(Ace {
+            id,
+            way: Way::Unknown,
+            flags,
+            mask: 0,
+            sid: None,
+            object: None,
+            inherited_object: None,
+            cond: None,
+            claim: None,
+            bytes: b.to_vec(),
+            byte,
+        });
     };
     let mask = u32_at(b, 4)?;
     let mut at = 8;
@@ -371,7 +556,19 @@ pub fn parse_ace(b: &[u8], id: u32) -> Option<Ace> {
     }
     let (sid, len) = sid_at(b, at)?;
     let data = &b[at + len..];
-    let mut ace = Ace { id, way: kind.way, flags, mask, sid: Some(sid), object, inherited_object, cond: None, claim: None, bytes: Vec::new(), byte: 0 };
+    let mut ace = Ace {
+        id,
+        way: kind.way,
+        flags,
+        mask,
+        sid: Some(sid),
+        object,
+        inherited_object,
+        cond: None,
+        claim: None,
+        bytes: Vec::new(),
+        byte: 0,
+    };
     if kind.callback {
         ace.cond = Some(Cond::read(data));
     }
@@ -379,7 +576,16 @@ pub fn parse_ace(b: &[u8], id: u32) -> Option<Ace> {
         match Claim::read(data) {
             Some(claim) => ace.claim = Some(claim),
             // A claim this editor cannot read is kept as it came.
-            None => return Some(Ace { way: Way::Unknown, bytes: b.to_vec(), mask: 0, sid: None, byte, ..ace }),
+            None => {
+                return Some(Ace {
+                    way: Way::Unknown,
+                    bytes: b.to_vec(),
+                    mask: 0,
+                    sid: None,
+                    byte,
+                    ..ace
+                });
+            }
         }
     }
     Some(ace)
@@ -393,7 +599,9 @@ pub fn ace_bytes(ace: &Ace, found: &Found) -> Result<Vec<u8>, String> {
     if ace.way == Way::Unknown {
         return Ok(ace.bytes.clone());
     }
-    let kind = ace.kind().ok_or("An entry has no type it can be written as.")?;
+    let kind = ace
+        .kind()
+        .ok_or("An entry has no type it can be written as.")?;
     let sid = ace.sid.ok_or("An entry names nobody.")?;
     let mut out = vec![kind.byte, ace.flags, 0, 0];
     out.extend_from_slice(&ace.mask.to_le_bytes());
@@ -419,8 +627,15 @@ pub fn ace_bytes(ace: &Ace, found: &Found) -> Result<Vec<u8>, String> {
 
 fn build_acl(acl: &Acl, found: &Found) -> Result<Vec<u8>, String> {
     // An object entry needs the list's revision to say it may have them.
-    let object = acl.aces.iter().any(|ace| ace.kind().is_some_and(|t| t.object));
-    let revision = if object { acl.revision.max(4) } else { acl.revision.max(2) };
+    let object = acl
+        .aces
+        .iter()
+        .any(|ace| ace.kind().is_some_and(|t| t.object));
+    let revision = if object {
+        acl.revision.max(4)
+    } else {
+        acl.revision.max(2)
+    };
     let mut out = vec![revision, 0, 0, 0, 0, 0, 0, 0];
     for ace in &acl.aces {
         out.extend(ace_bytes(ace, found)?);
@@ -437,8 +652,20 @@ fn build_acl(acl: &Acl, found: &Found) -> Result<Vec<u8>, String> {
 pub fn guid_text(g: &Guid) -> String {
     format!(
         "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{}",
-        g[3], g[2], g[1], g[0], g[5], g[4], g[7], g[6], g[8], g[9],
-        g[10..].iter().map(|b| format!("{b:02x}")).collect::<String>()
+        g[3],
+        g[2],
+        g[1],
+        g[0],
+        g[5],
+        g[4],
+        g[7],
+        g[6],
+        g[8],
+        g[9],
+        g[10..]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
     )
 }
 
@@ -454,7 +681,10 @@ pub fn named_guid(namespace: &Guid, name: &str) -> Guid {
     };
     let mut ns = *namespace;
     swap(&mut ns);
-    let digest = Sha1::new().chain_update(ns).chain_update(name.as_bytes()).finalize();
+    let digest = Sha1::new()
+        .chain_update(ns)
+        .chain_update(name.as_bytes())
+        .finalize();
     let mut g: Guid = digest[..16].try_into().expect("SHA-1 is 20 bytes");
     g[6] = (g[6] & 0x0f) | 0x50;
     g[8] = (g[8] & 0x3f) | 0x80;
@@ -502,7 +732,11 @@ mod tests {
         ] {
             let (sd, found, bytes) = read(text);
             let again = sd.build(&found).unwrap();
-            assert_eq!(sddl::format(&again).unwrap(), sddl::format(&bytes).unwrap(), "{text}");
+            assert_eq!(
+                sddl::format(&again).unwrap(),
+                sddl::format(&bytes).unwrap(),
+                "{text}"
+            );
             let mut found2 = Found::default();
             let reread = Descriptor::parse(&again, &mut Ids::default(), &mut found2).unwrap();
             assert_eq!(reread, sd, "{text}");
@@ -522,10 +756,21 @@ mod tests {
 
     #[test]
     fn an_unknown_type_is_kept_byte_for_byte() {
-        let unknown = [0x15u8, 0x00, 0x0c, 0x00, 0x01, 0x00, 0x00, 0x00, 0xaa, 0xbb, 0xcc, 0xdd];
+        let unknown = [
+            0x15u8, 0x00, 0x0c, 0x00, 0x01, 0x00, 0x00, 0x00, 0xaa, 0xbb, 0xcc, 0xdd,
+        ];
         let ace = parse_ace(&unknown, 7).unwrap();
         assert_eq!((ace.way, ace.byte), (Way::Unknown, 0x15));
-        let sd = Descriptor { owner: Some("S-1-5-18".parse().unwrap()), group: None, control: 0, dacl: None, sacl: Some(Acl { revision: 2, aces: vec![ace] }) };
+        let sd = Descriptor {
+            owner: Some("S-1-5-18".parse().unwrap()),
+            group: None,
+            control: 0,
+            dacl: None,
+            sacl: Some(Acl {
+                revision: 2,
+                aces: vec![ace],
+            }),
+        };
         let built = sd.build(&Found::default()).unwrap();
         assert!(built.windows(unknown.len()).any(|w| w == unknown));
     }
@@ -544,6 +789,12 @@ mod tests {
         // eventd's field namespace, and its stable vector for "timestamp"
         // (eventd-client access.rs).
         let eventd = guid_parse("e7d3a1b0-5c2f-4e8a-9b1d-0a6f3c8e2d4b").unwrap();
-        assert_eq!(named_guid(&eventd, "timestamp"), [0x67, 0x22, 0x1d, 0x34, 0xdb, 0xb9, 0x6b, 0x53, 0xb3, 0x6c, 0x94, 0xab, 0x6c, 0xd4, 0x7e, 0x4c]);
+        assert_eq!(
+            named_guid(&eventd, "timestamp"),
+            [
+                0x67, 0x22, 0x1d, 0x34, 0xdb, 0xb9, 0x6b, 0x53, 0xb3, 0x6c, 0x94, 0xab, 0x6c, 0xd4,
+                0x7e, 0x4c
+            ]
+        );
     }
 }

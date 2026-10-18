@@ -1,0 +1,4 @@
+repository = "https://github.com/peios/kernel.git"
+commit = "c966b93192535fe03663155e759424b62e9f0815"
+# Selected kernel-owned Rust closure; source files are unmodified.
+# Bazel wrappers and workspace membership are integration metadata, not upstream source.

@@ -19,7 +19,10 @@ pub enum Ended {
     Done(String),
     Cancelled(String),
     /// peipkg's code for why, and its words.
-    Failed { code: String, message: String },
+    Failed {
+        code: String,
+        message: String,
+    },
 }
 
 pub struct Run {
@@ -50,7 +53,13 @@ pub struct Run {
 }
 
 impl Run {
-    pub fn new(number: u64, title: String, verb: &'static str, args: Vec<String>, chosen: bool) -> Run {
+    pub fn new(
+        number: u64,
+        title: String,
+        verb: &'static str,
+        args: Vec<String>,
+        chosen: bool,
+    ) -> Run {
         Run {
             number,
             title,
@@ -117,9 +126,16 @@ impl Run {
     /// Answers the open question.
     pub fn answer(&mut self, id: u64, answer: &str) {
         if let Some(answers) = &self.answers {
-            answers.answer(id, answer);
+            // A closed child is reported by the event reader; do not report the
+            // same failure again from this UI answer callback.
+            let _ = answers.answer(id, answer);
         }
-        if self.question.as_ref().is_some_and(|q| q.kind == "proceed" && q.id == id) && answer == "yes" {
+        if self
+            .question
+            .as_ref()
+            .is_some_and(|q| q.kind == "proceed" && q.id == id)
+            && answer == "yes"
+        {
             self.proceeded = true;
         }
         self.question = None;
@@ -132,7 +148,11 @@ impl Run {
         {
             return said.clone();
         }
-        let ops = self.plan.as_ref().map(|p| p.operations.as_slice()).unwrap_or_default();
+        let ops = self
+            .plan
+            .as_ref()
+            .map(|p| p.operations.as_slice())
+            .unwrap_or_default();
         match (ops, summary) {
             ([], Some("nothing to do")) => "Nothing needed doing: it's already as asked.".into(),
             ([], Some(summary)) => words::sentence(summary),
@@ -154,9 +174,13 @@ impl Run {
     /// Where it has got to, as a bar: fetching and staging step through the
     /// packages coming in, then three steps for the whole.
     fn fraction(&self) -> (usize, usize) {
-        let coming = self.plan.as_ref().map_or(0, |p| p.operations.iter().filter(|o| o.kind != "remove").count());
+        let coming = self.plan.as_ref().map_or(0, |p| {
+            p.operations.iter().filter(|o| o.kind != "remove").count()
+        });
         let total = coming * 2 + 3;
-        let Some(p) = &self.progress else { return (0, total) };
+        let Some(p) = &self.progress else {
+            return (0, total);
+        };
         let done = match p.phase.as_str() {
             "fetch" => p.step.saturating_sub(1),
             "stage" => coming + p.step.saturating_sub(1),
@@ -171,7 +195,11 @@ impl Run {
 /// What a step of the transaction is doing, in words.
 fn doing(p: &Progress) -> String {
     let name = p.package.as_deref().map(words::short).unwrap_or_default();
-    let of = if p.steps > 1 { format!(" ({} of {})", p.step, p.steps) } else { String::new() };
+    let of = if p.steps > 1 {
+        format!(" ({} of {})", p.step, p.steps)
+    } else {
+        String::new()
+    };
     match p.phase.as_str() {
         "fetch" => format!("Downloading and checking {name}{of}…"),
         "stage" => format!("Preparing {name}{of}…"),
@@ -204,23 +232,58 @@ fn operation(op: &Operation) -> String {
     if let Some(root) = &op.root {
         lines.push(format!("In {root}"));
     }
-    let lines: Vec<(&str, bool)> = lines.iter().enumerate().map(|(i, l)| (l.as_str(), i == 0)).collect();
-    let size = if op.kind == "remove" { String::new() } else { words::size(op.size_installed) };
-    let control = format!(r#"<span class="what">{}</span><span class="size">{}</span>"#, escape(&what), escape(&size));
-    settings::item(&settings::icon(glyph, tile), words::short(&op.name), &lines, &control)
+    let lines: Vec<(&str, bool)> = lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| (l.as_str(), i == 0))
+        .collect();
+    let size = if op.kind == "remove" {
+        String::new()
+    } else {
+        words::size(op.size_installed)
+    };
+    let control = format!(
+        r#"<span class="what">{}</span><span class="size">{}</span>"#,
+        escape(&what),
+        escape(&size)
+    );
+    settings::item(
+        &settings::icon(glyph, tile),
+        words::short(&op.name),
+        &lines,
+        &control,
+    )
 }
 
 /// The plan, as rows, with what it costs under them.
 fn plan(plan: &Plan) -> String {
     let rows: String = plan.operations.iter().map(operation).collect();
-    let download: i64 = plan.operations.iter().filter(|o| o.kind != "remove" && !o.local).map(|o| o.size_download).sum();
-    let coming: i64 = plan.operations.iter().filter(|o| o.kind != "remove").map(|o| o.size_installed).sum();
+    let download: i64 = plan
+        .operations
+        .iter()
+        .filter(|o| o.kind != "remove" && !o.local)
+        .map(|o| o.size_download)
+        .sum();
+    let coming: i64 = plan
+        .operations
+        .iter()
+        .filter(|o| o.kind != "remove")
+        .map(|o| o.size_installed)
+        .sum();
     let foot = if download > 0 {
-        settings::hint(&format!("Downloads {}, and takes {} once installed.", words::size(download), words::size(coming)))
+        settings::hint(&format!(
+            "Downloads {}, and takes {} once installed.",
+            words::size(download),
+            words::size(coming)
+        ))
     } else {
         String::new()
     };
-    let mut out = settings::group(&words::count(plan.operations.len(), "Change", "Changes"), &rows, &foot);
+    let mut out = settings::group(
+        &words::count(plan.operations.len(), "Change", "Changes"),
+        &rows,
+        &foot,
+    );
     if !plan.other_roots.is_empty() {
         out.push_str(&settings::caution(&format!(
             "This also changes software in other installation roots: {}.",
@@ -235,7 +298,11 @@ fn plan(plan: &Plan) -> String {
 
 /// A button the keyboard goes to as it appears, sending `values`.
 pub fn focused(label: &str, event: &str, values: &[(&str, &str)], kind: Kind) -> String {
-    settings::button(label, event, values, kind, true).replacen("<button ", "<button fx-autofocus ", 1)
+    settings::button(label, event, values, kind, true).replacen(
+        "<button ",
+        "<button fx-autofocus ",
+        1,
+    )
 }
 
 /// The open question, with its answers.
@@ -272,9 +339,26 @@ fn question(run: &Run, q: &Question) -> String {
                         escape(name),
                         settings::actions(&format!(
                             "{}{}{}",
-                            settings::button("Stop Everything", "modified", &[("id", &id), ("answer", "abort")], Kind::Quiet, true),
-                            settings::button("Delete It", "modified", &[("id", &id), ("answer", "remove")], Kind::Danger, true),
-                            focused("Keep It", "modified", &[("id", &id), ("answer", "keep")], Kind::Primary),
+                            settings::button(
+                                "Stop Everything",
+                                "modified",
+                                &[("id", &id), ("answer", "abort")],
+                                Kind::Quiet,
+                                true
+                            ),
+                            settings::button(
+                                "Delete It",
+                                "modified",
+                                &[("id", &id), ("answer", "remove")],
+                                Kind::Danger,
+                                true
+                            ),
+                            focused(
+                                "Keep It",
+                                "modified",
+                                &[("id", &id), ("answer", "keep")],
+                                Kind::Primary
+                            ),
                         ))
                     ),
                 ),
@@ -282,14 +366,21 @@ fn question(run: &Run, q: &Question) -> String {
             )
         }
         _ => {
-            let removing = run.plan.as_ref().is_some_and(|p| p.operations.iter().any(|o| o.kind == "remove"));
+            let removing = run
+                .plan
+                .as_ref()
+                .is_some_and(|p| p.operations.iter().any(|o| o.kind == "remove"));
             // Taking software away is the one the keyboard doesn't start on.
             let go = if removing {
                 settings::button(run.verb, "proceed", &values, Kind::Danger, true)
             } else {
                 focused(run.verb, "proceed", &values, Kind::Primary)
             };
-            let stay = if removing { focused("Cancel", "refuse", &values, Kind::Plain) } else { settings::button("Cancel", "refuse", &values, Kind::Plain, true) };
+            let stay = if removing {
+                focused("Cancel", "refuse", &values, Kind::Plain)
+            } else {
+                settings::button("Cancel", "refuse", &values, Kind::Plain, true)
+            };
             settings::actions(&format!("{stay}{go}"))
         }
     }
@@ -297,15 +388,27 @@ fn question(run: &Run, q: &Question) -> String {
 
 /// What a failure means, and the way on where there is one: a retry with
 /// the flag that allows it.
-fn failure(code: &str, message: &str, may_retry: bool) -> (String, String, Option<(&'static str, &'static str)>) {
+fn failure(
+    code: &str,
+    message: &str,
+    may_retry: bool,
+) -> (String, String, Option<(&'static str, &'static str)>) {
     let (title, about, retry) = match code {
         "stale" => (
             "A repository's information is out of date",
             "Refreshing it didn't bring anything newer. You can carry on with what this machine already has, which may lack recent fixes. Carrying on is recorded.",
             Some(("Continue Anyway", "--allow-stale")),
         ),
-        "busy" => ("Another change is being made", "Software is already being installed or removed. Try again once that has finished.", Some(("Try Again", ""))),
-        "denied" => ("You can't make this change", "Changing software needs write access to where it is installed. As shipped, only Administrators have it.", None),
+        "busy" => (
+            "Another change is being made",
+            "Software is already being installed or removed. Try again once that has finished.",
+            Some(("Try Again", "")),
+        ),
+        "denied" => (
+            "You can't make this change",
+            "Changing software needs write access to where it is installed. As shipped, only Administrators have it.",
+            None,
+        ),
         "unowned" => (
             "A file is in the way",
             "A file this would install is already there, and no package owns it. Replacing it keeps the file that's there beside the new one.",
@@ -316,7 +419,11 @@ fn failure(code: &str, message: &str, may_retry: bool) -> (String, String, Optio
             "Its publisher says to update it with something other than Package Manager. Updating it here may skip steps they rely on.",
             Some(("Update Anyway", "--bypass-alternate-upgrade")),
         ),
-        "unresolvable" => ("This can't be done", "What it needs can't all be had together.", None),
+        "unresolvable" => (
+            "This can't be done",
+            "What it needs can't all be had together.",
+            None,
+        ),
         // Not a retry: the way on is elsewhere, and is a choice of its own.
         "untrusted" => (
             "A repository isn't trusted yet",
@@ -356,30 +463,67 @@ pub fn page(run: &Run) -> String {
                 (None, Some(said)) => words::sentence(said),
                 (None, None) => "Working out what's needed…".into(),
             };
-            let bar = if run.progress.is_some() { settings::progress(done, of, &text) } else { settings::progress(0, 0, &text) };
+            let bar = if run.progress.is_some() {
+                settings::progress(done, of, &text)
+            } else {
+                settings::progress(0, 0, &text)
+            };
             page.push_str(&settings::group("", &bar, ""));
         }
         (Some(Ended::Done(said)), _) => {
-            page.push_str(&settings::hero(&settings::big("Done", said), &settings::pill("Finished", Tone::Good)));
-            page.push_str(&settings::actions(&settings::focused_button("Close", "dismiss", Kind::Primary)));
+            page.push_str(&settings::hero(
+                &settings::big("Done", said),
+                &settings::pill("Finished", Tone::Good),
+            ));
+            page.push_str(&settings::actions(&settings::focused_button(
+                "Close",
+                "dismiss",
+                Kind::Primary,
+            )));
         }
         (Some(Ended::Cancelled(_)), _) => {
-            page.push_str(&settings::hero(&settings::big("Cancelled", "Nothing was changed."), ""));
-            page.push_str(&settings::actions(&settings::focused_button("Close", "dismiss", Kind::Primary)));
+            page.push_str(&settings::hero(
+                &settings::big("Cancelled", "Nothing was changed."),
+                "",
+            ));
+            page.push_str(&settings::actions(&settings::focused_button(
+                "Close",
+                "dismiss",
+                Kind::Primary,
+            )));
         }
         (Some(Ended::Failed { code, message }), _) => {
-            let flagged = run.args.iter().any(|a| a.starts_with("--allow-") || a.starts_with("--overwrite-") || a.starts_with("--bypass-"));
+            let flagged = run.args.iter().any(|a| {
+                a.starts_with("--allow-")
+                    || a.starts_with("--overwrite-")
+                    || a.starts_with("--bypass-")
+            });
             // A flag is offered once: what it allows was refused anyway.
-            let (title, about, retry) = failure(code, message, !flagged || code == "busy" || code == "untrusted");
+            let (title, about, retry) = failure(
+                code,
+                message,
+                !flagged || code == "busy" || code == "untrusted",
+            );
             page.push_str(&settings::group("", &settings::row(&title, &about, ""), ""));
             let retry = match retry {
                 Some((label, flag)) => match flag.strip_prefix("section:") {
-                    Some(section) => settings::button(label, "section", &[("section", section)], Kind::Primary, true),
-                    None => settings::button(label, "retry", &[("flag", flag)], Kind::Primary, true),
+                    Some(section) => settings::button(
+                        label,
+                        "section",
+                        &[("section", section)],
+                        Kind::Primary,
+                        true,
+                    ),
+                    None => {
+                        settings::button(label, "retry", &[("flag", flag)], Kind::Primary, true)
+                    }
                 },
                 None => String::new(),
             };
-            page.push_str(&settings::actions(&format!("{}{retry}", settings::focused_button("Close", "dismiss", Kind::Plain))));
+            page.push_str(&settings::actions(&format!(
+                "{}{retry}",
+                settings::focused_button("Close", "dismiss", Kind::Plain)
+            )));
         }
     }
     page.push_str(&notes(run));
@@ -419,8 +563,26 @@ fn notes(run: &Run) -> String {
     const SHOWN: usize = 3;
     let open = run.notes_open || notes.len() <= SHOWN;
     let shown = if open { notes.len() } else { SHOWN };
-    let rows: String = notes[..shown].iter().map(|w| format!(r#"<div class="st-row note"><span class="label"><small>{}</small></span></div>"#, escape(w))).collect();
-    let foot = if open { String::new() } else { settings::actions(&settings::button(&format!("Show All {}", notes.len()), "notes", &[], Kind::Quiet, true)) };
+    let rows: String = notes[..shown]
+        .iter()
+        .map(|w| {
+            format!(
+                r#"<div class="st-row note"><span class="label"><small>{}</small></span></div>"#,
+                escape(w)
+            )
+        })
+        .collect();
+    let foot = if open {
+        String::new()
+    } else {
+        settings::actions(&settings::button(
+            &format!("Show All {}", notes.len()),
+            "notes",
+            &[],
+            Kind::Quiet,
+            true,
+        ))
+    };
     settings::group(&words::count(notes.len(), "Note", "Notes"), &rows, &foot)
 }
 
@@ -429,28 +591,59 @@ mod tests {
     use super::*;
 
     fn op(kind: &str, name: &str, from: Option<&str>, to: Option<&str>) -> Operation {
-        Operation { kind: kind.into(), name: name.into(), from: from.map(Into::into), to: to.map(Into::into), ..Default::default() }
+        Operation {
+            kind: kind.into(),
+            name: name.into(),
+            from: from.map(Into::into),
+            to: to.map(Into::into),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn what_was_done_is_said_from_the_plan() {
         let mut run = Run::new(1, "Install make".into(), "Install", vec![], false);
-        run.heard(Event::Plan(Plan { operations: vec![op("install", "org.gnu.make", None, Some("4.4.1-1"))], ..Default::default() }));
-        run.heard(Event::Done { summary: Some("1 operation applied".into()), transaction: Some(3) });
+        run.heard(Event::Plan(Plan {
+            operations: vec![op("install", "org.gnu.make", None, Some("4.4.1-1"))],
+            ..Default::default()
+        }));
+        run.heard(Event::Done {
+            summary: Some("1 operation applied".into()),
+            transaction: Some(3),
+        });
         assert_eq!(run.end, Some(Ended::Done("make 4.4.1-1 installed.".into())));
 
         let mut run = Run::new(2, "Refresh".into(), "Refresh", vec![], false);
-        run.heard(Event::Done { summary: None, transaction: None });
+        run.heard(Event::Done {
+            summary: None,
+            transaction: None,
+        });
         assert_eq!(run.end, Some(Ended::Done("Done.".into())));
     }
 
     #[test]
     fn progress_moves_through_the_phases() {
         let mut run = Run::new(1, String::new(), "Install", vec![], false);
-        run.heard(Event::Plan(Plan { operations: vec![op("install", "a", None, Some("1")), op("install", "b", None, Some("1"))], ..Default::default() }));
-        run.heard(Event::Progress(Progress { phase: "fetch".into(), step: 2, steps: 2, package: Some("b".into()) }));
+        run.heard(Event::Plan(Plan {
+            operations: vec![
+                op("install", "a", None, Some("1")),
+                op("install", "b", None, Some("1")),
+            ],
+            ..Default::default()
+        }));
+        run.heard(Event::Progress(Progress {
+            phase: "fetch".into(),
+            step: 2,
+            steps: 2,
+            package: Some("b".into()),
+        }));
         assert_eq!(run.fraction(), (1, 7));
-        run.heard(Event::Progress(Progress { phase: "commit".into(), step: 1, steps: 1, package: None }));
+        run.heard(Event::Progress(Progress {
+            phase: "commit".into(),
+            step: 1,
+            steps: 1,
+            package: None,
+        }));
         assert_eq!(run.fraction(), (5, 7));
     }
 
@@ -464,16 +657,31 @@ mod tests {
         ];
         assert_eq!(
             gathered(&warnings),
-            ["Audit emission failed: x.", "2 packages came from a repository this machine no longer uses, and none offers them now, so they were left as they are."]
+            [
+                "Audit emission failed: x.",
+                "2 packages came from a repository this machine no longer uses, and none offers them now, so they were left as they are."
+            ]
         );
     }
 
     #[test]
     fn a_failure_offers_its_retry_once() {
-        let (_, about, retry) = failure("stale", "repository \"x\" serves stale metadata\npass --allow-stale", true);
+        let (_, about, retry) = failure(
+            "stale",
+            "repository \"x\" serves stale metadata\npass --allow-stale",
+            true,
+        );
         assert_eq!(retry, Some(("Continue Anyway", "--allow-stale")));
         assert!(about.ends_with("Repository \"x\" serves stale metadata."));
         assert_eq!(failure("stale", "", false).2, None);
-        assert_eq!(failure("unresolvable", "peipkg/resolver: package \"a\" depends on \"b\"", true).1, "What it needs can't all be had together. Package \"a\" depends on \"b\".");
+        assert_eq!(
+            failure(
+                "unresolvable",
+                "peipkg/resolver: package \"a\" depends on \"b\"",
+                true
+            )
+            .1,
+            "What it needs can't all be had together. Package \"a\" depends on \"b\"."
+        );
     }
 }

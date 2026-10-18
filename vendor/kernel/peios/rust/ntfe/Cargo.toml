@@ -1,0 +1,15 @@
+[package]
+name = "ntfe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+publish = false
+description = "NTFE's device, /dev/peios-ntfe, for userspace: engine status, the verdict stream, and the counters, flows and listeners dumps, decoded"
+
+[dependencies]
+# The records as the kernel lays them out: generated from uapi/pkm/ntfe.h,
+# with layout tests against the header. This crate only decodes them.
+peios-uapi = { path = "../peios-uapi", default-features = false }
+# No registry dependencies: the workspace's release gate builds offline, so the
+# few libc symbols this crate needs are declared in src/lib.rs.

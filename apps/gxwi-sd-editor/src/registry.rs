@@ -18,8 +18,16 @@ pub type Apply = Box<dyn FnMut(&[u8], &[Part]) -> Result<(), String> + Send>;
 /// A key's rights, by what they are called, the general ones first and from
 /// the most to the least.
 pub fn key_rights() -> Vec<Right> {
-    let general = |name: &str, mask: KeyAccess| Right { name: name.into(), mask: mask.bits(), general: true };
-    let special = |name: &str, mask: KeyAccess| Right { name: name.into(), mask: mask.bits(), general: false };
+    let general = |name: &str, mask: KeyAccess| Right {
+        name: name.into(),
+        mask: mask.bits(),
+        general: true,
+    };
+    let special = |name: &str, mask: KeyAccess| Right {
+        name: name.into(),
+        mask: mask.bits(),
+        general: false,
+    };
     vec![
         general("Full control", KeyAccess::ALL_ACCESS),
         general("Read", KeyAccess::READ),
@@ -40,7 +48,12 @@ pub fn key_rights() -> Vec<Right> {
 /// What the generic rights stand for on a key (LCS TRM §5.4.2). There is
 /// nothing to execute on a key, so execute stands for nothing.
 pub fn key_generic() -> Generic {
-    Generic { read: KeyAccess::READ.bits(), write: KeyAccess::WRITE.bits(), execute: 0, all: KeyAccess::ALL_ACCESS.bits() }
+    Generic {
+        read: KeyAccess::READ.bits(),
+        write: KeyAccess::WRITE.bits(),
+        execute: 0,
+        all: KeyAccess::ALL_ACCESS.bits(),
+    }
 }
 
 /// The descriptor of the key at `path`, as the editor is to be asked to show
@@ -63,14 +76,22 @@ pub fn key(path: &str, name: &str, cannot: &str) -> Result<(Request, Apply), Str
             Err(e) => return Err(format!("it could not be read ({e})")),
         }
     }
-    let Some((key, dacl, owner)) = opened else { return Err("you may not read who may use it".into()) };
+    let Some((key, dacl, owner)) = opened else {
+        return Err("you may not read who may use it".into());
+    };
     // The integrity label as well, where it can be read: it is changed with
     // the right to change the owner.
     let basic = SecInfo::OWNER | SecInfo::GROUP | SecInfo::DACL;
     let (descriptor, labelled) = match key.get_security(basic | SecInfo::LABEL) {
         Ok(descriptor) => (descriptor, true),
         Err(_) => (
-            key.get_security(basic).map_err(|e| if e.raw_os_error() == Some(EACCES) { "you may not read who may use it".to_string() } else { format!("who may use it could not be read ({e})") })?,
+            key.get_security(basic).map_err(|e| {
+                if e.raw_os_error() == Some(EACCES) {
+                    "you may not read who may use it".to_string()
+                } else {
+                    format!("who may use it could not be read ({e})")
+                }
+            })?,
             false,
         ),
     };
@@ -79,12 +100,24 @@ pub fn key(path: &str, name: &str, cannot: &str) -> Result<(Request, Apply), Str
         read.push(Part::Label);
     }
     let request = Request {
-        object: Object { name: name.into(), kind: format!("Registry key {path}"), container: true, children: Children::Containers, ..Object::default() },
+        object: Object {
+            name: name.into(),
+            kind: format!("Registry key {path}"),
+            container: true,
+            children: Children::Containers,
+            ..Object::default()
+        },
         sd: descriptor.as_bytes().to_vec(),
         read: Some(read),
         rights: key_rights(),
         generic: key_generic(),
-        can: Can { dacl, owner, label: owner && labelled, why: (!dacl).then(|| cannot.to_string()), ..Can::default() },
+        can: Can {
+            dacl,
+            owner,
+            label: owner && labelled,
+            why: (!dacl).then(|| cannot.to_string()),
+            ..Can::default()
+        },
     };
     let apply = move |sd: &[u8], parts: &[Part]| {
         let mut secinfo = SecInfo::empty();
@@ -97,9 +130,16 @@ pub fn key(path: &str, name: &str, cannot: &str) -> Result<(Request, Apply), Str
                 Part::Label => SecInfo::LABEL,
             };
         }
-        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec()).map_err(|e| format!("it is not a security descriptor ({e})"))?;
+        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec())
+            .map_err(|e| format!("it is not a security descriptor ({e})"))?;
         // The registry takes the parts named, and keeps the rest as it is.
-        key.set_security(secinfo, &sd, None).map_err(|e| if e.raw_os_error() == Some(EACCES) { "you are not allowed to".to_string() } else { e.to_string() })
+        key.set_security(secinfo, &sd, None).map_err(|e| {
+            if e.raw_os_error() == Some(EACCES) {
+                "you are not allowed to".to_string()
+            } else {
+                e.to_string()
+            }
+        })
     };
     Ok((request, Box::new(apply)))
 }
@@ -121,12 +161,22 @@ fn reg(info: peios::file::SecInfo) -> SecInfo {
 #[cfg(feature = "propagate")]
 impl Keys {
     fn open(path: &str, access: KeyAccess) -> Result<Key, String> {
-        Key::open(None, path, access, OpenFlags::OPEN_LINK).map_err(|e| if e.raw_os_error() == Some(EACCES) { "you are not allowed to".to_string() } else { e.to_string() })
+        Key::open(None, path, access, OpenFlags::OPEN_LINK).map_err(|e| {
+            if e.raw_os_error() == Some(EACCES) {
+                "you are not allowed to".to_string()
+            } else {
+                e.to_string()
+            }
+        })
     }
 
     /// What opening for `info` takes.
     fn access(info: SecInfo, write: bool) -> KeyAccess {
-        let mut access = if write { KeyAccess::empty() } else { KeyAccess::READ_CONTROL };
+        let mut access = if write {
+            KeyAccess::empty()
+        } else {
+            KeyAccess::READ_CONTROL
+        };
         if info.intersects(SecInfo::SACL) {
             access |= KeyAccess::ACCESS_SYSTEM_SECURITY;
         }
@@ -151,7 +201,10 @@ impl crate::propagate::Tree for Keys {
             let sub = sub.map_err(|e| e.to_string())?;
             let path = format!("{node}\\{}", String::from_utf8_lossy(&sub.name));
             // A link is left out: what it leads to is somewhere else.
-            let link = Key::open(None, &path, KeyAccess::READ_CONTROL, OpenFlags::OPEN_LINK).ok().and_then(|k| k.info().ok()).is_some_and(|i| i.symlink);
+            let link = Key::open(None, &path, KeyAccess::READ_CONTROL, OpenFlags::OPEN_LINK)
+                .ok()
+                .and_then(|k| k.info().ok())
+                .is_some_and(|i| i.symlink);
             if !link {
                 inside.push(path);
             }
@@ -170,14 +223,28 @@ impl crate::propagate::Tree for Keys {
     fn read(&mut self, node: &String, info: peios::file::SecInfo) -> Result<Vec<u8>, String> {
         let info = reg(info);
         let key = Keys::open(node, Keys::access(info, false))?;
-        key.get_security(info).map(|sd| sd.as_bytes().to_vec()).map_err(|e| e.to_string())
+        key.get_security(info)
+            .map(|sd| sd.as_bytes().to_vec())
+            .map_err(|e| e.to_string())
     }
 
-    fn write(&mut self, node: &String, sd: &[u8], info: peios::file::SecInfo) -> Result<(), String> {
+    fn write(
+        &mut self,
+        node: &String,
+        sd: &[u8],
+        info: peios::file::SecInfo,
+    ) -> Result<(), String> {
         let info = reg(info);
         let key = Keys::open(node, Keys::access(info, true))?;
-        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec()).map_err(|e| format!("what was worked out is not a security descriptor ({e})"))?;
-        key.set_security(info, &sd, None).map_err(|e| if e.raw_os_error() == Some(EACCES) { "you are not allowed to".to_string() } else { e.to_string() })
+        let sd = SecurityDescriptor::from_validated_bytes(sd.to_vec())
+            .map_err(|e| format!("what was worked out is not a security descriptor ({e})"))?;
+        key.set_security(info, &sd, None).map_err(|e| {
+            if e.raw_os_error() == Some(EACCES) {
+                "you are not allowed to".to_string()
+            } else {
+                e.to_string()
+            }
+        })
     }
 }
 

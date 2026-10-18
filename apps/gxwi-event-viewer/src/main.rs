@@ -32,13 +32,20 @@ libgxwi::icon!(b"dev.peios.gxwi-event-viewer");
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let (kind, origin, opens) = match arguments.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+    let (kind, origin, opens) = match arguments
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
         [] | ["--events"] => (Kind::Events, None, ""),
         ["--logs", origin] => (Kind::Logs, Some(origin.to_string()), ""),
         ["--metrics"] => (Kind::Events, None, "metrics"),
         ["--settings"] => (Kind::Events, None, "settings"),
         _ => {
-            eprintln!("gxwi-event-viewer: usage: gxwi-event-viewer [--events | --metrics | --settings | --logs ORIGIN]");
+            eprintln!(
+                "gxwi-event-viewer: usage: gxwi-event-viewer [--events | --metrics | --settings | --logs ORIGIN]"
+            );
             std::process::exit(64);
         }
     };
@@ -50,7 +57,10 @@ fn main() {
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gxwi-event-viewer.css", include_str!("gxwi-event-viewer.css"));
+    app.stylesheet(
+        "/gxwi-event-viewer.css",
+        include_str!("gxwi-event-viewer.css"),
+    );
     let mut opened = query::Filter::new(kind);
     opened.origin = origin.clone().unwrap_or_default();
     let window = app.live(&viewer::title(&opened), Viewer::new(kind));

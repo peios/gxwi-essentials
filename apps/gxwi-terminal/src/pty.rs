@@ -26,7 +26,10 @@ impl Size {
     /// The size asked for, kept to what a terminal can be: a page is not
     /// trusted to ask for something sensible.
     pub fn kept(rows: u64, cols: u64) -> Size {
-        Size { rows: rows.clamp(2, 500) as u16, cols: cols.clamp(2, 1000) as u16 }
+        Size {
+            rows: rows.clamp(2, 500) as u16,
+            cols: cols.clamp(2, 1000) as u16,
+        }
     }
 }
 
@@ -36,7 +39,13 @@ pub struct Pty(OwnedFd);
 impl Pty {
     /// Opens a pseudoterminal of `size` and starts `program` on it, in the
     /// directory `at`, with `environment` over this process's own.
-    pub fn start(program: &Path, arguments: &[String], at: &Path, environment: &[(&str, &str)], size: Size) -> io::Result<(Pty, Child)> {
+    pub fn start(
+        program: &Path,
+        arguments: &[String],
+        at: &Path,
+        environment: &[(&str, &str)],
+        size: Size,
+    ) -> io::Result<(Pty, Child)> {
         // SAFETY: each descriptor is checked before it is owned, and the
         // name is read into a buffer passed with its length.
         let (near, far) = unsafe {
@@ -53,7 +62,10 @@ impl Pty {
             if failed != 0 {
                 return Err(io::Error::from_raw_os_error(failed));
             }
-            let fd = libc::open(name.as_ptr(), libc::O_RDWR | libc::O_NOCTTY | libc::O_CLOEXEC);
+            let fd = libc::open(
+                name.as_ptr(),
+                libc::O_RDWR | libc::O_NOCTTY | libc::O_CLOEXEC,
+            );
             if fd < 0 {
                 return Err(io::Error::last_os_error());
             }
@@ -86,7 +98,12 @@ impl Pty {
     /// Tells the terminal how big it is, and whatever is running in it that
     /// it changed.
     pub fn resize(&self, size: Size) -> io::Result<()> {
-        let size = libc::winsize { ws_row: size.rows, ws_col: size.cols, ws_xpixel: 0, ws_ypixel: 0 };
+        let size = libc::winsize {
+            ws_row: size.rows,
+            ws_col: size.cols,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
         // SAFETY: the descriptor is this value's own, and the size is whole.
         if unsafe { libc::ioctl(self.0.as_raw_fd(), libc::TIOCSWINSZ, &raw const size) } < 0 {
             return Err(io::Error::last_os_error());
@@ -108,9 +125,21 @@ mod tests {
 
     #[test]
     fn a_size_is_kept_to_what_a_terminal_can_be() {
-        assert_eq!(Size::kept(40, 120), Size { rows: 40, cols: 120 });
+        assert_eq!(
+            Size::kept(40, 120),
+            Size {
+                rows: 40,
+                cols: 120
+            }
+        );
         assert_eq!(Size::kept(0, 0), Size { rows: 2, cols: 2 });
-        assert_eq!(Size::kept(u64::MAX, u64::MAX), Size { rows: 500, cols: 1000 });
+        assert_eq!(
+            Size::kept(u64::MAX, u64::MAX),
+            Size {
+                rows: 500,
+                cols: 1000
+            }
+        );
     }
 
     /// Everything printed until the program ends, which is an error from a
@@ -132,8 +161,18 @@ mod tests {
     fn what_is_started_has_the_terminal_and_its_size_and_is_where_it_was_put() {
         let size = Size { rows: 31, cols: 97 };
         let script = "stty size; pwd; echo $TERM; tty >/dev/null && echo a terminal";
-        let (pty, mut child) = Pty::start(Path::new("/bin/sh"), &[], Path::new("/"), &[("TERM", "tried"), ("SCRIPT", script)], size).unwrap();
-        pty.file().unwrap().write_all(b"eval \"$SCRIPT\"; exit\n").unwrap();
+        let (pty, mut child) = Pty::start(
+            Path::new("/bin/sh"),
+            &[],
+            Path::new("/"),
+            &[("TERM", "tried"), ("SCRIPT", script)],
+            size,
+        )
+        .unwrap();
+        pty.file()
+            .unwrap()
+            .write_all(b"eval \"$SCRIPT\"; exit\n")
+            .unwrap();
         let printed = printed(&pty);
         child.wait().unwrap();
         assert!(printed.contains("31 97"), "{printed}");

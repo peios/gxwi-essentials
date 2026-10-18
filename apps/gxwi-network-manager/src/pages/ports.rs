@@ -13,24 +13,58 @@ const BIND: u32 = 0x1;
 fn principals() -> Vec<(String, String, Vec<String>)> {
     let everyone = ["S-1-1-0".to_string(), "S-1-5-11".to_string()];
     let mut out = vec![
-        ("system".to_string(), "SYSTEM".to_string(), [vec!["S-1-5-18".to_string()], everyone.to_vec()].concat()),
-        ("admin".into(), "An administrator".into(), [vec!["S-1-5-32-544".to_string(), "S-1-5-32-545".into()], everyone.to_vec()].concat()),
-        ("user".into(), "A standard user".into(), [vec!["S-1-5-32-545".to_string()], everyone.to_vec()].concat()),
+        (
+            "system".to_string(),
+            "SYSTEM".to_string(),
+            [vec!["S-1-5-18".to_string()], everyone.to_vec()].concat(),
+        ),
+        (
+            "admin".into(),
+            "An administrator".into(),
+            [
+                vec!["S-1-5-32-544".to_string(), "S-1-5-32-545".into()],
+                everyone.to_vec(),
+            ]
+            .concat(),
+        ),
+        (
+            "user".into(),
+            "A standard user".into(),
+            [vec!["S-1-5-32-545".to_string()], everyone.to_vec()].concat(),
+        ),
     ];
     for service in ["sshd", "gxwid", "resolvd", "pnpd", "atriumd"] {
         let sid = pnp_core::Sid::service(service).to_string();
-        out.push((format!("svc:{service}"), format!("The {service} service"), [vec![sid, "S-1-5-6".into(), "S-1-5-19".into()], everyone.to_vec()].concat()));
+        out.push((
+            format!("svc:{service}"),
+            format!("The {service} service"),
+            [
+                vec![sid, "S-1-5-6".into(), "S-1-5-19".into()],
+                everyone.to_vec(),
+            ]
+            .concat(),
+        ));
     }
     out
 }
 
 /// The reservation a port takes: the narrowest that covers it, else the
 /// default.
-pub fn reservation_for<'a>(reservations: &'a [Reservation], protocol: &str, port: u16) -> Option<&'a Reservation> {
+pub fn reservation_for<'a>(
+    reservations: &'a [Reservation],
+    protocol: &str,
+    port: u16,
+) -> Option<&'a Reservation> {
     reservations
         .iter()
         .filter(|r| !r.is_default())
-        .filter_map(|r| r.covers().filter(|(protos, lo, hi)| protos.iter().any(|p| p == protocol) && *lo <= port && port <= *hi).map(|(_, lo, hi)| (r, hi - lo)))
+        .filter_map(|r| {
+            r.covers()
+                .filter(|(protos, lo, hi)| {
+                    protos.iter().any(|p| p == protocol) && *lo <= port && port <= *hi
+                })
+                .map(|(_, lo, hi)| (r, hi - lo))
+        })
         .min_by_key(|(_, width)| *width)
         .map(|(r, _)| r)
         .or_else(|| reservations.iter().find(|r| r.is_default()))
@@ -42,7 +76,12 @@ fn who(m: &Manager, sd: &[u8]) -> String {
         if mask & BIND == 0 {
             continue;
         }
-        let name = m.config.names.get(&sid).cloned().unwrap_or_else(|| sid.clone());
+        let name = m
+            .config
+            .names
+            .get(&sid)
+            .cloned()
+            .unwrap_or_else(|| sid.clone());
         let class = if !allows {
             "deny"
         } else if sid == "S-1-1-0" {
@@ -52,7 +91,11 @@ fn who(m: &Manager, sd: &[u8]) -> String {
         } else {
             ""
         };
-        out += &format!(r#"<span class="{class}">{}{}</span>"#, if allows { "" } else { "Not " }, h(&name));
+        out += &format!(
+            r#"<span class="{class}">{}{}</span>"#,
+            if allows { "" } else { "Not " },
+            h(&name)
+        );
     }
     if out.is_empty() {
         out = r#"<span>No one</span>"#.into();
@@ -72,20 +115,36 @@ pub fn page(m: &Manager) -> String {
     let mut labels = String::new();
     let mut lowest_free = 1u16;
     for r in rs.iter().filter(|r| !r.is_default()) {
-        let Some((_, lo, hi)) = r.covers() else { continue };
+        let Some((_, lo, hi)) = r.covers() else {
+            continue;
+        };
         if lo == hi {
-            shapes += &format!(r#"<rect class="pin" x="{:.1}" y="-3" width="3" height="40"><title>{}</title></rect>"#, at(lo) * 10.0 - 1.5, h(&r.selector));
+            shapes += &format!(
+                r#"<rect class="pin" x="{:.1}" y="-3" width="3" height="40"><title>{}</title></rect>"#,
+                at(lo) * 10.0 - 1.5,
+                h(&r.selector)
+            );
             labels += &format!(r#"<span class="pinlbl at{:.0}">{lo}</span>"#, at(lo));
         } else {
-            shapes += &format!(r#"<rect class="range" x="{:.1}" y="0" width="{:.1}" height="34" rx="6"><title>{}</title></rect>"#, at(lo) * 10.0, (at(hi) - at(lo)) * 10.0, h(&r.selector));
+            shapes += &format!(
+                r#"<rect class="range" x="{:.1}" y="0" width="{:.1}" height="34" rx="6"><title>{}</title></rect>"#,
+                at(lo) * 10.0,
+                (at(hi) - at(lo)) * 10.0,
+                h(&r.selector)
+            );
             if lo <= 1 {
                 lowest_free = lowest_free.max(hi.saturating_add(1));
                 labels += &format!(r#"<span class="lbl2 first">{lo}–{hi}: restricted</span>"#);
             }
         }
     }
-    labels += &format!(r#"<span class="lbl2 after at{:.0}">Others: the default</span>"#, at(lowest_free));
-    let bar = format!(r#"<svg viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true">{shapes}</svg>{labels}"#);
+    labels += &format!(
+        r#"<span class="lbl2 after at{:.0}">Others: the default</span>"#,
+        at(lowest_free)
+    );
+    let bar = format!(
+        r#"<svg viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true">{shapes}</svg>{labels}"#
+    );
     let rows: String = rs
         .iter()
         .map(|r| {
@@ -132,11 +191,19 @@ pub fn page(m: &Manager) -> String {
     let people: Vec<(String, String)> = principals().into_iter().map(|(k, l, _)| (k, l)).collect();
     format!(
         r#"{}{}<div class="sect"><div class="panel pad"><div class="portbar">{bar}</div><div class="portaxis"><span>1</span><span>10</span><span>100</span><span>1,000</span><span>10,000</span><span>65,535</span></div></div></div><div class="sect"><div class="panel scroll"><table class="tbl"><thead><tr><th>Reservation</th><th>Ports</th><th>Who can listen</th><th></th></tr></thead><tbody>{rows}</tbody></table></div><div class="checkrow gap-top8"><input class="inp mono w180" name="res-new" placeholder="tcp:8443" autocomplete="off"{off}><button class="btn sm" fx-click="perm"{}{off}>{}Add reservation</button></div></div><div class="sect"><h2>Check a port</h2><div class="panel pad"><div class="checkrow"><label class="fld"><span>Port</span><input class="inp mono w100" name="pc-port" inputmode="numeric" autocomplete="off"></label><label class="fld"><span>Protocol</span>{}</label><label class="fld"><span>Program running as</span>{}</label><button class="btn primary" fx-click="port-check">Check</button></div>{answer}</div><div class="footnote">A reservation says who may listen. Who may connect is the firewall's to say: see <button class="btn ghost sm inline" fx-click="section"{}>Exposure</button>.</div></div>"#,
-        phead("Port reservations", "Who may listen on a port. Each port uses its narrowest reservation; a port without one uses the default.", ""),
+        phead(
+            "Port reservations",
+            "Who may listen on a port. Each port uses its narrowest reservation; a port without one uses the default.",
+            ""
+        ),
         locked(m.config.may.reservations, LOCKED),
         values(&[("w", "new-reservation")]),
         svg("plus"),
-        select("pc-proto", &[("tcp".into(), "TCP".into()), ("udp".into(), "UDP".into())], true),
+        select(
+            "pc-proto",
+            &[("tcp".into(), "TCP".into()), ("udp".into(), "UDP".into())],
+            true
+        ),
         select("pc-who", &people, true),
         values(&[("section", "exposure")])
     )
@@ -147,28 +214,56 @@ mod tests {
     use super::*;
 
     fn sd(sddl: &str) -> Vec<u8> {
-        peios::security::sddl::parse(sddl).map(|s| s.as_bytes().to_vec()).unwrap_or_default()
+        peios::security::sddl::parse(sddl)
+            .map(|s| s.as_bytes().to_vec())
+            .unwrap_or_default()
     }
 
     #[test]
     fn a_port_takes_its_narrowest_reservation() {
         let rs = vec![
-            Reservation { selector: "@".into(), sd: Vec::new() },
-            Reservation { selector: "tcp,udp:1-1023".into(), sd: Vec::new() },
-            Reservation { selector: "tcp:22".into(), sd: Vec::new() },
+            Reservation {
+                selector: "@".into(),
+                sd: Vec::new(),
+            },
+            Reservation {
+                selector: "tcp,udp:1-1023".into(),
+                sd: Vec::new(),
+            },
+            Reservation {
+                selector: "tcp:22".into(),
+                sd: Vec::new(),
+            },
         ];
-        assert_eq!(reservation_for(&rs, "tcp", 22).map(|r| r.selector.as_str()), Some("tcp:22"));
-        assert_eq!(reservation_for(&rs, "udp", 22).map(|r| r.selector.as_str()), Some("tcp,udp:1-1023"));
-        assert_eq!(reservation_for(&rs, "tcp", 8080).map(|r| r.selector.as_str()), Some("@"));
+        assert_eq!(
+            reservation_for(&rs, "tcp", 22).map(|r| r.selector.as_str()),
+            Some("tcp:22")
+        );
+        assert_eq!(
+            reservation_for(&rs, "udp", 22).map(|r| r.selector.as_str()),
+            Some("tcp,udp:1-1023")
+        );
+        assert_eq!(
+            reservation_for(&rs, "tcp", 8080).map(|r| r.selector.as_str()),
+            Some("@")
+        );
     }
 
     #[test]
     fn who_may_listen_is_read_from_the_access_list() {
         let ssh = sd("O:SYG:SYD:(A;;0x1;;;SY)(A;;0x1;;;S-1-5-80-1-2-3-4-5)");
         assert!(machine::granted(&ssh, &["S-1-5-18".into()], BIND));
-        assert!(!machine::granted(&ssh, &["S-1-5-32-544".into(), "S-1-1-0".into()], BIND));
+        assert!(!machine::granted(
+            &ssh,
+            &["S-1-5-32-544".into(), "S-1-1-0".into()],
+            BIND
+        ));
         let open = sd("O:SYG:SYD:(D;;0x1;;;BG)(A;;0x1;;;WD)");
         assert!(machine::granted(&open, &["S-1-1-0".into()], BIND));
-        assert!(!machine::granted(&open, &["S-1-5-32-546".into(), "S-1-1-0".into()], BIND));
+        assert!(!machine::granted(
+            &open,
+            &["S-1-5-32-546".into(), "S-1-1-0".into()],
+            BIND
+        ));
     }
 }

@@ -1,7 +1,0 @@
-# What Gexora is to a desktop (PGSS Applications): installed as
-# /usr/share/apps/dev.peios.gexora.toml, named for the id, by the package
-# that installs the program.
-title = "Gexora"
-description = "Browse the files on this system"
-program = "/usr/bin/gexora"
-opens = ["inode/directory"]

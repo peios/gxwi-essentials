@@ -1,0 +1,72 @@
+#!/bin/sh
+# Create disposable regular-file disk images and print their QEMU arguments.
+set -eu
+umask 077
+export LC_ALL=C
+
+fail() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+[ "$#" -eq 1 ] || fail 'Usage: prepare-test-disks NEW_ABSOLUTE_DIRECTORY'
+output=$1
+case "$output" in
+/*) ;;
+*) fail 'The output directory must be absolute.' ;;
+esac
+# VM_EXTRA is split into QEMU arguments; commas also separate -drive options.
+case "$output" in
+*[!a-zA-Z0-9_./-]*) fail 'Use only letters, digits, dots, slashes, underscores and hyphens in the output path.' ;;
+esac
+[ ! -e "$output" ] && [ ! -L "$output" ] || fail "Output already exists: $output"
+for tool in truncate sgdisk mkfs.vfat mke2fs sed; do
+    command -v "$tool" >/dev/null || fail "Required tool is missing: $tool"
+done
+# A new private directory prevents stale files or symlinks from becoming mkfs targets.
+# Its parent must already exist. Never reuse, mount or open a device as an image.
+mkdir -- "$output"
+cd -- "$output"
+output=$PWD
+data=$output/data.img
+stick=$output/stick.img
+
+partition_value() {
+    information=$(sgdisk -i "$2" "$1")
+    case "$3" in
+    first) value=$(printf '%s\n' "$information" | sed -n 's/^First sector: \([0-9]*\).*/\1/p') ;;
+    size) value=$(printf '%s\n' "$information" | sed -n 's/^Partition size: \([0-9]*\) sectors.*/\1/p') ;;
+    *) fail 'Unknown partition property.' ;;
+    esac
+    case "$value" in
+    '' | *[!0-9]*) fail "Could not read partition $2 geometry from $1" ;;
+    esac
+    printf '%s\n' "$value"
+}
+
+format_fat() {
+    image=$1
+    partition=$2
+    label=$3
+    first_sector=$(partition_value "$image" "$partition" first)
+    size_sectors=$(partition_value "$image" "$partition" size)
+    mkfs.vfat -F 32 -n "$label" --offset "$first_sector" "$image" "$((size_sectors / 2))" >&2
+}
+
+truncate -s 8G "$data"
+sgdisk -o \
+    -n 1:1MiB:+512MiB -t 1:ef00 -c 1:'EFI system partition' \
+    -n 2:0:+4GiB -t 2:8300 -c 2:Data \
+    -n 3:0:+1GiB -t 3:8300 -c 3:Spare \
+    "$data" >&2
+format_fat "$data" 1 SYSTEM
+first_sector=$(partition_value "$data" 2 first)
+size_sectors=$(partition_value "$data" 2 size)
+mke2fs -q -F -t ext4 -L data -E "offset=$((first_sector * 512))" \
+    "$data" "$((size_sectors / 2))k" >&2
+
+truncate -s 2G "$stick"
+sgdisk -o -n 1:1MiB:0 -t 1:0700 -c 1:Stick "$stick" >&2
+format_fat "$stick" 1 STICK
+
+printf '%s\n' "-drive file=$data,if=none,id=data,format=raw -device virtio-blk-pci,drive=data,serial=PEIOS-DATA-1 -device qemu-xhci -drive file=$stick,if=none,id=stick,format=raw -device usb-storage,drive=stick,removable=on"

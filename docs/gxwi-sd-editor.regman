@@ -1,0 +1,83 @@
+--- machine\common\securitydescriptorbuilder
+canonical: Machine\Common\SecurityDescriptorBuilder
+
+Shared suggestions for programs that construct security descriptors.
+
+These settings describe claims and remember applied conditions. They do
+not grant access or change the meaning of a security descriptor. Access
+follows the key's registry security. The Permissions Editor opens existing
+keys and does not create this shared root.
+
+--- machine\common\securitydescriptorbuilder\knownclaims
+canonical: Machine\Common\SecurityDescriptorBuilder\KnownClaims
+
+Administrator-defined claim names and suggested values.
+
+Each child key names one claim as `Source.Name`, such as
+`User.Department` or `Resource.Classification`. Sources understood by the
+editor are `User`, `Device`, `Resource`, and `Local`. The child can contain
+Type, Values, and Description. Missing or unreadable keys supply no
+suggestions; an unreadable child is skipped. Invalid value types are
+ignored without changing stored data.
+
+--- machine\common\securitydescriptorbuilder\knownclaims\<claim> type
+canonical: Machine\Common\SecurityDescriptorBuilder\KnownClaims\<claim> Type
+type: REG_SZ
+default: (absent: no suggested type)
+valid: TS, TI, TU, TB, TD, or TX
+applies: restart (when another Permissions Editor dialog opens)
+
+Suggested SDDL type of a claim.
+
+TS means text, TI signed integer, TU unsigned integer, TB Boolean, TD
+identity, and TX bytes. Leading and trailing whitespace is ignored. An
+unknown type supplies no type suggestion.
+
+--- machine\common\securitydescriptorbuilder\knownclaims\<claim> values
+canonical: Machine\Common\SecurityDescriptorBuilder\KnownClaims\<claim> Values
+type: REG_MULTI_SZ
+default: (absent: no suggested values)
+valid: NUL-separated text suggestions
+applies: restart (when another Permissions Editor dialog opens)
+
+Ordered suggested values for a claim.
+
+The editor displays the stored order. Empty strings are ignored. A
+suggestion does not constrain which valid values a condition can use.
+
+--- machine\common\securitydescriptorbuilder\knownclaims\<claim> description
+canonical: Machine\Common\SecurityDescriptorBuilder\KnownClaims\<claim> Description
+type: REG_SZ
+default: (absent: no description)
+valid: descriptive text
+applies: restart (when another Permissions Editor dialog opens)
+
+Explanation of a claim's purpose.
+
+The description helps a person choose a claim; it does not affect access
+checks. Invalid UTF-8 in suggestion text is displayed with replacement
+characters, rather than rejected as a registry read error.
+
+--- machine\common\securitydescriptorbuilder usedclaims
+canonical: Machine\Common\SecurityDescriptorBuilder UsedClaims
+type: REG_MULTI_SZ
+default: (absent: no learned suggestions)
+valid: NUL-separated usage records with tab-separated fields
+applies: restart (when another Permissions Editor dialog opens)
+
+Claim and value usage counts learned from applied conditions.
+
+Each string contains a claim name, a decimal unsigned 32-bit usage count,
+and zero or more `value=count` fields, separated by tabs. For example,
+`User.Department<TAB>2<TAB>Finance=2` records two uses of that claim and
+value. Here `<TAB>` denotes a literal tab byte, not those five characters.
+
+Records without a valid claim count are skipped. Invalid value counts are
+skipped independently. The final equals sign separates a value from its
+count. A repeated claim name replaces its earlier record. Suggestions are
+ordered by descending usage, then by name for ties.
+
+The editor learns from applied conditions, not unfinished edits. It writes
+only when the existing key grants SET_VALUE. Missing or unreadable data
+supplies no learned suggestions. Its own edits update the open dialog's
+state; another dialog reads the saved value when it opens.

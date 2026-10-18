@@ -1,0 +1,33 @@
+{
+    "git+https://github.com/peios/authd.git?rev=a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa#a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa": {
+        "third-party/authd-a014fa4c74f1/LICENSE": "f2e13dfaed084ae47cd23808d8015fa8d04de7ec777c66437cf2c54949976aa4"
+    },
+    "git+https://github.com/peios/eventd.git?rev=d9833bff0ebb0707add6bfb1fd78dd5d49261eaf#d9833bff0ebb0707add6bfb1fd78dd5d49261eaf": {
+        "third-party/eventd-d9833bff0ebb/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"
+    },
+    "git+https://github.com/peios/gxwi.git?rev=e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76#e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76": {
+        "third-party/gxwi-e9d86e56e8d7/LICENSE": "f2e13dfaed084ae47cd23808d8015fa8d04de7ec777c66437cf2c54949976aa4"
+    },
+    "git+https://github.com/peios/netd.git?rev=23af1f6b84f3764d9327eb009ced56b2a16b7aa8#23af1f6b84f3764d9327eb009ced56b2a16b7aa8": {
+        "third-party/netd-23af1f6b84f3/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"
+    },
+    "git+https://github.com/peios/peinit.git?rev=0e20fef16f3c170d8fba0e3a169b617e7b4da3aa#0e20fef16f3c170d8fba0e3a169b617e7b4da3aa": {
+        "third-party/peinit-0e20fef16f3c/LICENSE": "f2e13dfaed084ae47cd23808d8015fa8d04de7ec777c66437cf2c54949976aa4"
+    },
+    "git+https://github.com/peios/peios-rs.git?rev=f8c84930f2b71763bcf0550df0b1420a0f63b21e#f8c84930f2b71763bcf0550df0b1420a0f63b21e": {
+        "third-party/peios-rs-f8c84930f2b7/LICENSE": "f2e13dfaed084ae47cd23808d8015fa8d04de7ec777c66437cf2c54949976aa4"
+    },
+    "git+https://github.com/peios/peiosutils.git?rev=67ffede760dc1c5767fbb3c6c66e5fc5e12b7314#67ffede760dc1c5767fbb3c6c66e5fc5e12b7314": {
+        "third-party/peiosutils-67ffede760dc/LICENSE": "29953405eaa3dcc41c37d1621d55b6a47eee93e05613e439e73295029740b10c",
+        "third-party/peiosutils-67ffede760dc/NOTICE": "78720cb9bee485fb0c761526f52d23047f78789139861696d12051d9169a3cb0"
+    },
+    "git+https://github.com/peios/resolvd.git?rev=9c96d693c9672e635cc40ee1e2ea8122e64f017e#9c96d693c9672e635cc40ee1e2ea8122e64f017e": {
+        "third-party/resolvd-9c96d693c967/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"
+    },
+    "git+https://github.com/peios/timed.git?rev=c1db503a60108542c8586c574802e5f2339dbcb4#c1db503a60108542c8586c574802e5f2339dbcb4": {
+        "third-party/timed-c1db503a6010/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"
+    },
+    "git+https://github.com/peios/trustd.git?rev=2fd7d86aac00e207320bda1ae11045aec3d61fbf#2fd7d86aac00e207320bda1ae11045aec3d61fbf": {
+        "third-party/trustd-2fd7d86aac00/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"
+    }
+}

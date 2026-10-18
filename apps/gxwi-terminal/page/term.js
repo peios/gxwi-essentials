@@ -18,6 +18,7 @@
 
 import { Terminal } from "./vendor/xterm.mjs";
 import { FitAddon } from "./vendor/addon-fit.mjs";
+import { InputQueue } from "./input.mjs";
 
 const room = document.getElementById("room");
 const said = document.getElementById("said");
@@ -27,7 +28,13 @@ const colour = (name) => getComputedStyle(document.documentElement).getPropertyV
 
 function theme() {
     const numbered = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
-    const named = { background: colour("--bg-base"), foreground: colour("--text-body"), cursor: colour("--accent-solid"), cursorAccent: colour("--bg-base"), selectionBackground: colour("--term-selection") };
+    const named = {
+        background: colour("--bg-base"),
+        foreground: colour("--text-body"),
+        cursor: colour("--accent-solid"),
+        cursorAccent: colour("--bg-base"),
+        selectionBackground: colour("--term-selection"),
+    };
     for (const name of numbered) {
         named[name] = colour(`--term-${name}`);
         named[`bright${name[0].toUpperCase()}${name.slice(1)}`] = colour(`--term-bright-${name}`);
@@ -36,20 +43,27 @@ function theme() {
 }
 
 const FONT = colour("--font-mono") || "ui-monospace, monospace";
-const SIZE = 14;
+const FONT_SIZE_PX = 14;
+const SCROLLBACK_LINES = 5000;
+const RECONNECT_DELAY_MS = 1000;
+const RESIZE_DELAY_MS = 60;
+const MIN_ROOM_WIDTH_PX = 40;
+const MIN_ROOM_HEIGHT_PX = 20;
 
 // The emulator measures its cell once, from the font it has when it opens,
 // and each row is that high with what overflows it cut off. So it opens on
 // the font it will draw with, loaded, and measures again if a face arrives
 // later; and a row has room below the baseline, where an underscore sits,
 // which at a line height of 1 some monospace faces draw outside the cell.
-await document.fonts.load(`${SIZE}px ${FONT}`).catch(() => {});
+await document.fonts.load(`${FONT_SIZE_PX}px ${FONT}`).catch(() => {
+    // A missing preferred font falls back to the configured monospace family.
+});
 const term = new Terminal({
     fontFamily: FONT,
-    fontSize: SIZE,
+    fontSize: FONT_SIZE_PX,
     lineHeight: 1.2,
     cursorBlink: true,
-    scrollback: 5000,
+    scrollback: SCROLLBACK_LINES,
     theme: theme(),
 });
 const fit = new FitAddon();
@@ -61,7 +75,10 @@ document.fonts.addEventListener("loadingdone", () => {
     term.options.fontFamily = FONT;
     ask();
 });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => (term.options.theme = theme()));
+matchMedia("(prefers-color-scheme: dark)").addEventListener(
+    "change",
+    () => (term.options.theme = theme()),
+);
 
 function say(what) {
     said.textContent = what ?? "";
@@ -75,7 +92,20 @@ let ended = false;
 /** Whether what comes next prints the terminal as it stands. */
 let afresh = false;
 
-const encoder = new TextEncoder();
+const input = new InputQueue((state) => {
+    term.options.disableStdin = !state.connected || state.ended || state.paused;
+    say(
+        state.warning ||
+            (state.ended
+                ? "Ended"
+                : state.paused
+                  ? "Input paused: waiting for the program to read."
+                  : !state.connected
+                    ? "Not reaching the terminal. Trying again."
+                    : ""),
+    );
+});
+term.options.disableStdin = true;
 const send = (what) => socket?.readyState === WebSocket.OPEN && socket.send(what);
 
 function connect() {
@@ -84,7 +114,7 @@ function connect() {
     const made = new WebSocket(address);
     made.binaryType = "arraybuffer";
     socket = made;
-    made.onopen = () => say(null);
+    made.onopen = () => input.open((bytes) => made.send(bytes));
     made.onmessage = (message) => {
         if (typeof message.data !== "string") {
             term.write(new Uint8Array(message.data), afresh ? ask : undefined);
@@ -101,39 +131,52 @@ function connect() {
             case "size":
                 term.resize(heard.cols, heard.rows);
                 break;
+            case "typed":
+                if (!ended && !input.acknowledge(heard.bytes)) made.close();
+                break;
+            case "input-error":
+                input.disconnect(`Input interrupted: ${heard.why}. Queued input was not replayed.`);
+                made.close();
+                break;
             case "ended":
                 ended = true;
-                say("Ended");
+                input.finish();
                 break;
         }
     };
     made.onclose = () => {
         if (socket !== made || ended) return;
-        say("Not reaching the terminal. Trying again.");
-        setTimeout(connect, 1000);
+        input.disconnect();
+        setTimeout(connect, RECONNECT_DELAY_MS);
     };
 }
 
-term.onData((typed) => send(encoder.encode(typed)));
+term.onData((typed) => input.text(typed));
 // What is not text: a mouse's reports, in the older way of making them.
-term.onBinary((typed) => send(Uint8Array.from(typed, (c) => c.charCodeAt(0))));
+term.onBinary((typed) => input.text(typed, { binary: true }));
 
 // ---- the size
 
 /** Says what this page has room for, if it has any: one out of sight has none. */
 function ask() {
     const box = room.getBoundingClientRect();
-    if (box.width < 40 || box.height < 20 || document.visibilityState !== "visible") return;
-    const room_for = fit.proposeDimensions();
-    if (!room_for || !(room_for.cols >= 2) || !(room_for.rows >= 2)) return;
-    if (room_for.cols === term.cols && room_for.rows === term.rows) return;
-    send(JSON.stringify({ type: "size", rows: room_for.rows, cols: room_for.cols }));
+    if (
+        box.width < MIN_ROOM_WIDTH_PX ||
+        box.height < MIN_ROOM_HEIGHT_PX ||
+        document.visibilityState !== "visible"
+    ) {
+        return;
+    }
+    const roomFor = fit.proposeDimensions();
+    if (!roomFor || !(roomFor.cols >= 2) || !(roomFor.rows >= 2)) return;
+    if (roomFor.cols === term.cols && roomFor.rows === term.rows) return;
+    send(JSON.stringify({ type: "size", rows: roomFor.rows, cols: roomFor.cols }));
 }
 
 let asking = 0;
 new ResizeObserver(() => {
     clearTimeout(asking);
-    asking = setTimeout(ask, 60);
+    asking = setTimeout(ask, RESIZE_DELAY_MS);
 }).observe(room);
 
 // ---- the keyboard
@@ -145,11 +188,15 @@ window.addEventListener("focus", () => {
 
 function copy() {
     const text = term.getSelection();
-    if (text && window.parent !== window) window.parent.postMessage({ fx: "copy", text }, location.origin);
+    if (text && window.parent !== window) {
+        window.parent.postMessage({ fx: "copy", text }, location.origin);
+    }
 }
 
 term.attachCustomKeyEventHandler((event) => {
-    const pasting = (event.ctrlKey && event.shiftKey && event.code === "KeyV") || (event.shiftKey && !event.ctrlKey && event.key === "Insert");
+    const pasting =
+        (event.ctrlKey && event.shiftKey && event.code === "KeyV") ||
+        (event.shiftKey && !event.ctrlKey && event.key === "Insert");
     if (pasting) return false;
     if (event.ctrlKey && event.shiftKey && event.code === "KeyC") {
         if (event.type === "keydown") copy();

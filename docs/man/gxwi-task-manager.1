@@ -1,0 +1,57 @@
+.TH GXWI-TASK-MANAGER 1 2026-10-19 "Peios gxwi-task-manager 0.1.0"
+.SH NAME
+gxwi-task-manager \- see what is running, and who is signed in, on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-task-manager
+.SH DESCRIPTION
+Task Manager shows running processes and sessions in four views.
+Processes lists every process, with its PID, who it runs as, and its share of the processor and memory.
+Group by arranges them by service or job, or by person, and Find narrows them.
+The process picked is shown in full beside it: what started it, its command, its service or job, its session, its integrity, its protection and its mitigations.
+Performance graphs the last two minutes of the processors, memory, each disk and each network interface.
+Jobs lists the jobs peinit is running.
+Signed in lists each logon session: who, how, since when, and its processes.
+.PP
+It reads /proc as the person looking, and asks peinit which services and jobs there are and authd who each SID is, with no more authority than they have.
+What they cannot see is left out or marked, and the window says how much and why.
+As shipped, who a process runs as and its command are visible to that person and to Administrators.
+A protected process is closed to everyone, Administrators included, but is still listed.
+The full list of sessions is the kernel's, which only Administrators can read; anyone else sees the sessions their own processes are in.
+.PP
+End process asks first, then asks the process to end, holding it by a pidfd so that another given the same PID cannot be ended by mistake; one still there after five seconds is offered End it now.
+Stop service and Stop job ask peinit to stop what the process belongs to.
+Sign out asks authd to end a session and every process in it.
+Each is offered only where the person can: End process where the process's own descriptor lets them, Stop where peinit says they can stop it, and Sign out for their own sessions and, as shipped, anyone's to Administrators.
+Where they cannot, the window says why.
+.PP
+Everything is read again every two seconds; F5, or Refresh, reads it at once.
+Nothing is kept once the window closes.
+What is defined, rather than what is running, is Services Manager's.
+.SH SECURITY
+Process, peinit, and session operations use the requester's access.
+A protected process can be visible in the list without readable details or termination access.
+A retained process descriptor protects termination against process-ID reuse.
+.SH EXIT STATUS
+.TP
+.B 0
+The application session ended normally.
+.TP
+.B 1
+A connection, initialization, or application error prevented normal operation.
+.TP
+.B 64
+Invalid command arguments.
+.SH ENVIRONMENT
+.TP
+.B GXWI_DISPLAY
+The display connection supplied by the desktop session.
+Launch through the desktop so inherited session descriptors and identity are available.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-task-manager.toml
+Its application declaration, listed in a launcher as Task Manager.
+.TP
+.I /proc
+The processes, and the machine's processor, memory, disk and network figures.
+.SH SEE ALSO
+Task Manager, and The Process Security Block, at learn.peios.org.

@@ -9,10 +9,10 @@
 //! in with keys only — can't prove itself that way, so its keys are an
 //! administrator's to change.
 
-use libauthd::Secret;
-use libauthd::credential::Policy;
-use libauthd_client::credential::{Abandon, Collector, Credentials, Refusal, Round};
-use libauthd_client::own::{Own, OwnAccount};
+use auth_core::Secret;
+use auth_core::credential::Policy;
+use auth_core::client::credential::{Abandon, Collector, Credentials, Refusal, Round};
+use auth_core::client::own::{Own, OwnAccount};
 use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
 use libgxwi::{Fields, escape};
 
@@ -24,12 +24,21 @@ pub fn read() -> Account {
 }
 
 pub fn fill(account: &Account, fields: &mut Fields) {
-    fields.set("display-name", account.as_ref().map_or("", |a| a.display_name.as_str()));
+    fields.set(
+        "display-name",
+        account.as_ref().map_or("", |a| a.display_name.as_str()),
+    );
 }
 
 /// The fields that hold passwords, emptied as soon as they have been used:
 /// what is typed is part of the window, on every screen it is on.
-pub const SECRETS: [&str; 5] = ["current", "new", "confirm", "key-password", "remove-password"];
+pub const SECRETS: [&str; 5] = [
+    "current",
+    "new",
+    "confirm",
+    "key-password",
+    "remove-password",
+];
 
 pub fn forget_secrets(fields: &mut Fields) {
     for name in SECRETS {
@@ -94,21 +103,39 @@ fn unreadable(why: &str) -> String {
 }
 
 pub fn render_account(account: &Account, fields: &Fields) -> String {
-    let head = settings::head(Glyph::User, Tile::Orange, "Account", "Your display name and sign-in details.");
+    let head = settings::head(
+        Glyph::User,
+        Tile::Orange,
+        "Account",
+        "Your display name and sign-in details.",
+    );
     let account = match account {
         Err(why) => return format!("{head}{}", unreadable(why)),
         Ok(account) => account,
     };
     let (shown, under) = if account.display_name.is_empty() {
-        (account.name.as_str(), "No display name set. Your account name is shown instead.".to_string())
+        (
+            account.name.as_str(),
+            "No display name set. Your account name is shown instead.".to_string(),
+        )
     } else {
-        (account.display_name.as_str(), format!("Signed in as {}", account.name))
+        (
+            account.display_name.as_str(),
+            format!("Signed in as {}", account.name),
+        )
     };
     let hero = settings::hero(
         &settings::hero_title(Glyph::User, Tile::Orange, shown, &under),
         &settings::pill(policy_words(account.policy), Tone::Plain),
     );
-    let mut control = settings::text("display-name", "Display Name", "text", Width::Normal, true, r#"maxlength="256" autocomplete="name" placeholder="Not set""#);
+    let mut control = settings::text(
+        "display-name",
+        "Display Name",
+        "text",
+        Width::Normal,
+        true,
+        r#"maxlength="256" autocomplete="name" placeholder="Not set""#,
+    );
     if fields.get("display-name").trim() != account.display_name {
         control.push_str(&settings::submit("Apply", Kind::Primary, true));
     }
@@ -116,20 +143,33 @@ pub fn render_account(account: &Account, fields: &Fields) -> String {
         r#"<form fx-submit="save-name">{}</form>"#,
         settings::group(
             "Profile",
-            &settings::row("Display Name", "Shown on the desktop from your next sign-in.", &control),
+            &settings::row(
+                "Display Name",
+                "Shown on the desktop from your next sign-in.",
+                &control
+            ),
             ""
         )
     );
     let facts = settings::group(
         "Account Details",
-        &format!("{}{}", settings::fact("Account Name", &account.name, false), settings::fact("Sign-In Method", policy_words(account.policy), false)),
+        &format!(
+            "{}{}",
+            settings::fact("Account Name", &account.name, false),
+            settings::fact("Sign-In Method", policy_words(account.policy), false)
+        ),
         &settings::hint("An administrator can change these in Principals Manager."),
     );
     format!("{head}{hero}{name}{facts}")
 }
 
 pub fn render_password(account: &Account, fields: &Fields) -> String {
-    let head = settings::head(Glyph::Lock, Tile::Green, "Password", "Used to sign in here and over SSH.");
+    let head = settings::head(
+        Glyph::Lock,
+        Tile::Green,
+        "Password",
+        "Used to sign in here and over SSH.",
+    );
     let account = match account {
         Err(why) => return format!("{head}{}", unreadable(why)),
         Ok(account) => account,
@@ -144,9 +184,22 @@ pub fn render_password(account: &Account, fields: &Fields) -> String {
         );
     }
     let field = |name: &str, label: &str, complete: &str| {
-        settings::row(label, "", &settings::text(name, label, "password", Width::Normal, true, &format!(r#"autocomplete="{complete}""#)))
+        settings::row(
+            label,
+            "",
+            &settings::text(
+                name,
+                label,
+                "password",
+                Width::Normal,
+                true,
+                &format!(r#"autocomplete="{complete}""#),
+            ),
+        )
     };
-    let ready = !fields.get("current").is_empty() && !fields.get("new").is_empty() && !fields.get("confirm").is_empty();
+    let ready = !fields.get("current").is_empty()
+        && !fields.get("new").is_empty()
+        && !fields.get("confirm").is_empty();
     let rows = format!(
         "{}{}{}",
         field("current", "Current Password", "current-password"),
@@ -158,11 +211,24 @@ pub fn render_password(account: &Account, fields: &Fields) -> String {
         settings::actions(&settings::submit("Change Password", Kind::Primary, ready)),
         settings::hint("Takes effect at your next sign-in. You stay signed in now.")
     );
-    format!(r#"{head}<form fx-submit="change-password">{}</form>"#, settings::group("Change Password", &rows, &foot))
+    format!(
+        r#"{head}<form fx-submit="change-password">{}</form>"#,
+        settings::group("Change Password", &rows, &foot)
+    )
 }
 
-pub fn render_keys(account: &Account, fields: &Fields, removing: Option<&Removing>, adding: bool) -> String {
-    let head = settings::head(Glyph::Key, Tile::Teal, "SSH Keys", "Sign in from another computer without a password.");
+pub fn render_keys(
+    account: &Account,
+    fields: &Fields,
+    removing: Option<&Removing>,
+    adding: bool,
+) -> String {
+    let head = settings::head(
+        Glyph::Key,
+        Tile::Teal,
+        "SSH Keys",
+        "Sign in from another computer without a password.",
+    );
     let account = match account {
         Err(why) => return format!("{head}{}", unreadable(why)),
         Ok(account) => account,
@@ -170,17 +236,35 @@ pub fn render_keys(account: &Account, fields: &Fields, removing: Option<&Removin
     let proves = can_prove(account);
     let mut rows = String::new();
     for key in &account.keys {
-        let added = jiff::Timestamp::from_second(key.created as i64).map(|t| t.strftime("%-d %b %Y").to_string()).unwrap_or_default();
+        let added = jiff::Timestamp::from_second(key.created as i64)
+            .map(|t| t.strftime("%-d %b %Y").to_string())
+            .unwrap_or_default();
         let this = removing.is_some_and(|r| r.fingerprint == key.fingerprint);
         let remove = if proves && !this && removing.is_none() && !adding {
-            settings::button("Remove", "remove-key", &[("fingerprint", &key.fingerprint), ("label", &key.label)], Kind::Plain, true)
+            settings::button(
+                "Remove",
+                "remove-key",
+                &[("fingerprint", &key.fingerprint), ("label", &key.label)],
+                Kind::Plain,
+                true,
+            )
         } else {
             String::new()
         };
-        let kind = format!("{} · added {added}", key.algorithm.trim_start_matches("ssh-").replace("ed25519", "Ed25519").replace("rsa", "RSA"));
+        let kind = format!(
+            "{} · added {added}",
+            key.algorithm
+                .trim_start_matches("ssh-")
+                .replace("ed25519", "Ed25519")
+                .replace("rsa", "RSA")
+        );
         rows.push_str(&settings::item(
             &settings::icon(Glyph::Key, Tile::Teal),
-            if key.label.is_empty() { "A key" } else { &key.label },
+            if key.label.is_empty() {
+                "A key"
+            } else {
+                &key.label
+            },
             &[(&key.fingerprint, true), (&kind, false)],
             &remove,
         ));
@@ -201,13 +285,22 @@ pub fn render_keys(account: &Account, fields: &Fields, removing: Option<&Removin
         }
     }
     if account.keys.is_empty() {
-        let about = if proves { "Add the public key of each computer you sign in from." } else { "" };
+        let about = if proves {
+            "Add the public key of each computer you sign in from."
+        } else {
+            ""
+        };
         rows.push_str(&settings::row("No Keys", about, ""));
     }
     if proves {
         if adding {
-            let ready = !fields.get("key").trim().is_empty() && !fields.get("key-password").is_empty();
-            rows.push_str(&settings::row("Add Key", "Paste the contents of your public key file (.pub).", ""));
+            let ready =
+                !fields.get("key").trim().is_empty() && !fields.get("key-password").is_empty();
+            rows.push_str(&settings::row(
+                "Add Key",
+                "Paste the contents of your public key file (.pub).",
+                "",
+            ));
             rows.push_str(&settings::more(
                 More::Form,
                 &format!(
@@ -244,8 +337,14 @@ pub fn render_keys(account: &Account, fields: &Fields, removing: Option<&Removin
 
 pub fn save_name(fields: &Fields) -> Result<String, String> {
     let name = fields.get("display-name").trim().to_string();
-    Own::new().set_display_name(&name).map_err(|refusal| refusal.reason)?;
-    Ok(if name.is_empty() { "Display name cleared.".into() } else { format!("Display name set to {name}.") })
+    Own::new()
+        .set_display_name(&name)
+        .map_err(|refusal| refusal.reason)?;
+    Ok(if name.is_empty() {
+        "Display name cleared.".into()
+    } else {
+        format!("Display name set to {name}.")
+    })
 }
 
 /// Answers each round from what the form holds, in order, and keeps every
@@ -260,28 +359,50 @@ struct Form {
 
 impl Collector for Form {
     fn round(&mut self, round: &Round) -> Result<Vec<Secret>, Abandon> {
-        self.said.extend(round.messages.iter().map(|notice| notice.text.clone()));
+        self.said
+            .extend(round.messages.iter().map(|notice| notice.text.clone()));
         if self.answers.len() < round.prompts.len() {
             return Err(Abandon::new("It asked for more than the form holds."));
         }
-        Ok(round.prompts.iter().filter_map(|_| self.answers.pop_front()).collect())
+        Ok(round
+            .prompts
+            .iter()
+            .filter_map(|_| self.answers.pop_front())
+            .collect())
     }
 }
 
 impl Form {
     /// What the authority said, then the window's own words, a line each.
     fn with(&self, ours: &str) -> String {
-        self.said.iter().map(String::as_str).chain([ours]).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
+        self.said
+            .iter()
+            .map(String::as_str)
+            .chain([ours])
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
 fn form(answers: &[&str]) -> Form {
-    Form { answers: answers.iter().map(|a| Secret::from_slice(a.as_bytes())).collect(), said: Vec::new() }
+    Form {
+        answers: answers
+            .iter()
+            .map(|a| Secret::from_slice(a.as_bytes()))
+            .collect(),
+        said: Vec::new(),
+    }
 }
 
 /// The outcome of a conversation, in words: what the authority said, and
 /// what the refusal's code means. The code is branched on, never the text.
-fn outcome(result: Result<(), Refusal>, form: &Form, done: &str, what: &str) -> Result<String, String> {
+fn outcome(
+    result: Result<(), Refusal>,
+    form: &Form,
+    done: &str,
+    what: &str,
+) -> Result<String, String> {
     let refusal = match result {
         Ok(()) => return Ok(form.with(done)),
         Err(refusal) => refusal,
@@ -301,13 +422,22 @@ fn outcome(result: Result<(), Refusal>, form: &Form, done: &str, what: &str) -> 
 }
 
 pub fn change_password(fields: &Fields) -> Result<String, String> {
-    let (current, new, confirm) = (fields.get("current"), fields.get("new"), fields.get("confirm"));
+    let (current, new, confirm) = (
+        fields.get("current"),
+        fields.get("new"),
+        fields.get("confirm"),
+    );
     if new != confirm {
         return Err("The new passwords don't match.".into());
     }
     let mut collector = form(&[current, new, confirm]);
     let result = Credentials::new().change_password(&mut collector);
-    outcome(result, &collector, "Password changed. Use it at your next sign-in.", "the change")
+    outcome(
+        result,
+        &collector,
+        "Password changed. Use it at your next sign-in.",
+        "the change",
+    )
 }
 
 pub fn add_key(fields: &Fields) -> Result<String, String> {

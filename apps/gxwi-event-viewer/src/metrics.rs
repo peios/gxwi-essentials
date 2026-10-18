@@ -138,7 +138,9 @@ impl Metrics {
     }
 
     fn read_catalogue(&self, window: &Weak<Surface<Viewer>>, socket: &Path) {
-        let Some(window) = window.upgrade() else { return };
+        let Some(window) = window.upgrade() else {
+            return;
+        };
         let socket = socket.to_path_buf();
         std::thread::spawn(move || {
             let read = catalogue(&socket);
@@ -147,7 +149,9 @@ impl Metrics {
     }
 
     pub fn read_policy(&self, window: &Weak<Surface<Viewer>>) {
-        let Some(window) = window.upgrade() else { return };
+        let Some(window) = window.upgrade() else {
+            return;
+        };
         std::thread::spawn(move || {
             let readable = access::readable(Namespace::Metrics);
             window.update(|viewer, _| viewer.metrics.readable = Some(readable));
@@ -163,13 +167,24 @@ impl Metrics {
             self.queries.clear();
             return;
         };
-        let queries: Vec<String> = dashboard.charts.iter().map(|chart| chart.query(dashboard.span)).collect();
+        let queries: Vec<String> = dashboard
+            .charts
+            .iter()
+            .map(|chart| chart.query(dashboard.span))
+            .collect();
         self.answers = queries
             .iter()
-            .map(|query| self.queries.iter().position(|asked| asked == query).and_then(|was| self.answers.get(was).cloned().flatten()))
+            .map(|query| {
+                self.queries
+                    .iter()
+                    .position(|asked| asked == query)
+                    .and_then(|was| self.answers.get(was).cloned().flatten())
+            })
             .collect();
         self.queries = queries;
-        let Some(window) = window.upgrade() else { return };
+        let Some(window) = window.upgrade() else {
+            return;
+        };
         let window = Arc::downgrade(&window);
         let (span, charts) = (dashboard.span, dashboard.charts.clone());
         let (socket, generation) = (socket.to_path_buf(), self.generation.clone());
@@ -184,7 +199,9 @@ impl Metrics {
 
     /// Keeps the person's dashboards, saying so if they could not be kept.
     fn keep(&mut self) {
-        self.keeping = dashboards::write(&self.dashboards).err().map(|why| format!("Your dashboards could not be saved: {why}."));
+        self.keeping = dashboards::write(&self.dashboards)
+            .err()
+            .map(|why| format!("Your dashboards could not be saved: {why}."));
     }
 
     /// Adds a chart of `metric` to the shown dashboard.
@@ -192,9 +209,14 @@ impl Metrics {
         if !eventd_client::text::is_identifier(metric) {
             return;
         }
-        let Some(dashboard) = self.dashboards.get_mut(self.shown) else { return };
+        let Some(dashboard) = self.dashboards.get_mut(self.shown) else {
+            return;
+        };
         if dashboard.charts.len() >= dashboards::MOST_CHARTS {
-            self.keeping = Some(format!("A dashboard holds at most {} charts.", dashboards::MOST_CHARTS));
+            self.keeping = Some(format!(
+                "A dashboard holds at most {} charts.",
+                dashboards::MOST_CHARTS
+            ));
             return;
         }
         dashboard.charts.push(Chart::of(metric, metric_type));
@@ -203,28 +225,38 @@ impl Metrics {
 
     /// Changes one chart: `set` is what the menu item says to do.
     pub fn change(&mut self, chart: usize, set: &str) {
-        let Some(dashboard) = self.dashboards.get_mut(self.shown) else { return };
+        let Some(dashboard) = self.dashboards.get_mut(self.shown) else {
+            return;
+        };
         if chart >= dashboard.charts.len() {
             return;
         }
         let (what, to) = set.split_once(':').unwrap_or((set, ""));
         match what {
             "transform" => {
-                let Some(transform) = Transform::named(to) else { return };
+                let Some(transform) = Transform::named(to) else {
+                    return;
+                };
                 dashboard.charts[chart].transform = transform;
             }
             "function" => {
-                let Some(function) = Function::named(to) else { return };
+                let Some(function) = Function::named(to) else {
+                    return;
+                };
                 dashboard.charts[chart].function = function;
             }
             "lines" => dashboard.charts[chart].combined = to == "one",
             "earlier" if chart > 0 => {
                 dashboard.charts.swap(chart, chart - 1);
-                self.editing = self.editing.map(|editing| if editing == chart { chart - 1 } else { editing });
+                self.editing = self
+                    .editing
+                    .map(|editing| if editing == chart { chart - 1 } else { editing });
             }
             "later" if chart + 1 < dashboard.charts.len() => {
                 dashboard.charts.swap(chart, chart + 1);
-                self.editing = self.editing.map(|editing| if editing == chart { chart + 1 } else { editing });
+                self.editing = self
+                    .editing
+                    .map(|editing| if editing == chart { chart + 1 } else { editing });
             }
             "remove" => {
                 dashboard.charts.remove(chart);
@@ -241,7 +273,12 @@ impl Metrics {
             self.editing = None;
             return;
         }
-        let Some(shown) = self.dashboard().and_then(|dashboard| dashboard.charts.get(chart)) else { return };
+        let Some(shown) = self
+            .dashboard()
+            .and_then(|dashboard| dashboard.charts.get(chart))
+        else {
+            return;
+        };
         fields.set("edit-transform", shown.transform.name());
         fields.set("edit-function", shown.function.name());
         fields.set("edit-lines", if shown.combined { "one" } else { "each" });
@@ -277,13 +314,26 @@ impl Metrics {
     }
 
     pub fn span(&mut self, fields: &Fields) {
-        let (Some(span), Some(dashboard)) = (Span::named(fields.get("span")), self.dashboards.get_mut(self.shown)) else { return };
+        let (Some(span), Some(dashboard)) = (
+            Span::named(fields.get("span")),
+            self.dashboards.get_mut(self.shown),
+        ) else {
+            return;
+        };
         dashboard.span = span;
         self.keep();
     }
 
     pub fn rename(&mut self, fields: &mut Fields) {
-        let name: String = fields.get("boardname").chars().filter(|c| !c.is_control()).collect::<String>().trim().chars().take(80).collect();
+        let name: String = fields
+            .get("boardname")
+            .chars()
+            .filter(|c| !c.is_control())
+            .collect::<String>()
+            .trim()
+            .chars()
+            .take(80)
+            .collect();
         if let Some(dashboard) = self.dashboards.get_mut(self.shown)
             && !name.is_empty()
         {
@@ -295,10 +345,21 @@ impl Metrics {
 
     pub fn create(&mut self, fields: &mut Fields) {
         if self.dashboards.len() >= dashboards::MOST_DASHBOARDS {
-            self.keeping = Some(format!("You can keep at most {} dashboards.", dashboards::MOST_DASHBOARDS));
+            self.keeping = Some(format!(
+                "You can keep at most {} dashboards.",
+                dashboards::MOST_DASHBOARDS
+            ));
             return;
         }
-        let name = (1..).map(|number| format!("Dashboard {number}")).find(|name| !self.dashboards.iter().any(|dashboard| &dashboard.name == name)).unwrap_or_default();
+        let name = (1..)
+            .map(|number| format!("Dashboard {number}"))
+            .find(|name| {
+                !self
+                    .dashboards
+                    .iter()
+                    .any(|dashboard| &dashboard.name == name)
+            })
+            .unwrap_or_default();
         self.dashboards.push(Dashboard::new(&name));
         self.shown = self.dashboards.len() - 1;
         self.editing = None;
@@ -328,10 +389,25 @@ impl Metrics {
             .dashboards
             .iter()
             .enumerate()
-            .map(|(index, dashboard)| format!("<option value=\"{index}\"{}>{}</option>", selected(index == self.shown), escape(&dashboard.name)))
+            .map(|(index, dashboard)| {
+                format!(
+                    "<option value=\"{index}\"{}>{}</option>",
+                    selected(index == self.shown),
+                    escape(&dashboard.name)
+                )
+            })
             .collect();
-        let spans: String =
-            Span::ALL.iter().map(|span| format!("<option value=\"{}\"{}>{}</option>", span.name(), selected(fields.get("span") == span.name()), span.words())).collect();
+        let spans: String = Span::ALL
+            .iter()
+            .map(|span| {
+                format!(
+                    "<option value=\"{}\"{}>{}</option>",
+                    span.name(),
+                    selected(fields.get("span") == span.name()),
+                    span.words()
+                )
+            })
+            .collect();
         format!(
             "<form class=\"filters\" fx-submit=\"rename\">\
              <select name=\"board\" aria-label=\"Dashboard\">{boards}</select>\
@@ -345,7 +421,10 @@ impl Metrics {
     pub fn body(&self, fields: &Fields, clock: &Clock) -> String {
         format!(
             "<div class=\"split\" id=\"msplit\" fx-columns=\"260px minmax(0, 1fr)\"><div class=\"body metrics\">{catalogue}{board}</div></div>",
-            catalogue = self.listed(fields.get("find"), i64::try_from(clock.now().0.as_nanosecond()).unwrap_or(i64::MAX)),
+            catalogue = self.listed(
+                fields.get("find"),
+                i64::try_from(clock.now().0.as_nanosecond()).unwrap_or(i64::MAX)
+            ),
             board = self.board(clock),
         )
     }
@@ -354,15 +433,31 @@ impl Metrics {
     fn listed(&self, find: &str, now: i64) -> String {
         let find = find.trim().to_lowercase();
         let (items, said) = match &self.catalogue {
-            None => (String::new(), "<p class=\"more\">Reading metrics…</p>".to_string()),
-            Some(Err(why)) => (String::new(), format!("<p class=\"trouble\">{}</p>", escape(why))),
+            None => (
+                String::new(),
+                "<p class=\"more\">Reading metrics…</p>".to_string(),
+            ),
+            Some(Err(why)) => (
+                String::new(),
+                format!("<p class=\"trouble\">{}</p>", escape(why)),
+            ),
             Some(Ok(metrics)) => {
-                let shown: Vec<&Metric> = metrics.iter().filter(|metric| metric.name.to_lowercase().contains(&find)).collect();
+                let shown: Vec<&Metric> = metrics
+                    .iter()
+                    .filter(|metric| metric.name.to_lowercase().contains(&find))
+                    .collect();
                 let items: String = shown.iter().map(|metric| item(metric, now)).collect();
                 let said = match (metrics.is_empty(), shown.is_empty()) {
-                    (true, _) if self.readable == Some(Readable::Nothing) => "<p class=\"more\">You can't read metrics on this machine.</p>".into(),
-                    (true, _) => "<p class=\"more\">No metrics have been recorded that you may read.</p>".into(),
-                    (false, true) => "<p class=\"more\">No metric's name has that in it.</p>".into(),
+                    (true, _) if self.readable == Some(Readable::Nothing) => {
+                        "<p class=\"more\">You can't read metrics on this machine.</p>".into()
+                    }
+                    (true, _) => {
+                        "<p class=\"more\">No metrics have been recorded that you may read.</p>"
+                            .into()
+                    }
+                    (false, true) => {
+                        "<p class=\"more\">No metric's name has that in it.</p>".into()
+                    }
                     (false, false) => String::new(),
                 };
                 (items, said)
@@ -375,10 +470,20 @@ impl Metrics {
     }
 
     fn board(&self, clock: &Clock) -> String {
-        let Some(dashboard) = self.dashboard() else { return "<section class=\"board\"></section>".into() };
-        let mut keeping = self.keeping.as_ref().map(|why| format!("<p class=\"note bad\">{}</p>", escape(why))).unwrap_or_default();
+        let Some(dashboard) = self.dashboard() else {
+            return "<section class=\"board\"></section>".into();
+        };
+        let mut keeping = self
+            .keeping
+            .as_ref()
+            .map(|why| format!("<p class=\"note bad\">{}</p>", escape(why)))
+            .unwrap_or_default();
         if self.deleting {
-            let only = if self.dashboards.len() == 1 { " It is your only one, so eventd's health will be shown in its place." } else { "" };
+            let only = if self.dashboards.len() == 1 {
+                " It is your only one, so eventd's health will be shown in its place."
+            } else {
+                ""
+            };
             keeping += &format!(
                 "<p class=\"note\">Delete {} and its charts? This cannot be undone.{only} \
                  <button type=\"button\" class=\"link\" fx-click=\"board-delete\">Delete it</button> \
@@ -386,15 +491,35 @@ impl Metrics {
                 escape(&dashboard.name)
             );
         }
-        let charts: String = dashboard.charts.iter().enumerate().map(|(index, chart)| self.figure(index, chart, dashboard.span, clock)).collect();
-        let empty = if dashboard.charts.is_empty() { "<p class=\"more\">This dashboard has no charts yet. Pick a metric on the left to chart it here.</p>" } else { "" };
-        let menus: String = dashboard.charts.iter().enumerate().map(|(index, chart)| self.menu(index, chart, dashboard.charts.len())).collect();
-        format!("<section class=\"board\" aria-label=\"{}\">{keeping}<div class=\"charts\">{charts}</div>{empty}{menus}</section>", escape(&dashboard.name))
+        let charts: String = dashboard
+            .charts
+            .iter()
+            .enumerate()
+            .map(|(index, chart)| self.figure(index, chart, dashboard.span, clock))
+            .collect();
+        let empty = if dashboard.charts.is_empty() {
+            "<p class=\"more\">This dashboard has no charts yet. Pick a metric on the left to chart it here.</p>"
+        } else {
+            ""
+        };
+        let menus: String = dashboard
+            .charts
+            .iter()
+            .enumerate()
+            .map(|(index, chart)| self.menu(index, chart, dashboard.charts.len()))
+            .collect();
+        format!(
+            "<section class=\"board\" aria-label=\"{}\">{keeping}<div class=\"charts\">{charts}</div>{empty}{menus}</section>",
+            escape(&dashboard.name)
+        )
     }
 
     fn metric_type(&self, metric: &str) -> Option<&str> {
         match &self.catalogue {
-            Some(Ok(metrics)) => metrics.iter().find(|candidate| candidate.name == metric).map(|candidate| candidate.metric_type.as_str()),
+            Some(Ok(metrics)) => metrics
+                .iter()
+                .find(|candidate| candidate.name == metric)
+                .map(|candidate| candidate.metric_type.as_str()),
             _ => None,
         }
     }
@@ -402,20 +527,44 @@ impl Metrics {
     fn figure(&self, index: usize, chart: &Chart, span: Span, clock: &Clock) -> String {
         let shown = match self.answers.get(index).cloned().flatten() {
             None => "<p class=\"more\">Reading…</p>".to_string(),
-            Some(Answer { trouble: Some(why), .. }) => format!("<p class=\"trouble\">{}</p>", escape(&why)),
+            Some(Answer {
+                trouble: Some(why), ..
+            }) => format!("<p class=\"trouble\">{}</p>", escape(&why)),
             Some(answer) => {
                 let (_, zone) = clock.now();
-                let windows: Vec<String> = (0..answer.lines.first().map_or(0, |line| line.readings.len()))
-                    .map(|window| said_window(answer.first + answer.width * window as i64, answer.width, span, &zone))
-                    .collect();
+                let windows: Vec<String> =
+                    (0..answer.lines.first().map_or(0, |line| line.readings.len()))
+                        .map(|window| {
+                            said_window(
+                                answer.first + answer.width * window as i64,
+                                answer.width,
+                                span,
+                                &zone,
+                            )
+                        })
+                        .collect();
                 let start = said_time(answer.first, span, &zone);
-                chart::plot(&Plot { id: index as u64, windows: &windows, lines: &answer.lines, unit: unit(chart), ends: (&start, "now") })
+                chart::plot(&Plot {
+                    id: index as u64,
+                    windows: &windows,
+                    lines: &answer.lines,
+                    unit: unit(chart),
+                    ends: (&start, "now"),
+                })
             }
         };
         let metric_type = self.metric_type(&chart.metric);
         let fits = metric_type.is_none_or(|metric_type| chart.transform.fits(metric_type));
-        let unfit = if fits { "" } else { "<p class=\"note\">A metric of this type can't be shown that way. Pick another way in its settings.</p>" };
-        let settings = if self.editing == Some(index) { self.settings(index, chart, metric_type) } else { String::new() };
+        let unfit = if fits {
+            ""
+        } else {
+            "<p class=\"note\">A metric of this type can't be shown that way. Pick another way in its settings.</p>"
+        };
+        let settings = if self.editing == Some(index) {
+            self.settings(index, chart, metric_type)
+        } else {
+            String::new()
+        };
         format!(
             "<figure class=\"chart\" id=\"chart-{index}\" fx-menu=\"chart-menu-{index}\" fx-value-chart=\"{index}\"><figcaption><span class=\"name\">{name}</span><span class=\"how\">{how}</span>\
              <button type=\"button\" class=\"more-button\" fx-click=\"edit\" fx-value-chart=\"{index}\" aria-expanded=\"{open}\" title=\"Change this chart\" aria-label=\"Change this chart\">⋯</button></figcaption>{settings}{unfit}{shown}</figure>",
@@ -427,20 +576,45 @@ impl Metrics {
 
     /// A chart's settings, open under its title.
     fn settings(&self, index: usize, chart: &Chart, metric_type: Option<&str>) -> String {
-        let option = |value: &str, label: &str, chosen: bool| format!("<option value=\"{value}\"{}>{label}</option>", selected(chosen));
+        let option = |value: &str, label: &str, chosen: bool| {
+            format!(
+                "<option value=\"{value}\"{}>{label}</option>",
+                selected(chosen)
+            )
+        };
         let transforms: String = Transform::ALL
             .iter()
-            .filter(|transform| metric_type.is_none_or(|metric_type| transform.fits(metric_type)) || **transform == chart.transform)
-            .map(|transform| option(transform.name(), transform.words(), *transform == chart.transform))
+            .filter(|transform| {
+                metric_type.is_none_or(|metric_type| transform.fits(metric_type))
+                    || **transform == chart.transform
+            })
+            .map(|transform| {
+                option(
+                    transform.name(),
+                    transform.words(),
+                    *transform == chart.transform,
+                )
+            })
             .collect();
-        let functions: String = Function::ALL.iter().map(|function| option(function.name(), function.words(), *function == chart.function)).collect();
+        let functions: String = Function::ALL
+            .iter()
+            .map(|function| {
+                option(
+                    function.name(),
+                    function.words(),
+                    *function == chart.function,
+                )
+            })
+            .collect();
         let action = |set: &str, label: &str, disabled: bool| {
             format!(
                 "<button type=\"button\" fx-click=\"chart\" fx-value-chart=\"{index}\" fx-value-set=\"{set}\"{}>{label}</button>",
                 if disabled { " disabled" } else { "" }
             )
         };
-        let count = self.dashboard().map_or(0, |dashboard| dashboard.charts.len());
+        let count = self
+            .dashboard()
+            .map_or(0, |dashboard| dashboard.charts.len());
         format!(
             "<div class=\"settings\"><label>Show <select name=\"edit-transform\">{transforms}</select></label>\
              <label>In each window, the <select name=\"edit-function\">{functions}</select></label>\
@@ -466,16 +640,40 @@ impl Metrics {
         let transforms: String = Transform::ALL
             .iter()
             .filter(|transform| metric_type.is_none_or(|metric_type| transform.fits(metric_type)))
-            .map(|transform| item(&format!("transform:{}", transform.name()), transform.words(), *transform == chart.transform, false))
+            .map(|transform| {
+                item(
+                    &format!("transform:{}", transform.name()),
+                    transform.words(),
+                    *transform == chart.transform,
+                    false,
+                )
+            })
             .collect();
         let functions: String = Function::ALL
             .iter()
-            .map(|function| item(&format!("function:{}", function.name()), &format!("{} of each window", function.words()), *function == chart.function, false))
+            .map(|function| {
+                item(
+                    &format!("function:{}", function.name()),
+                    &format!("{} of each window", function.words()),
+                    *function == chart.function,
+                    false,
+                )
+            })
             .collect();
         format!(
             "<menu id=\"chart-menu-{index}\" hidden>{transforms}<hr>{functions}<hr>{each}{one}<hr>{earlier}{later}{remove}</menu>",
-            each = item("lines:each", "A line for each series", !chart.combined, false),
-            one = item("lines:one", "One line for all of them", chart.combined, false),
+            each = item(
+                "lines:each",
+                "A line for each series",
+                !chart.combined,
+                false
+            ),
+            one = item(
+                "lines:one",
+                "One line for all of them",
+                chart.combined,
+                false
+            ),
             earlier = item("earlier", "Move earlier", false, index == 0),
             later = item("later", "Move later", false, index + 1 >= count),
             remove = item("remove", "Remove this chart", false, false),
@@ -488,12 +686,24 @@ impl Metrics {
             Some(Ok(metrics)) => format!("{} metrics", metrics.len()),
             _ => String::new(),
         };
-        let every = self.dashboard().map(|dashboard| format!(" · charts read every {} seconds", dashboard.span.refresh_seconds())).unwrap_or_default();
+        let every = self
+            .dashboard()
+            .map(|dashboard| {
+                format!(
+                    " · charts read every {} seconds",
+                    dashboard.span.refresh_seconds()
+                )
+            })
+            .unwrap_or_default();
         let hidden = match &self.readable {
             Some(Readable::Nothing) => "You can't read metrics on this machine.".to_string(),
             Some(Readable::Unknown(why)) => format!("Some metrics may be hidden from you: {why}."),
             Some(Readable::Some { hidden }) => {
-                let named: Vec<String> = hidden.iter().filter(|pattern| *pattern != "*").map(|pattern| format!("{pattern}*")).collect();
+                let named: Vec<String> = hidden
+                    .iter()
+                    .filter(|pattern| *pattern != "*")
+                    .map(|pattern| format!("{pattern}*"))
+                    .collect();
                 if named.is_empty() || hidden.iter().any(|pattern| pattern == "*") {
                     "Only some metrics are yours to read.".into()
                 } else {
@@ -502,7 +712,10 @@ impl Metrics {
             }
             Some(Readable::Everything) | None => String::new(),
         };
-        format!("<footer class=\"status\"><span>{metrics}{every}</span><span class=\"hidden\">{}</span></footer>", escape(&hidden))
+        format!(
+            "<footer class=\"status\"><span>{metrics}{every}</span><span class=\"hidden\">{}</span></footer>",
+            escape(&hidden)
+        )
     }
 }
 
@@ -531,7 +744,11 @@ fn item(metric: &Metric, now: i64) -> String {
         .series
         .iter()
         .map(|(labels, latest, at)| {
-            let said = if labels.is_empty() { reading(latest) } else { format!("{labels}: {}", reading(latest)) };
+            let said = if labels.is_empty() {
+                reading(latest)
+            } else {
+                format!("{labels}: {}", reading(latest))
+            };
             match stale(at) {
                 Some(at) => format!("{said}, last recorded {}", ago(now, at)),
                 None => said,
@@ -574,8 +791,16 @@ fn how(chart: &Chart, span: Span) -> String {
         seconds if seconds % 60 == 0 => format!("{} minutes", seconds / 60),
         seconds => format!("{seconds} seconds"),
     };
-    let together = if chart.combined { ", all series together" } else { "" };
-    format!("{}, {} of each {window}{together}", chart.transform.words(), chart.function.words().to_lowercase())
+    let together = if chart.combined {
+        ", all series together"
+    } else {
+        ""
+    };
+    format!(
+        "{}, {} of each {window}{together}",
+        chart.transform.words(),
+        chart.function.words().to_lowercase()
+    )
 }
 
 /// How a chart's values are said: bytes and percentages by their names'
@@ -590,14 +815,18 @@ fn unit_of(metric: &str, transform: Transform) -> Unit {
     match (last, transform) {
         ("bytes", Transform::Rate) => Unit::BytesPerSecond,
         ("bytes", _) => Unit::Bytes,
-        ("percent", Transform::None | Transform::P50 | Transform::P95 | Transform::P99) => Unit::Percent,
+        ("percent", Transform::None | Transform::P50 | Transform::P95 | Transform::P99) => {
+            Unit::Percent
+        }
         (_, Transform::Rate) => Unit::PerSecond,
         _ => Unit::Plain,
     }
 }
 
 fn said_time(at: i64, span: Span, zone: &jiff::tz::TimeZone) -> String {
-    let Ok(at) = jiff::Timestamp::from_nanosecond(i128::from(at)) else { return at.to_string() };
+    let Ok(at) = jiff::Timestamp::from_nanosecond(i128::from(at)) else {
+        return at.to_string();
+    };
     let at = at.to_zoned(zone.clone());
     let format = match span {
         Span::Minutes15 => "%H:%M:%S",
@@ -608,7 +837,11 @@ fn said_time(at: i64, span: Span, zone: &jiff::tz::TimeZone) -> String {
 }
 
 fn said_window(start: i64, width: i64, span: Span, zone: &jiff::tz::TimeZone) -> String {
-    format!("{} to {}", said_time(start, span, zone), said_time(start + width, span, zone))
+    format!(
+        "{} to {}",
+        said_time(start, span, zone),
+        said_time(start + width, span, zone)
+    )
 }
 
 /// Every metric there is that the person may read, at its latest.
@@ -616,9 +849,17 @@ fn catalogue(socket: &Path) -> Result<Vec<Metric>, String> {
     let mut metrics: BTreeMap<String, Metric> = BTreeMap::new();
     for (metric_type, text) in CATALOGUE {
         for record in eventd_client::query(socket, text).map_err(|error| trouble(&error))? {
-            let Some(Value::String(name)) = record.get("name") else { continue };
-            let metric = metrics.entry(name.clone()).or_insert_with(|| Metric { name: name.clone(), metric_type: metric_type.into(), series: Vec::new() });
-            metric.series.push((labels(&record), reading(&record), words::timestamp(&record)));
+            let Some(Value::String(name)) = record.get("name") else {
+                continue;
+            };
+            let metric = metrics.entry(name.clone()).or_insert_with(|| Metric {
+                name: name.clone(),
+                metric_type: metric_type.into(),
+                series: Vec::new(),
+            });
+            metric
+                .series
+                .push((labels(&record), reading(&record), words::timestamp(&record)));
         }
     }
     Ok(metrics.into_values().collect())
@@ -639,7 +880,9 @@ fn reading(record: &Record) -> Option<Reading> {
         Some(Value::Float(value)) => Some(Reading::Value(*value)),
         Some(Value::Signed(value)) => Some(Reading::Value(*value as f64)),
         Some(Value::Unsigned(value)) => Some(Reading::Value(*value as f64)),
-        Some(Value::Null) if record.get("overflow") == Some(&Value::Bool(true)) => Some(Reading::Overflow),
+        Some(Value::Null) if record.get("overflow") == Some(&Value::Bool(true)) => {
+            Some(Reading::Overflow)
+        }
         _ => None,
     }
 }
@@ -652,28 +895,58 @@ fn answer(span: Span, now: i64, result: Result<Vec<Record>, Error>) -> Answer {
     let count = usize::try_from((now.div_euclid(width) * width - first) / width + 1).unwrap_or(0);
     let records = match result {
         Ok(records) => records,
-        Err(error) => return Answer { first, width, lines: Vec::new(), trouble: Some(trouble(&error)) },
+        Err(error) => {
+            return Answer {
+                first,
+                width,
+                lines: Vec::new(),
+                trouble: Some(trouble(&error)),
+            };
+        }
     };
     let mut lines: BTreeMap<String, Vec<Option<Reading>>> = BTreeMap::new();
     for record in &records {
-        let Some(at) = words::timestamp(record) else { continue };
-        let Ok(window) = usize::try_from((at - first).div_euclid(width)) else { continue };
+        let Some(at) = words::timestamp(record) else {
+            continue;
+        };
+        let Ok(window) = usize::try_from((at - first).div_euclid(width)) else {
+            continue;
+        };
         if window >= count {
             continue;
         }
         let label = labels(record);
-        let label = if label.is_empty() { "all".to_string() } else { label };
+        let label = if label.is_empty() {
+            "all".to_string()
+        } else {
+            label
+        };
         lines.entry(label).or_insert_with(|| vec![None; count])[window] = reading(record);
     }
     if lines.is_empty() {
         lines.insert(String::new(), vec![None; count]);
     }
-    Answer { first, width, lines: lines.into_iter().map(|(label, readings)| Line { label, readings }).collect(), trouble: None }
+    Answer {
+        first,
+        width,
+        lines: lines
+            .into_iter()
+            .map(|(label, readings)| Line { label, readings })
+            .collect(),
+        trouble: None,
+    }
 }
 
 /// Asks for every chart, and again every little while, until the window
 /// goes or `generation` moves on.
-fn poll(window: &Weak<Surface<Viewer>>, generation: &AtomicU64, mine: u64, socket: &Path, span: Span, charts: &[Chart]) {
+fn poll(
+    window: &Weak<Surface<Viewer>>,
+    generation: &AtomicU64,
+    mine: u64,
+    socket: &Path,
+    span: Span,
+    charts: &[Chart],
+) {
     let every = Duration::from_secs(span.refresh_seconds());
     let socket: PathBuf = socket.to_path_buf();
     loop {
@@ -689,7 +962,9 @@ fn poll(window: &Weak<Surface<Viewer>>, generation: &AtomicU64, mine: u64, socke
             .collect();
         // The catalogue's latest values move with the charts.
         let listed = catalogue(&socket);
-        let Some(strong) = window.upgrade() else { return };
+        let Some(strong) = window.upgrade() else {
+            return;
+        };
         strong.update(|viewer, _| {
             viewer.metrics.answered(mine, answers);
             if viewer.metrics.generation.load(Ordering::SeqCst) == mine {
@@ -715,7 +990,10 @@ mod tests {
     const SECOND: i64 = 1_000_000_000;
 
     fn record(at: i64, labels: &[(&str, &str)], value: Value) -> Record {
-        let mut record: Record = labels.iter().map(|(key, value)| ((*key).to_string(), Value::String((*value).to_string()))).collect();
+        let mut record: Record = labels
+            .iter()
+            .map(|(key, value)| ((*key).to_string(), Value::String((*value).to_string())))
+            .collect();
         record.insert("timestamp".into(), Value::Signed(at));
         record.insert("name".into(), Value::String("eventd.store.bytes".into()));
         record.insert("type".into(), Value::String("gauge".into()));
@@ -730,7 +1008,11 @@ mod tests {
         let records = vec![
             record(first, &[("store", "logs")], Value::Float(1.0)),
             record(first + 15 * SECOND, &[("store", "logs")], Value::Float(2.0)),
-            record(first + 30 * SECOND, &[("store", "events")], Value::Float(3.0)),
+            record(
+                first + 30 * SECOND,
+                &[("store", "events")],
+                Value::Float(3.0),
+            ),
             // Outside the windows: left out.
             record(first - 15 * SECOND, &[("store", "logs")], Value::Float(9.0)),
         ];
@@ -740,14 +1022,26 @@ mod tests {
         assert_eq!(answer.lines[0].label, "store=events");
         assert_eq!(answer.lines[1].label, "store=logs");
         assert_eq!(answer.lines[1].readings.len(), 61);
-        assert_eq!(answer.lines[1].readings[..3], [Some(Reading::Value(1.0)), Some(Reading::Value(2.0)), None]);
+        assert_eq!(
+            answer.lines[1].readings[..3],
+            [Some(Reading::Value(1.0)), Some(Reading::Value(2.0)), None]
+        );
         assert_eq!(answer.lines[0].readings[2], Some(Reading::Value(3.0)));
     }
 
     #[test]
     fn an_answer_says_why_there_is_none() {
-        let refused = answer(Span::Hour, 3_600 * SECOND * 1_000, Err(Error::Refused("metric selector spans more than one type".into())));
-        assert_eq!(refused.trouble.as_deref(), Some("eventd refused: metric selector spans more than one type."));
+        let refused = answer(
+            Span::Hour,
+            3_600 * SECOND * 1_000,
+            Err(Error::Refused(
+                "metric selector spans more than one type".into(),
+            )),
+        );
+        assert_eq!(
+            refused.trouble.as_deref(),
+            Some("eventd refused: metric selector spans more than one type.")
+        );
         let empty = answer(Span::Hour, 3_600 * SECOND * 1_000, Ok(Vec::new()));
         assert_eq!(empty.lines.len(), 1);
         assert!(empty.lines[0].readings.iter().all(Option::is_none));
@@ -756,37 +1050,81 @@ mod tests {
     #[test]
     fn units_come_from_the_name_and_the_transform() {
         assert_eq!(unit_of("eventd.store.bytes", Transform::None), Unit::Bytes);
-        assert_eq!(unit_of("disk.read.bytes", Transform::Rate), Unit::BytesPerSecond);
-        assert_eq!(unit_of("eventd.kmes.ring.fill.percent", Transform::None), Unit::Percent);
-        assert_eq!(unit_of("eventd.events.stored", Transform::Rate), Unit::PerSecond);
-        assert_eq!(unit_of("eventd.events.stored", Transform::Delta), Unit::Plain);
+        assert_eq!(
+            unit_of("disk.read.bytes", Transform::Rate),
+            Unit::BytesPerSecond
+        );
+        assert_eq!(
+            unit_of("eventd.kmes.ring.fill.percent", Transform::None),
+            Unit::Percent
+        );
+        assert_eq!(
+            unit_of("eventd.events.stored", Transform::Rate),
+            Unit::PerSecond
+        );
+        assert_eq!(
+            unit_of("eventd.events.stored", Transform::Delta),
+            Unit::Plain
+        );
     }
 
     #[test]
     fn a_chart_is_described_in_words() {
-        let chart = Chart { metric: "eventd.events.stored".into(), transform: Transform::Rate, function: Function::Sum, combined: true };
-        assert_eq!(how(&chart, Span::Hour), "Rate per second, total of each minute, all series together");
-        assert_eq!(how(&Chart::of("eventd.store.bytes", "gauge"), Span::Week), "As recorded, average of each 2 hours");
-        assert_eq!(how(&Chart::of("x", "gauge"), Span::Minutes15), "As recorded, average of each 15 seconds");
+        let chart = Chart {
+            metric: "eventd.events.stored".into(),
+            transform: Transform::Rate,
+            function: Function::Sum,
+            combined: true,
+        };
+        assert_eq!(
+            how(&chart, Span::Hour),
+            "Rate per second, total of each minute, all series together"
+        );
+        assert_eq!(
+            how(&Chart::of("eventd.store.bytes", "gauge"), Span::Week),
+            "As recorded, average of each 2 hours"
+        );
+        assert_eq!(
+            how(&Chart::of("x", "gauge"), Span::Minutes15),
+            "As recorded, average of each 15 seconds"
+        );
     }
 
     #[test]
     fn the_catalogue_says_each_metric_and_its_latest() {
         let now = 1_791_032_000 * SECOND;
-        let one = Metric { name: "eventd.store.bytes".into(), metric_type: "gauge".into(), series: vec![(String::new(), Some(Reading::Value(2048.0)), Some(now - SECOND))] };
+        let one = Metric {
+            name: "eventd.store.bytes".into(),
+            metric_type: "gauge".into(),
+            series: vec![(
+                String::new(),
+                Some(Reading::Value(2048.0)),
+                Some(now - SECOND),
+            )],
+        };
         let html = item(&one, now);
         assert!(html.contains("class=\"metric\" fx-click=\"add\" fx-value-metric=\"eventd.store.bytes\" fx-value-type=\"gauge\""));
         assert!(html.contains("<span class=\"latest\">2 KiB</span>"));
         let two = Metric {
             name: "cpu.usage".into(),
             metric_type: "gauge".into(),
-            series: vec![("core=0".into(), Some(Reading::Value(3.0)), Some(now)), ("core=1".into(), None, Some(now - 3 * 3_600 * SECOND))],
+            series: vec![
+                ("core=0".into(), Some(Reading::Value(3.0)), Some(now)),
+                ("core=1".into(), None, Some(now - 3 * 3_600 * SECOND)),
+            ],
         };
         let html = item(&two, now);
         assert!(html.contains("<span class=\"latest\">2 series</span>"));
         assert!(html.contains("title=\"core=0: 3\ncore=1: nothing, last recorded 3 hours ago\""));
         // Every series stopped: said so, and when.
-        let stopped = Metric { series: vec![("core=0".into(), Some(Reading::Value(3.0)), Some(now - 20 * 60 * SECOND))], ..two };
+        let stopped = Metric {
+            series: vec![(
+                "core=0".into(),
+                Some(Reading::Value(3.0)),
+                Some(now - 20 * 60 * SECOND),
+            )],
+            ..two
+        };
         let html = item(&stopped, now);
         assert!(html.contains("class=\"metric stopped\""));
         assert!(html.contains("<span class=\"latest\">nothing since 20 minutes ago</span>"));
@@ -813,6 +1151,9 @@ mod tests {
         assert_eq!(metrics.dashboards[0].charts.len(), before.len() - 1);
         metrics.add("not a name", "gauge");
         metrics.add("cpu.usage", "gauge");
-        assert_eq!(metrics.dashboards[0].charts.last().unwrap().metric, "cpu.usage");
+        assert_eq!(
+            metrics.dashboards[0].charts.last().unwrap().metric,
+            "cpu.usage"
+        );
     }
 }

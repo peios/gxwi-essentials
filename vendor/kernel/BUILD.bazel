@@ -1,0 +1,35 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["BUILD.bazel"])
+
+filegroup(
+    name = "semantic-sources",
+    srcs = glob(["security/**/*.rs"]),
+)
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["**/target/**"],
+    ) + [
+        "//vendor/kernel/peios/rust/ntfe:sources",
+        "//vendor/kernel/peios/rust/peios-uapi:sources",
+        "//vendor/kernel/peios/rust/pnp-core:sources",
+    ],
+)
+
+alias(
+    name = "ntfe",
+    actual = "//vendor/kernel/peios/rust/ntfe:ntfe",
+)
+
+alias(
+    name = "peios-uapi",
+    actual = "//vendor/kernel/peios/rust/peios-uapi:peios_uapi",
+)
+
+alias(
+    name = "pnp-core",
+    actual = "//vendor/kernel/peios/rust/pnp-core:pnp_core",
+)

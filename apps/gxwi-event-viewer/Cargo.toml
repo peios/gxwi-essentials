@@ -1,28 +1,18 @@
 [package]
 name = "gxwi-event-viewer"
-version = "0.0.3"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 publish = false
-
-[dependencies]
-# libgxwi as of the gxwi release dev.peios.gxwi-sdk stages, which a package
-# build takes it from (gxwi's dev/pins.toml).
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76" }
-# eventd's query channel, live tails, query text and read access. It pins
-# the same `peios` revision as libgxwi, which it must: `peios-sys` links
-# libpeios, and a program can hold only one of it.
-eventd-client = { git = "https://github.com/peios/eventd.git", rev = "3df88bab845d962e866158896807eac2976b83e3" }
-# The person's registry, where their dashboards are kept. The revision
-# eventd-client pins.
-peios = { git = "https://github.com/peios/peios-rs.git", rev = "f8c84930f2b71763bcf0550df0b1420a0f63b21e", package = "peios" }
-# eventd's read policy, opened in the permissions editor, and who a SID is,
-# said as the editor says it.
-gxwi-sd-editor = { git = "https://github.com/peios/gxwi-sd-editor.git", rev = "43fee424bdfd756996a63347f31abcb6af64eb62", default-features = false, features = ["names", "splice"] }
-# eventd's regman page, read as regman reads it.
-libregman = { git = "https://github.com/peios/peiosutils.git", rev = "67ffede760dc1c5767fbb3c6c66e5fc5e12b7314" }
-# A record's time, said on this machine's clock.
-jiff = "0.2.29"
 
 [dev-dependencies]
 serde_json = "1"
+
+[dependencies]
+eventd-client = { workspace = true }
+gxwi-sd-editor = { workspace = true, features = ["names", "splice"], default-features = false }
+jiff = { workspace = true }
+libgxwi = { workspace = true }
+libregman = { workspace = true }
+peios = { workspace = true }

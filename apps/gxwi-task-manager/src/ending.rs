@@ -27,9 +27,19 @@ pub fn pidfd(pid: u32) -> io::Result<OwnedFd> {
 pub fn signal(pidfd: &OwnedFd, signal: i32) -> io::Result<()> {
     // SAFETY: a live pidfd, a signal number, no siginfo, no flags.
     let ret = unsafe {
-        libc::syscall(libc::SYS_pidfd_send_signal, pidfd.as_raw_fd(), signal, std::ptr::null::<libc::siginfo_t>(), 0)
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            pidfd.as_raw_fd(),
+            signal,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        )
     };
-    if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 /// Whether this person may end the process `pid`, or why not, in words.

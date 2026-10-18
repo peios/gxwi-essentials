@@ -43,11 +43,18 @@ impl View {
     ];
 
     fn by(name: &str) -> Option<View> {
-        View::ALL.iter().find(|(_, by)| *by == name).map(|(view, _)| *view)
+        View::ALL
+            .iter()
+            .find(|(_, by)| *by == name)
+            .map(|(view, _)| *view)
     }
 
     fn id(self) -> &'static str {
-        View::ALL.iter().find(|(view, _)| *view == self).map(|(_, by)| *by).unwrap_or("installed")
+        View::ALL
+            .iter()
+            .find(|(view, _)| *view == self)
+            .map(|(_, by)| *by)
+            .unwrap_or("installed")
     }
 }
 
@@ -157,8 +164,14 @@ impl Manager {
                 Ok((Some(plan), Event::Done { .. })) => Updates::Found(plan.operations),
                 Ok((None, Event::Done { .. })) => Updates::Found(Vec::new()),
                 Ok((_, Event::Error { code, message })) => Updates::Failed { code, message },
-                Ok(_) => Updates::Failed { code: "failed".into(), message: "The check was cancelled".into() },
-                Err(why) => Updates::Failed { code: "failed".into(), message: why },
+                Ok(_) => Updates::Failed {
+                    code: "failed".into(),
+                    message: "The check was cancelled".into(),
+                },
+                Err(why) => Updates::Failed {
+                    code: "failed".into(),
+                    message: why,
+                },
             };
             if let Some(window) = window.upgrade() {
                 window.update(|manager, _| manager.updates = found);
@@ -184,7 +197,12 @@ impl Manager {
             }
         }) {
             Ok(answers) => run.answers = Some(answers),
-            Err(why) => run.end = Some(Ended::Failed { code: "failed".into(), message: why }),
+            Err(why) => {
+                run.end = Some(Ended::Failed {
+                    code: "failed".into(),
+                    message: why,
+                })
+            }
         }
         self.run = Some(run);
         self.asking = None;
@@ -192,7 +210,9 @@ impl Manager {
     }
 
     fn heard_run(&mut self, number: u64, event: Event, _fields: &mut Fields) {
-        let Some(run) = self.run.as_mut().filter(|r| r.number == number) else { return };
+        let Some(run) = self.run.as_mut().filter(|r| r.number == number) else {
+            return;
+        };
         let ended = event.ends();
         let changed = matches!(event, Event::Done { .. });
         run.heard(event);
@@ -237,7 +257,11 @@ impl Manager {
     }
 
     fn answer(&mut self, value: &Value, answer: &str) {
-        let id = value.get("id").and_then(Value::as_str).and_then(|id| id.parse().ok()).unwrap_or(0);
+        let id = value
+            .get("id")
+            .and_then(Value::as_str)
+            .and_then(|id| id.parse().ok())
+            .unwrap_or(0);
         if let Some(run) = &mut self.run {
             run.answer(id, answer);
         }
@@ -258,18 +282,30 @@ impl Manager {
         };
         let window = self.window.clone();
         let opened = gxwi_file_dialog::choose(&request, move |file: Option<PathBuf>| {
-            let Some(window) = window.upgrade() else { return };
+            let Some(window) = window.upgrade() else {
+                return;
+            };
             window.update(|manager, _| {
                 manager.choosing = false;
                 if let Some(file) = file {
-                    let shown = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    manager.start(format!("Install {shown}"), "Install", vec!["install".into(), file.display().to_string()], false);
+                    let shown = file
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    manager.start(
+                        format!("Install {shown}"),
+                        "Install",
+                        vec!["install".into(), file.display().to_string()],
+                        false,
+                    );
                 }
             });
         });
         match opened {
             Ok(()) => self.choosing = true,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => self.said = Some(Err("The file dialog isn't installed.".into())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                self.said = Some(Err("The file dialog isn't installed.".into()))
+            }
             Err(e) => self.said = Some(Err(format!("The file dialog couldn't be opened: {e}."))),
         }
     }
@@ -277,26 +313,44 @@ impl Manager {
     /// Checks a package's files against what was installed.
     fn verify(&mut self, name: &str) {
         let short = words::short(name);
-        self.said = Some(match peipkg::query::<Vec<Problem>>(&["verify", "--json", name]) {
-            Ok(problems) if problems.is_empty() => Ok(format!("Every file of {short} is as it was installed.")),
-            Ok(problems) => Err(format!(
-                "{} of {short} {} changed: {}.",
-                words::count(problems.len(), "file", "files"),
-                if problems.len() == 1 { "has" } else { "have" },
-                problems.iter().map(|p| p.problem.as_str()).collect::<Vec<_>>().join("; ")
-            )),
-            Err(why) => Err(words::sentence(&why)),
-        });
+        self.said = Some(
+            match peipkg::query::<Vec<Problem>>(&["verify", "--json", name]) {
+                Ok(problems) if problems.is_empty() => {
+                    Ok(format!("Every file of {short} is as it was installed."))
+                }
+                Ok(problems) => Err(format!(
+                    "{} of {short} {} changed: {}.",
+                    words::count(problems.len(), "file", "files"),
+                    if problems.len() == 1 { "has" } else { "have" },
+                    problems
+                        .iter()
+                        .map(|p| p.problem.as_str())
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                )),
+                Err(why) => Err(words::sentence(&why)),
+            },
+        );
     }
 
     /// Adds the repository the form describes.
     fn add_repo(&mut self, fields: &mut Fields) {
         let name = fields.get("repo-name").trim().to_string();
         let url = fields.get("repo-url").trim().to_string();
-        let key: String = fields.get("repo-key").chars().filter(|c| !c.is_whitespace()).collect::<String>().to_lowercase();
+        let key: String = fields
+            .get("repo-key")
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>()
+            .to_lowercase();
         let problem = if name.is_empty() || name.contains(['/', ' ']) {
             Some("Give it a name, without spaces or slashes.")
-        } else if self.store.repositories.as_ref().is_ok_and(|r| r.iter().any(|r| r.name == name)) {
+        } else if self
+            .store
+            .repositories
+            .as_ref()
+            .is_ok_and(|r| r.iter().any(|r| r.name == name))
+        {
             Some("A repository has that name already.")
         } else if !(url.starts_with("https://") || url.starts_with("file:///")) {
             Some("The address must start with https:// or file:///.")
@@ -312,20 +366,54 @@ impl Manager {
         for field in ["repo-name", "repo-url", "repo-key"] {
             fields.set(field, "");
         }
-        self.start(format!("Add {name}"), "Add", vec!["repo".into(), "add".into(), name.clone(), url, "--anchor".into(), key], true);
-        self.saying(&format!("{name} added and trusted. What it offers is under Available."));
+        self.start(
+            format!("Add {name}"),
+            "Add",
+            vec![
+                "repo".into(),
+                "add".into(),
+                name.clone(),
+                url,
+                "--anchor".into(),
+                key,
+            ],
+            true,
+        );
+        self.saying(&format!(
+            "{name} added and trusted. What it offers is under Available."
+        ));
     }
 
     fn nav(&self) -> Vec<Nav> {
         // Where nothing can be read, every section says so, the same way.
         let hidden = self.store.look.is_err();
         let section = |view: View, title, now: String, glyph, tile| {
-            let now = if hidden { "Not readable".to_string() } else { now };
-            Nav::Section(Section { id: view.id(), title, now, glyph, tile })
+            let now = if hidden {
+                "Not readable".to_string()
+            } else {
+                now
+            };
+            Nav::Section(Section {
+                id: view.id(),
+                title,
+                now,
+                glyph,
+                tile,
+            })
         };
         let or = |read: bool, now: String| if read { now } else { "Unavailable".to_string() };
-        let installed = or(self.store.installed.is_ok(), words::count(self.store.installed.as_ref().map_or(0, Vec::len), "package", "packages"));
-        let available = or(self.store.offers.is_ok(), format!("{} to install", self.store.not_installed().len()));
+        let installed = or(
+            self.store.installed.is_ok(),
+            words::count(
+                self.store.installed.as_ref().map_or(0, Vec::len),
+                "package",
+                "packages",
+            ),
+        );
+        let available = or(
+            self.store.offers.is_ok(),
+            format!("{} to install", self.store.not_installed().len()),
+        );
         let updates = match &self.updates {
             Updates::Unchecked | Updates::Checking => "Checking…".to_string(),
             Updates::Found(ops) if ops.is_empty() => "Up to date".to_string(),
@@ -343,7 +431,14 @@ impl Manager {
             Ok(list) => words::count(list.len(), "repository", "repositories"),
             Err(_) => "Unavailable".to_string(),
         };
-        let roles = or(self.store.roles.is_ok(), words::count(self.store.roles.as_ref().map_or(0, Vec::len), "role", "roles"));
+        let roles = or(
+            self.store.roles.is_ok(),
+            words::count(
+                self.store.roles.as_ref().map_or(0, Vec::len),
+                "role",
+                "roles",
+            ),
+        );
         let roots = match &self.store.roots {
             Ok(list) if list.is_empty() => "None".to_string(),
             Ok(list) => words::count(list.len(), "root", "roots"),
@@ -351,14 +446,44 @@ impl Manager {
         };
         vec![
             Nav::Heading("Software"),
-            section(View::Installed, "Installed", installed, Glyph::Package, Tile::Blue),
-            section(View::Available, "Available", available, Glyph::Download, Tile::Teal),
-            section(View::Updates, "Updates", updates, Glyph::Refresh, Tile::Green),
+            section(
+                View::Installed,
+                "Installed",
+                installed,
+                Glyph::Package,
+                Tile::Blue,
+            ),
+            section(
+                View::Available,
+                "Available",
+                available,
+                Glyph::Download,
+                Tile::Teal,
+            ),
+            section(
+                View::Updates,
+                "Updates",
+                updates,
+                Glyph::Refresh,
+                Tile::Green,
+            ),
             Nav::Heading("This Machine"),
             section(View::History, "History", history, Glyph::Clock, Tile::Slate),
-            section(View::Repositories, "Repositories", repositories, Glyph::Server, Tile::Violet),
+            section(
+                View::Repositories,
+                "Repositories",
+                repositories,
+                Glyph::Server,
+                Tile::Violet,
+            ),
             section(View::Roles, "Roles", roles, Glyph::Tag, Tile::Orange),
-            section(View::Roots, "Installation Roots", roots, Glyph::Folder, Tile::Pink),
+            section(
+                View::Roots,
+                "Installation Roots",
+                roots,
+                Glyph::Folder,
+                Tile::Pink,
+            ),
         ]
     }
 }
@@ -368,7 +493,8 @@ impl Manager {
 /// confirmed, and trusting one is the person's choice, under Repositories,
 /// never a side effect of looking for updates.
 fn refresh_trusted() -> Vec<String> {
-    let trusted = peipkg::query::<Vec<peipkg::Repository>>(&["repo", "list", "--json"]).unwrap_or_default();
+    let trusted =
+        peipkg::query::<Vec<peipkg::Repository>>(&["repo", "list", "--json"]).unwrap_or_default();
     let mut args = vec!["refresh".to_string()];
     args.extend(trusted.into_iter().filter(|r| r.trusted).map(|r| r.name));
     args
@@ -379,7 +505,13 @@ fn refresh_trusted() -> Vec<String> {
 fn collect(args: &[String]) -> Result<(Option<peipkg::Plan>, Event), String> {
     if args == ["refresh"] {
         // Nothing is trusted: nothing to refresh.
-        return Ok((None, Event::Done { summary: None, transaction: None }));
+        return Ok((
+            None,
+            Event::Done {
+                summary: None,
+                transaction: None,
+            },
+        ));
     }
     let (send, receive) = std::sync::mpsc::channel();
     let answers = peipkg::drive(args, move |event| {
@@ -405,49 +537,96 @@ impl Live for Manager {
         let page = if let Some(run) = &self.run {
             let mut page = crate::run::page(run);
             if self.close_when_done && run.going() {
-                page = settings::caution("Package Manager closes when these changes are finished.") + &page;
+                page = settings::caution("Package Manager closes when these changes are finished.")
+                    + &page;
             }
             page
         } else if let Some(name) = &self.package {
-            let files = self.files.as_ref().filter(|(of, _)| of == name).map(|(_, files)| files);
-            let from = if self.view == View::Installed { "Installed" } else if self.view == View::Updates { "Updates" } else { "Available" };
-            packages::detail(name, &self.store, &Looking { updates: &self.updates, files, from, busy })
+            let files = self
+                .files
+                .as_ref()
+                .filter(|(of, _)| of == name)
+                .map(|(_, files)| files);
+            let from = if self.view == View::Installed {
+                "Installed"
+            } else if self.view == View::Updates {
+                "Updates"
+            } else {
+                "Available"
+            };
+            packages::detail(
+                name,
+                &self.store,
+                &Looking {
+                    updates: &self.updates,
+                    files,
+                    from,
+                    busy,
+                },
+            )
         } else {
             match self.view {
                 View::Installed => packages::installed(&self.store, fields, &self.updates),
                 View::Available => packages::available(&self.store, fields, self.choosing),
                 View::Updates => changes::updates(&self.store, &self.updates, busy),
                 View::History => changes::history(&self.store, busy),
-                View::Repositories => sources::repositories(&self.store, self.asking.as_ref(), busy, now),
+                View::Repositories => {
+                    sources::repositories(&self.store, self.asking.as_ref(), busy, now)
+                }
                 View::Roles => sources::roles(&self.store, busy),
                 View::Roots => sources::roots(&self.store),
             }
         };
-        settings::window(&self.nav(), self.view.id(), &page, &settings::status(self.said.as_ref(), ""))
+        settings::window(
+            &self.nav(),
+            self.view.id(),
+            &page,
+            &settings::status(self.said.as_ref(), ""),
+        )
     }
 
     fn input(&mut self, name: &str, fields: &mut Fields) {
-        let Some(role) = name.strip_prefix("role:") else { return };
+        let Some(role) = name.strip_prefix("role:") else {
+            return;
+        };
         let holder = fields.get(name).to_string();
         if self.busy() || self.store.may.is_err() {
             sources::fill_roles(&self.store, fields);
             return;
         }
         let (title, args, said) = if holder.is_empty() {
-            (format!("Stop providing {role}"), vec!["claim".into(), role.to_string(), "revoke".into()], format!("Nothing provides {role} now."))
+            (
+                format!("Stop providing {role}"),
+                vec!["claim".into(), role.to_string(), "revoke".into()],
+                format!("Nothing provides {role} now."),
+            )
         } else {
             let short = words::short(&holder).to_string();
-            (format!("Provide {role} with {short}"), vec!["claim".into(), role.to_string(), "grant".into(), holder], format!("{short} provides {role} now."))
+            (
+                format!("Provide {role} with {short}"),
+                vec!["claim".into(), role.to_string(), "grant".into(), holder],
+                format!("{short} provides {role} now."),
+            )
         };
         self.start(title, "Change", args, true);
         self.saying(&said);
     }
 
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
-        let named = || value.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+        let named = || {
+            value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
         match name {
             "section" => {
-                if let Some(view) = value.get("section").and_then(Value::as_str).and_then(View::by) {
+                if let Some(view) = value
+                    .get("section")
+                    .and_then(Value::as_str)
+                    .and_then(View::by)
+                {
                     // Read again: peipkg may have been run from a terminal
                     // since, and nothing tells this window when.
                     self.reread();
@@ -470,25 +649,62 @@ impl Live for Manager {
             }
             "install" => {
                 let n = named();
-                self.start(format!("Install {}", words::short(&n)), "Install", vec!["install".into(), n], false);
+                self.start(
+                    format!("Install {}", words::short(&n)),
+                    "Install",
+                    vec!["install".into(), n],
+                    false,
+                );
             }
             "update" => {
                 let n = named();
-                self.start(format!("Update {}", words::short(&n)), "Update", vec!["upgrade".into(), n], false);
+                self.start(
+                    format!("Update {}", words::short(&n)),
+                    "Update",
+                    vec!["upgrade".into(), n],
+                    false,
+                );
             }
-            "update-all" => self.start("Update Everything".into(), "Update", vec!["upgrade".into()], false),
+            "update-all" => self.start(
+                "Update Everything".into(),
+                "Update",
+                vec!["upgrade".into()],
+                false,
+            ),
             "remove" => {
                 let n = named();
-                self.start(format!("Remove {}", words::short(&n)), "Remove", vec!["uninstall".into(), n], false);
+                self.start(
+                    format!("Remove {}", words::short(&n)),
+                    "Remove",
+                    vec!["uninstall".into(), n],
+                    false,
+                );
             }
-            "undo" => self.start("Undo the Last Change".into(), "Undo", vec!["undo".into()], false),
+            "undo" => self.start(
+                "Undo the Last Change".into(),
+                "Undo",
+                vec!["undo".into()],
+                false,
+            ),
             "recover" => {
-                self.start("Resolve the Interrupted Change".into(), "Resolve", vec!["recover".into()], true);
+                self.start(
+                    "Resolve the Interrupted Change".into(),
+                    "Resolve",
+                    vec!["recover".into()],
+                    true,
+                );
                 self.saying("The interrupted change is resolved: what it had begun is put back.");
             }
             "refresh" => {
                 let mut args = vec!["refresh".to_string()];
-                args.extend(self.store.repositories.iter().flatten().filter(|r| r.trusted).map(|r| r.name.clone()));
+                args.extend(
+                    self.store
+                        .repositories
+                        .iter()
+                        .flatten()
+                        .filter(|r| r.trusted)
+                        .map(|r| r.name.clone()),
+                );
                 if args.len() > 1 {
                     self.start("Refresh Repositories".into(), "Refresh", args, true);
                     self.saying("Every trusted repository is up to date with what it offers.");
@@ -508,19 +724,38 @@ impl Live for Manager {
             }
             "ask-add-repo" => self.asking = Some(Asking::Add),
             "ask-remove-repo" => {
-                let repo = value.get("repo").and_then(Value::as_str).unwrap_or_default().to_string();
+                let repo = value
+                    .get("repo")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 self.asking = Some(Asking::Remove(repo));
             }
             "ask-trust-repo" => {
-                let repo = value.get("repo").and_then(Value::as_str).unwrap_or_default().to_string();
+                let repo = value
+                    .get("repo")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 self.asking = Some(Asking::Trust(repo));
             }
             "trust-repo" => {
                 // The configured form of `repo add`: the trust ceremony, with
                 // the key already given in its .repo file.
-                let repo = value.get("repo").and_then(Value::as_str).unwrap_or_default().to_string();
-                self.start(format!("Trust {repo}"), "Trust", vec!["repo".into(), "add".into(), repo.clone()], true);
-                self.saying(&format!("{repo} is trusted, and what it offers can be installed."));
+                let repo = value
+                    .get("repo")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                self.start(
+                    format!("Trust {repo}"),
+                    "Trust",
+                    vec!["repo".into(), "add".into(), repo.clone()],
+                    true,
+                );
+                self.saying(&format!(
+                    "{repo} is trusted, and what it offers can be installed."
+                ));
             }
             "cancel" => {
                 self.asking = None;
@@ -528,18 +763,37 @@ impl Live for Manager {
             }
             "add-repo" => self.add_repo(fields),
             "remove-repo" => {
-                let repo = value.get("repo").and_then(Value::as_str).unwrap_or_default().to_string();
-                self.start(format!("Remove {repo}"), "Remove", vec!["repo".into(), "remove".into(), repo.clone()], true);
-                self.saying(&format!("{repo} removed. What was installed from it stays installed."));
+                let repo = value
+                    .get("repo")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                self.start(
+                    format!("Remove {repo}"),
+                    "Remove",
+                    vec!["repo".into(), "remove".into(), repo.clone()],
+                    true,
+                );
+                self.saying(&format!(
+                    "{repo} removed. What was installed from it stays installed."
+                ));
             }
             "allow" | "proceed" => self.answer(value, "yes"),
             "refuse" => self.answer(value, "no"),
             "modified" => {
-                let answer = value.get("answer").and_then(Value::as_str).unwrap_or("abort").to_string();
+                let answer = value
+                    .get("answer")
+                    .and_then(Value::as_str)
+                    .unwrap_or("abort")
+                    .to_string();
                 self.answer(value, &answer);
             }
             "retry" => {
-                let flag = value.get("flag").and_then(Value::as_str).unwrap_or_default().to_string();
+                let flag = value
+                    .get("flag")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 self.retry(&flag);
             }
             "notes" => {

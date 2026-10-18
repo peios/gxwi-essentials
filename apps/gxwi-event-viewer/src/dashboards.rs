@@ -40,7 +40,13 @@ pub enum Span {
 }
 
 impl Span {
-    pub const ALL: [Span; 5] = [Span::Minutes15, Span::Hour, Span::Hours6, Span::Day, Span::Week];
+    pub const ALL: [Span; 5] = [
+        Span::Minutes15,
+        Span::Hour,
+        Span::Hours6,
+        Span::Day,
+        Span::Week,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -108,7 +114,14 @@ pub enum Transform {
 }
 
 impl Transform {
-    pub const ALL: [Transform; 6] = [Transform::None, Transform::Rate, Transform::Delta, Transform::P50, Transform::P95, Transform::P99];
+    pub const ALL: [Transform; 6] = [
+        Transform::None,
+        Transform::Rate,
+        Transform::Delta,
+        Transform::P50,
+        Transform::P95,
+        Transform::P99,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -122,7 +135,9 @@ impl Transform {
     }
 
     pub fn named(name: &str) -> Option<Transform> {
-        Transform::ALL.into_iter().find(|transform| transform.name() == name)
+        Transform::ALL
+            .into_iter()
+            .find(|transform| transform.name() == name)
     }
 
     /// Its keyword in a query, if it has one.
@@ -191,7 +206,9 @@ impl Function {
     }
 
     pub fn named(name: &str) -> Option<Function> {
-        Function::ALL.into_iter().find(|function| function.name() == name)
+        Function::ALL
+            .into_iter()
+            .find(|function| function.name() == name)
     }
 
     pub fn keyword(self) -> &'static str {
@@ -227,15 +244,31 @@ impl Chart {
     /// A chart of `metric`, of type `metric_type`, as it is first added.
     pub fn of(metric: &str, metric_type: &str) -> Chart {
         let transform = Transform::first(metric_type);
-        Chart { metric: metric.into(), transform, function: if transform == Transform::Rate { Function::Sum } else { Function::Avg }, combined: false }
+        Chart {
+            metric: metric.into(),
+            transform,
+            function: if transform == Transform::Rate {
+                Function::Sum
+            } else {
+                Function::Avg
+            },
+            combined: false,
+        }
     }
 
     /// The query for this chart over `span`: one value per window, for
     /// each series or for them all.
     pub fn query(&self, span: Span) -> String {
         let brackets = if self.combined { "" } else { "[]" };
-        let transform = self.transform.keyword().map(|keyword| format!(" {keyword}")).unwrap_or_default();
-        let said = |seconds: i64| text::duration(Duration::from_secs(seconds.unsigned_abs())).unwrap_or_else(|| format!("{seconds}s"));
+        let transform = self
+            .transform
+            .keyword()
+            .map(|keyword| format!(" {keyword}"))
+            .unwrap_or_default();
+        let said = |seconds: i64| {
+            text::duration(Duration::from_secs(seconds.unsigned_abs()))
+                .unwrap_or_else(|| format!("{seconds}s"))
+        };
         format!(
             "METRIC {}{brackets}{transform} SINCE {} ago {} {}",
             self.metric,
@@ -246,7 +279,13 @@ impl Chart {
     }
 
     fn line(&self) -> String {
-        format!("chart {} {} {} {}", self.metric, self.transform.name(), self.function.name(), if self.combined { "one" } else { "each" })
+        format!(
+            "chart {} {} {} {}",
+            self.metric,
+            self.transform.name(),
+            self.function.name(),
+            if self.combined { "one" } else { "each" }
+        )
     }
 }
 
@@ -259,14 +298,23 @@ pub struct Dashboard {
 
 impl Dashboard {
     pub fn new(name: &str) -> Dashboard {
-        Dashboard { name: name.into(), span: Span::Hour, charts: Vec::new() }
+        Dashboard {
+            name: name.into(),
+            span: Span::Hour,
+            charts: Vec::new(),
+        }
     }
 }
 
 /// What a person is shown before they have saved anything: how eventd
 /// itself is doing (eventd TRM §5.7).
 pub fn health() -> Dashboard {
-    let chart = |metric: &str, transform, function, combined| Chart { metric: metric.into(), transform, function, combined };
+    let chart = |metric: &str, transform, function, combined| Chart {
+        metric: metric.into(),
+        transform,
+        function,
+        combined,
+    };
     Dashboard {
         name: "eventd's health".into(),
         span: Span::Hour,
@@ -274,11 +322,31 @@ pub fn health() -> Dashboard {
             chart("eventd.events.stored", Transform::Rate, Function::Sum, true),
             chart("eventd.logs.stored", Transform::Rate, Function::Sum, true),
             chart("eventd.events.lost", Transform::Delta, Function::Sum, false),
-            chart("eventd.kmes.ring.fill.percent", Transform::None, Function::Max, false),
+            chart(
+                "eventd.kmes.ring.fill.percent",
+                Transform::None,
+                Function::Max,
+                false,
+            ),
             chart("eventd.store.bytes", Transform::None, Function::Max, false),
-            chart("eventd.queries.active", Transform::None, Function::Max, true),
-            chart("eventd.queries.refused", Transform::Delta, Function::Sum, false),
-            chart("eventd.metrics.stored", Transform::Rate, Function::Sum, true),
+            chart(
+                "eventd.queries.active",
+                Transform::None,
+                Function::Max,
+                true,
+            ),
+            chart(
+                "eventd.queries.refused",
+                Transform::Delta,
+                Function::Sum,
+                false,
+            ),
+            chart(
+                "eventd.metrics.stored",
+                Transform::Rate,
+                Function::Sum,
+                true,
+            ),
         ],
     }
 }
@@ -287,7 +355,11 @@ pub fn health() -> Dashboard {
 pub fn lines(dashboards: &[Dashboard]) -> Vec<String> {
     let mut lines = Vec::new();
     for dashboard in dashboards {
-        lines.push(format!("dashboard {} {}", dashboard.span.name(), dashboard.name));
+        lines.push(format!(
+            "dashboard {} {}",
+            dashboard.span.name(),
+            dashboard.name
+        ));
         lines.extend(dashboard.charts.iter().map(Chart::line));
     }
     lines
@@ -299,15 +371,24 @@ pub fn parse<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<Dashboard> {
     for line in lines {
         let mut words = line.splitn(3, ' ');
         match (words.next(), words.next(), words.next()) {
-            (Some("dashboard"), Some(span), Some(name)) if !name.trim().is_empty() && dashboards.len() < MOST_DASHBOARDS => {
+            (Some("dashboard"), Some(span), Some(name))
+                if !name.trim().is_empty() && dashboards.len() < MOST_DASHBOARDS =>
+            {
                 if let Some(span) = Span::named(span) {
-                    dashboards.push(Dashboard { name: name.trim().into(), span, charts: Vec::new() });
+                    dashboards.push(Dashboard {
+                        name: name.trim().into(),
+                        span,
+                        charts: Vec::new(),
+                    });
                 }
             }
             (Some("chart"), Some(metric), Some(rest)) => {
-                let Some(dashboard) = dashboards.last_mut() else { continue };
+                let Some(dashboard) = dashboards.last_mut() else {
+                    continue;
+                };
                 let rest: Vec<&str> = rest.split(' ').collect();
-                if let ([transform, function, combined], true) = (rest.as_slice(), text::is_identifier(metric))
+                if let ([transform, function, combined], true) =
+                    (rest.as_slice(), text::is_identifier(metric))
                     && let (Some(transform), Some(function), Some(combined)) = (
                         Transform::named(transform),
                         Function::named(function),
@@ -319,7 +400,12 @@ pub fn parse<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<Dashboard> {
                     )
                     && dashboard.charts.len() < MOST_CHARTS
                 {
-                    dashboard.charts.push(Chart { metric: metric.into(), transform, function, combined });
+                    dashboard.charts.push(Chart {
+                        metric: metric.into(),
+                        transform,
+                        function,
+                        combined,
+                    });
                 }
             }
             _ => {}
@@ -331,32 +417,66 @@ pub fn parse<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<Dashboard> {
 /// The person's dashboards; eventd's health if they have none saved; and
 /// why theirs could not be read, if they could not.
 pub fn read() -> (Vec<Dashboard>, Option<String>) {
-    let saved = Key::open(None, OWN, KeyAccess::QUERY_VALUE, OpenFlags::empty()).and_then(|key| key.query_value(NAME.as_bytes(), None));
+    let saved = Key::open(None, OWN, KeyAccess::QUERY_VALUE, OpenFlags::empty())
+        .and_then(|key| key.query_value(NAME.as_bytes(), None));
     let value = match saved {
         Ok(value) => value,
         Err(error) if error.raw_os_error() == Some(ENOENT) => return (vec![health()], None),
-        Err(error) => return (vec![health()], Some(format!("Your saved dashboards could not be read: {error}."))),
+        Err(error) => {
+            return (
+                vec![health()],
+                Some(format!("Your saved dashboards could not be read: {error}.")),
+            );
+        }
     };
     if value.ty != ValueType::MULTI_SZ {
-        return (vec![health()], Some("Your saved dashboards are not a list of lines, so they were left as they are.".into()));
+        return (
+            vec![health()],
+            Some(
+                "Your saved dashboards are not a list of lines, so they were left as they are."
+                    .into(),
+            ),
+        );
     }
     let text = String::from_utf8_lossy(&value.data);
     let dashboards = parse(text.split('\0'));
-    if dashboards.is_empty() { (vec![health()], None) } else { (dashboards, None) }
+    if dashboards.is_empty() {
+        (vec![health()], None)
+    } else {
+        (dashboards, None)
+    }
 }
 
 /// Saves the person's dashboards, making their key if it is the first
 /// time.
 pub fn write(dashboards: &[Dashboard]) -> Result<(), String> {
-    let (parent, _) = Key::create(None, PARENT, KeyAccess::CREATE_SUB_KEY, CreateFlags::empty(), None, None).map_err(|error| format!("{PARENT}: {error}"))?;
-    let (own, _) = Key::create(Some(&parent), CHILD, KeyAccess::SET_VALUE, CreateFlags::empty(), None, None).map_err(|error| format!("{OWN}: {error}"))?;
+    let (parent, _) = Key::create(
+        None,
+        PARENT,
+        KeyAccess::CREATE_SUB_KEY,
+        CreateFlags::empty(),
+        None,
+        None,
+    )
+    .map_err(|error| format!("{PARENT}: {error}"))?;
+    let (own, _) = Key::create(
+        Some(&parent),
+        CHILD,
+        KeyAccess::SET_VALUE,
+        CreateFlags::empty(),
+        None,
+        None,
+    )
+    .map_err(|error| format!("{OWN}: {error}"))?;
     let mut bytes = Vec::new();
     for line in lines(dashboards) {
         bytes.extend_from_slice(line.as_bytes());
         bytes.push(0);
     }
     bytes.push(0);
-    own.set_value(NAME.as_bytes(), ValueType::MULTI_SZ, &bytes).call().map_err(|error| error.to_string())
+    own.set_value(NAME.as_bytes(), ValueType::MULTI_SZ, &bytes)
+        .call()
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]
@@ -368,7 +488,12 @@ mod tests {
         let mut second = Dashboard::new("Disks and things");
         second.span = Span::Week;
         second.charts.push(Chart::of("disk.read.bytes", "counter"));
-        second.charts.push(Chart { metric: "request.duration".into(), transform: Transform::P99, function: Function::Max, combined: true });
+        second.charts.push(Chart {
+            metric: "request.duration".into(),
+            transform: Transform::P99,
+            function: Function::Max,
+            combined: true,
+        });
         let dashboards = vec![health(), second];
         let lines = lines(&dashboards);
         assert_eq!(lines[0], "dashboard 1h eventd's health");
@@ -390,18 +515,35 @@ mod tests {
             "",
         ]);
         assert_eq!(read.len(), 1);
-        assert_eq!(read[0].charts, vec![Chart { metric: "cpu.usage".into(), transform: Transform::None, function: Function::Avg, combined: false }]);
+        assert_eq!(
+            read[0].charts,
+            vec![Chart {
+                metric: "cpu.usage".into(),
+                transform: Transform::None,
+                function: Function::Avg,
+                combined: false
+            }]
+        );
     }
 
     #[test]
     fn a_chart_asks_for_one_value_per_window() {
         let mut chart = Chart::of("eventd.events.stored", "counter");
-        assert_eq!(chart.query(Span::Hour), "METRIC eventd.events.stored[] RATE SINCE 1h ago SUM_OVER 1m");
+        assert_eq!(
+            chart.query(Span::Hour),
+            "METRIC eventd.events.stored[] RATE SINCE 1h ago SUM_OVER 1m"
+        );
         chart.combined = true;
         chart.transform = Transform::None;
         chart.function = Function::Max;
-        assert_eq!(chart.query(Span::Minutes15), "METRIC eventd.events.stored SINCE 15m ago MAX_OVER 15s");
-        assert_eq!(Chart::of("request.duration", "histogram").query(Span::Week), "METRIC request.duration[] P95 SINCE 7d ago AVG_OVER 2h");
+        assert_eq!(
+            chart.query(Span::Minutes15),
+            "METRIC eventd.events.stored SINCE 15m ago MAX_OVER 15s"
+        );
+        assert_eq!(
+            Chart::of("request.duration", "histogram").query(Span::Week),
+            "METRIC request.duration[] P95 SINCE 7d ago AVG_OVER 2h"
+        );
     }
 
     #[test]
@@ -411,7 +553,10 @@ mod tests {
         assert!(Transform::P95.fits("histogram") && !Transform::P95.fits("counter"));
         for span in Span::ALL {
             assert_eq!(Span::named(span.name()), Some(span));
-            assert!((60..=100).contains(&(span.seconds() / span.window_seconds())), "{span:?}");
+            assert!(
+                (60..=100).contains(&(span.seconds() / span.window_seconds())),
+                "{span:?}"
+            );
         }
     }
 }

@@ -1,10 +1,11 @@
 [package]
-name = "peitor"
-version = "0.0.1"
-edition = "2024"
-license = "MIT"
+name = "gxwi-text-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 publish = false
 
 [dependencies]
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "5629140add3de075511b3379fd690fdabd06dcaf" }
-libc = "0.2"
+libc = { workspace = true }
+libgxwi = { workspace = true }

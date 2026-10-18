@@ -41,7 +41,9 @@ impl View {
         match id {
             "mounts" => Some(View::Mounts),
             "startup" => Some(View::Startup),
-            _ => id.strip_prefix("disk:").map(|name| View::Disk(name.to_string())),
+            _ => id
+                .strip_prefix("disk:")
+                .map(|name| View::Disk(name.to_string())),
         }
     }
 }
@@ -186,7 +188,10 @@ impl Manager {
             }
         }
         // The first disk is the first thing shown, once there is one.
-        if first && let Ok(disks) = &self.machine.disks && let Some(disk) = disks.first() {
+        if first
+            && let Ok(disks) = &self.machine.disks
+            && let Some(disk) = disks.first()
+        {
             self.view = View::Disk(disk.name.clone());
         }
         // What was open may have gone: a disk taken out, a mount undone.
@@ -212,7 +217,12 @@ impl Manager {
         }
         self.jobs += 1;
         let number = self.jobs;
-        self.job = Some(Job { number, change: change.clone(), progress: None, ended: None });
+        self.job = Some(Job {
+            number,
+            change: change.clone(),
+            progress: None,
+            ended: None,
+        });
         self.asking = None;
         self.said = None;
         let window = self.window.clone();
@@ -224,11 +234,17 @@ impl Manager {
     }
 
     fn heard_job(&mut self, number: u64, heard: Heard) {
-        let Some(job) = self.job.as_mut().filter(|j| j.number == number) else { return };
+        let Some(job) = self.job.as_mut().filter(|j| j.number == number) else {
+            return;
+        };
         match heard {
             Heard::Progress { done, of, text } => job.progress = Some((done, of, text)),
             Heard::Done(said) => {
-                let said = if said.is_empty() { job.change.done() } else { said };
+                let said = if said.is_empty() {
+                    job.change.done()
+                } else {
+                    said
+                };
                 job.ended = Some(Ok(said.clone()));
                 self.said = Some(Ok(said));
             }
@@ -250,11 +266,19 @@ impl Manager {
     }
 
     fn named(value: &Value, key: &str) -> String {
-        value.get(key).and_then(Value::as_str).unwrap_or_default().to_string()
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
     }
 
     fn number(value: &Value, key: &str) -> u64 {
-        value.get(key).and_then(Value::as_str).and_then(|s| s.parse().ok()).unwrap_or(0)
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0)
     }
 
     /// Opens a form or a question, with its fields as they start.
@@ -275,8 +299,17 @@ impl Manager {
                 fields.set("add-label", "");
             }
             Asking::Format(name) => {
-                let label = self.machine.volume(name).and_then(|(_, v)| v.filesystem.as_ref()?.label.clone()).unwrap_or_default();
-                let format = match self.machine.volume(name).and_then(|(_, v)| v.filesystem.as_ref()).map(|f| f.kind.as_str()) {
+                let label = self
+                    .machine
+                    .volume(name)
+                    .and_then(|(_, v)| v.filesystem.as_ref()?.label.clone())
+                    .unwrap_or_default();
+                let format = match self
+                    .machine
+                    .volume(name)
+                    .and_then(|(_, v)| v.filesystem.as_ref())
+                    .map(|f| f.kind.as_str())
+                {
                     Some("vfat") => Format::Fat32,
                     _ => Format::Ext4,
                 };
@@ -284,10 +317,15 @@ impl Manager {
                 fields.set("format-label", &label);
             }
             Asking::Mount(name) => {
-                let Some((_, volume)) = self.machine.volume(name) else { return };
+                let Some((_, volume)) = self.machine.volume(name) else {
+                    return;
+                };
                 fields.set("mount-where", &page::suggested_target(volume));
                 fields.set("mount-ro", if volume.read_only { "on" } else { "" });
-                fields.set("mount-policy", page::default_policy(volume.filesystem.as_ref()).id());
+                fields.set(
+                    "mount-policy",
+                    page::default_policy(volume.filesystem.as_ref()).id(),
+                );
                 fields.set("mount-startup", "");
             }
             Asking::AddStartup => {
@@ -306,12 +344,23 @@ impl Manager {
     }
 
     fn add_partition(&mut self, fields: &mut Fields) {
-        let Some(Asking::Add { disk, start, size: free }) = self.asking.clone() else { return };
+        let Some(Asking::Add {
+            disk,
+            start,
+            size: free,
+        }) = self.asking.clone()
+        else {
+            return;
+        };
         let amount: f64 = match fields.get("add-size").trim().replace(',', ".").parse() {
             Ok(n) if n > 0.0 => n,
             _ => return self.refuse("Give the partition a size."),
         };
-        let unit = if fields.get("add-unit") == "mb" { disks::MIB } else { 1024 * disks::MIB };
+        let unit = if fields.get("add-unit") == "mb" {
+            disks::MIB
+        } else {
+            1024 * disks::MIB
+        };
         // Whole mebibytes, as the table lays partitions out; a size a hair
         // over what is free, as a rounded figure is, is all of it.
         let mut size = ((amount * unit as f64) as u64) / disks::MIB * disks::MIB;
@@ -339,49 +388,119 @@ impl Manager {
             }
             None => None,
         };
-        let root = format.as_ref().filter(|(f, _)| f.keeps_permissions()).map(|_| self.drafts.root.clone().unwrap_or_else(permissions::default_root));
-        self.start(Change::AddPartition { disk, start, size, kind, name, format, root });
+        let root = format
+            .as_ref()
+            .filter(|(f, _)| f.keeps_permissions())
+            .map(|_| {
+                self.drafts
+                    .root
+                    .clone()
+                    .unwrap_or_else(permissions::default_root)
+            });
+        self.start(Change::AddPartition {
+            disk,
+            start,
+            size,
+            kind,
+            name,
+            format,
+            root,
+        });
     }
 
     fn format(&mut self, fields: &mut Fields) {
-        let Some(Asking::Format(volume)) = self.asking.clone() else { return };
+        let Some(Asking::Format(volume)) = self.asking.clone() else {
+            return;
+        };
         let format = Format::by(fields.get("format-fs")).unwrap_or(Format::Ext4);
         let label = fields.get("format-label").trim().to_string();
         if let Err(why) = page::check_label(format, &label) {
             return self.refuse(&why);
         }
-        let root = format.keeps_permissions().then(|| self.drafts.root.clone().unwrap_or_else(permissions::default_root));
-        self.start(Change::Format { volume, format, label, root });
+        let root = format.keeps_permissions().then(|| {
+            self.drafts
+                .root
+                .clone()
+                .unwrap_or_else(permissions::default_root)
+        });
+        self.start(Change::Format {
+            volume,
+            format,
+            label,
+            root,
+        });
     }
 
     fn mount(&mut self, fields: &mut Fields) {
-        let Some(Asking::Mount(volume)) = self.asking.clone() else { return };
-        let target = fields.get("mount-where").trim().trim_end_matches('/').to_string();
-        if let Err(why) = page::check_target(&target, self.machine.mounts.as_deref().unwrap_or_default()) {
+        let Some(Asking::Mount(volume)) = self.asking.clone() else {
+            return;
+        };
+        let target = fields
+            .get("mount-where")
+            .trim()
+            .trim_end_matches('/')
+            .to_string();
+        if let Err(why) =
+            page::check_target(&target, self.machine.mounts.as_deref().unwrap_or_default())
+        {
             return self.refuse(&why);
         }
         let kind = PolicyKind::by(fields.get("mount-policy")).unwrap_or(PolicyKind::DenyMissing);
-        let template = kind.makes().then(|| self.drafts.template.clone().unwrap_or_else(permissions::default_root));
+        let template = kind.makes().then(|| {
+            self.drafts
+                .template
+                .clone()
+                .unwrap_or_else(permissions::default_root)
+        });
         let policy = MountPolicy { kind, template };
         let read_only = fields.get("mount-ro") == "on";
         let at_startup = fields.get("mount-startup") == "on";
-        self.start(Change::Mount { volume, target, read_only, policy, at_startup });
+        self.start(Change::Mount {
+            volume,
+            target,
+            read_only,
+            policy,
+            at_startup,
+        });
     }
 
     fn add_startup(&mut self, fields: &mut Fields) {
         let uuid = fields.get("startup-fs").to_string();
-        let Some(volume) = self.machine.disks.iter().flatten().flat_map(|d| d.volumes()).find(|v| v.filesystem.as_ref().and_then(|f| f.uuid.as_deref()) == Some(uuid.as_str())) else {
+        let Some(volume) = self
+            .machine
+            .disks
+            .iter()
+            .flatten()
+            .flat_map(|d| d.volumes())
+            .find(|v| v.filesystem.as_ref().and_then(|f| f.uuid.as_deref()) == Some(uuid.as_str()))
+        else {
             return self.refuse("Choose a filesystem.");
         };
         let shown = page::volume_name(volume);
-        let target = fields.get("startup-where").trim().trim_end_matches('/').to_string();
+        let target = fields
+            .get("startup-where")
+            .trim()
+            .trim_end_matches('/')
+            .to_string();
         if let Err(why) = page::check_target(&target, &[]) {
             return self.refuse(&why);
         }
         let kind = PolicyKind::by(fields.get("startup-policy")).unwrap_or(PolicyKind::DenyMissing);
-        let template = kind.makes().then(|| self.drafts.template.clone().unwrap_or_else(permissions::default_root));
+        let template = kind.makes().then(|| {
+            self.drafts
+                .template
+                .clone()
+                .unwrap_or_else(permissions::default_root)
+        });
         let read_only = fields.get("startup-ro") == "on";
-        let startup = Startup { id: String::new(), uuid, shown, target, read_only, policy: MountPolicy { kind, template } };
+        let startup = Startup {
+            id: String::new(),
+            uuid,
+            shown,
+            target,
+            read_only,
+            policy: MountPolicy { kind, template },
+        };
         self.start(Change::AddStartup { startup });
     }
 
@@ -391,26 +510,42 @@ impl Manager {
         if self.editing {
             return;
         }
-        let current = if root { self.drafts.root.clone() } else { self.drafts.template.clone() }.unwrap_or_else(permissions::default_root);
+        let current = if root {
+            self.drafts.root.clone()
+        } else {
+            self.drafts.template.clone()
+        }
+        .unwrap_or_else(permissions::default_root);
         let window = self.window.clone();
         let window_done = self.window.clone();
-        let what = if root { "The new filesystem's top folder" } else { "Files without permissions of their own" };
-        let opened = permissions::edit(what, &current, true, None, move |sd| {
-            if let Some(window) = window.upgrade() {
-                window.update(|manager, _| {
-                    if root {
-                        manager.drafts.root = Some(sd.to_vec());
-                    } else {
-                        manager.drafts.template = Some(sd.to_vec());
-                    }
-                });
-            }
-            Ok(())
-        }, move || {
-            if let Some(window) = window_done.upgrade() {
-                window.update(|manager, _| manager.editing = false);
-            }
-        });
+        let what = if root {
+            "The new filesystem's top folder"
+        } else {
+            "Files without permissions of their own"
+        };
+        let opened = permissions::edit(
+            what,
+            &current,
+            true,
+            None,
+            move |sd| {
+                if let Some(window) = window.upgrade() {
+                    window.update(|manager, _| {
+                        if root {
+                            manager.drafts.root = Some(sd.to_vec());
+                        } else {
+                            manager.drafts.template = Some(sd.to_vec());
+                        }
+                    });
+                }
+                Ok(())
+            },
+            move || {
+                if let Some(window) = window_done.upgrade() {
+                    window.update(|manager, _| manager.editing = false);
+                }
+            },
+        );
         match opened {
             Ok(()) => self.editing = true,
             Err(why) => self.said = Some(Err(why)),
@@ -423,29 +558,51 @@ impl Manager {
         if self.editing {
             return;
         }
-        let Some(mount) = self.machine.mount(id) else { return };
+        let Some(mount) = self.machine.mount(id) else {
+            return;
+        };
         let Ok(policy) = &mount.policy else { return };
-        let current = policy.template_sd.clone().unwrap_or_else(permissions::default_root);
+        let current = policy
+            .template_sd
+            .clone()
+            .unwrap_or_else(permissions::default_root);
         let may = self.may() && mount.fixed_policy().is_none() && mount.needed().is_none();
         let why = if self.machine.may.is_err() {
             Some("You may not change this mount's policy.".to_string())
         } else {
-            mount.fixed_policy().or(mount.needed()).map(|why| why.to_string())
+            mount
+                .fixed_policy()
+                .or(mount.needed())
+                .map(|why| why.to_string())
         };
         let kind = policy.kind;
         let target = mount.target.clone();
         let window_done = self.window.clone();
         let what = format!("Files on {target} without permissions of their own");
-        let opened = permissions::edit(&what, &current, may, why, move |sd| {
-            service::make(Change::SetPolicy { target: target.clone(), policy: MountPolicy { kind, template: Some(sd.to_vec()) } }).map(|_| ())
-        }, move || {
-            if let Some(window) = window_done.upgrade() {
-                window.update(|manager, _| {
-                    manager.editing = false;
-                    manager.reread();
-                });
-            }
-        });
+        let opened = permissions::edit(
+            &what,
+            &current,
+            may,
+            why,
+            move |sd| {
+                service::make(Change::SetPolicy {
+                    target: target.clone(),
+                    policy: MountPolicy {
+                        kind,
+                        template: Some(sd.to_vec()),
+                    },
+                })
+                .map(|_| ())
+            },
+            move || {
+                if let Some(window) = window_done.upgrade() {
+                    window.update(|manager, _| {
+                        manager.editing = false;
+                        manager.reread();
+                    });
+                }
+            },
+        );
         match opened {
             Ok(()) => self.editing = true,
             Err(why) => self.said = Some(Err(why)),
@@ -470,13 +627,31 @@ impl Manager {
                         Kind::Image => Tile::Slate,
                     };
                     let now = format!("{} · {}", disk.name, words::bytes(disk.size));
-                    nav.push(Nav::Section(Section { id: View::Disk(disk.name.clone()).id(), title: interned(&words::disk_title(disk)), now, glyph, tile }));
+                    nav.push(Nav::Section(Section {
+                        id: View::Disk(disk.name.clone()).id(),
+                        title: interned(&words::disk_title(disk)),
+                        now,
+                        glyph,
+                        tile,
+                    }));
                 }
             }
-            Err(_) => nav.push(Nav::Section(Section { id: "disk:", title: "Disks", now: "Unavailable".into(), glyph: Glyph::Disk, tile: Tile::Blue })),
+            Err(_) => nav.push(Nav::Section(Section {
+                id: "disk:",
+                title: "Disks",
+                now: "Unavailable".into(),
+                glyph: Glyph::Disk,
+                tile: Tile::Blue,
+            })),
         }
         let mounts = match &self.machine.mounts {
-            Ok(list) => words::count(list.iter().filter(|m| !m.hidden && m.origin == disks::Origin::Storage).count(), "filesystem", "filesystems"),
+            Ok(list) => words::count(
+                list.iter()
+                    .filter(|m| !m.hidden && m.origin == disks::Origin::Storage)
+                    .count(),
+                "filesystem",
+                "filesystems",
+            ),
             Err(_) => "Unavailable".into(),
         };
         let startup = match &self.machine.startup {
@@ -485,8 +660,20 @@ impl Manager {
             Err(_) => "Unavailable".into(),
         };
         nav.push(Nav::Heading("This Machine"));
-        nav.push(Nav::Section(Section { id: "mounts", title: "Mounts", now: mounts, glyph: Glyph::Folder, tile: Tile::Teal }));
-        nav.push(Nav::Section(Section { id: "startup", title: "At Startup", now: startup, glyph: Glyph::Power, tile: Tile::Green }));
+        nav.push(Nav::Section(Section {
+            id: "mounts",
+            title: "Mounts",
+            now: mounts,
+            glyph: Glyph::Folder,
+            tile: Tile::Teal,
+        }));
+        nav.push(Nav::Section(Section {
+            id: "startup",
+            title: "At Startup",
+            now: startup,
+            glyph: Glyph::Power,
+            tile: Tile::Green,
+        }));
         nav
     }
 }
@@ -495,9 +682,13 @@ impl Live for Manager {
     fn render(&self, facts: &Facts) -> String {
         let fields = facts.fields;
         let page = if !self.read {
-            settings::head(Glyph::Disk, Tile::Blue, "Disks", "") + &settings::group("", &settings::row("Reading…", "", ""), "")
+            settings::head(Glyph::Disk, Tile::Blue, "Disks", "")
+                + &settings::group("", &settings::row("Reading…", "", ""), "")
         } else {
-            let looking = page::Looking { manager: self, fields };
+            let looking = page::Looking {
+                manager: self,
+                fields,
+            };
             match (&self.open, &self.view) {
                 (Some(Open::Volume(name)), _) => page::volume(&looking, name),
                 (Some(Open::Mount(id)), _) => crate::mounts::mount(&looking, *id),
@@ -511,19 +702,32 @@ impl Live for Manager {
                 let (done, of, text) = job.progress.clone().unwrap_or((0, 0, job.change.doing()));
                 let mut top = settings::progress(done, of, &text);
                 if self.close_when_done {
-                    top = settings::caution("Disk Manager closes when this change is finished.") + &top;
+                    top = settings::caution("Disk Manager closes when this change is finished.")
+                        + &top;
                 }
                 top + &page
             }
             _ => page,
         };
-        settings::window(&self.nav(), self.view.id(), &page, &settings::status(self.said.as_ref(), ""))
+        settings::window(
+            &self.nav(),
+            self.view.id(),
+            &page,
+            &settings::status(self.said.as_ref(), ""),
+        )
     }
 
     fn input(&mut self, name: &str, fields: &mut Fields) {
         // A mount's policy, chosen on its page, applies as it is chosen.
-        let Some(id) = name.strip_prefix("policy:").and_then(|id| id.parse::<u32>().ok()) else { return };
-        let Some(mount) = self.machine.mount(id) else { return };
+        let Some(id) = name
+            .strip_prefix("policy:")
+            .and_then(|id| id.parse::<u32>().ok())
+        else {
+            return;
+        };
+        let Some(mount) = self.machine.mount(id) else {
+            return;
+        };
         let Ok(current) = &mount.policy else { return };
         let chosen = PolicyKind::by(fields.get(name));
         let current_kind = current.kind;
@@ -532,17 +736,29 @@ impl Live for Manager {
             return;
         }
         let kind = chosen.unwrap_or(current_kind);
-        let template = kind.makes().then(|| current.template_sd.clone().unwrap_or_else(permissions::default_root));
+        let template = kind.makes().then(|| {
+            current
+                .template_sd
+                .clone()
+                .unwrap_or_else(permissions::default_root)
+        });
         let target = mount.target.clone();
         // Until the policy is changed, the field shows what it is.
         fields.set(name, current_kind.id());
-        self.start(Change::SetPolicy { target, policy: MountPolicy { kind, template } });
+        self.start(Change::SetPolicy {
+            target,
+            policy: MountPolicy { kind, template },
+        });
     }
 
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
         match name {
             "section" => {
-                if let Some(view) = value.get("section").and_then(Value::as_str).and_then(View::by) {
+                if let Some(view) = value
+                    .get("section")
+                    .and_then(Value::as_str)
+                    .and_then(View::by)
+                {
                     self.view = view;
                     self.open = None;
                     self.asking = None;
@@ -567,7 +783,11 @@ impl Live for Manager {
             }
             "ask-new-table" => self.ask(Asking::NewTable(Self::named(value, "disk")), fields),
             "ask-add" => {
-                let asking = Asking::Add { disk: Self::named(value, "disk"), start: Self::number(value, "start"), size: Self::number(value, "size") };
+                let asking = Asking::Add {
+                    disk: Self::named(value, "disk"),
+                    start: Self::number(value, "start"),
+                    size: Self::number(value, "size"),
+                };
                 self.ask(asking, fields);
             }
             "ask-delete" => self.ask(Asking::Delete(Self::named(value, "volume")), fields),

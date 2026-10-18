@@ -62,7 +62,9 @@ impl Value {
 
     fn encode(&self) -> (ValueType, Vec<u8>) {
         match self {
-            Value::Int(i) if (0..=i64::from(u32::MAX)).contains(i) => (ValueType::DWORD, (*i as u32).to_le_bytes().to_vec()),
+            Value::Int(i) if (0..=i64::from(u32::MAX)).contains(i) => {
+                (ValueType::DWORD, (*i as u32).to_le_bytes().to_vec())
+            }
             Value::Int(i) => (ValueType::QWORD, i.to_le_bytes().to_vec()),
             Value::Str(s) => {
                 let mut data = s.as_bytes().to_vec();
@@ -85,7 +87,11 @@ impl Value {
     fn decode(ty: ValueType, data: &[u8]) -> Option<Value> {
         let text = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).ok();
         match ty {
-            ValueType::DWORD if data.len() == 4 => Some(Value::Int(i64::from(u32::from_le_bytes([data[0], data[1], data[2], data[3]])))),
+            ValueType::DWORD if data.len() == 4 => {
+                Some(Value::Int(i64::from(u32::from_le_bytes([
+                    data[0], data[1], data[2], data[3],
+                ]))))
+            }
             ValueType::QWORD if data.len() == 8 => {
                 let mut b = [0u8; 8];
                 b.copy_from_slice(data);
@@ -95,7 +101,12 @@ impl Value {
                 let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
                 text(&data[..end]).map(Value::Str)
             }
-            ValueType::MULTI_SZ => Some(Value::List(data.split(|&b| b == 0).filter(|s| !s.is_empty()).filter_map(text).collect())),
+            ValueType::MULTI_SZ => Some(Value::List(
+                data.split(|&b| b == 0)
+                    .filter(|s| !s.is_empty())
+                    .filter_map(text)
+                    .collect(),
+            )),
             _ => Some(Value::Bytes(data.to_vec())),
         }
     }
@@ -112,17 +123,26 @@ pub struct Tree {
 
 impl Tree {
     pub fn new(name: &str) -> Tree {
-        Tree { name: name.to_string(), values: Vec::new(), children: Vec::new() }
+        Tree {
+            name: name.to_string(),
+            values: Vec::new(),
+            children: Vec::new(),
+        }
     }
 
     /// The value `name`, matched without regard to case, as the registry
     /// matches names.
     pub fn value(&self, name: &str) -> Option<&Value> {
-        self.values.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, v)| v)
+        self.values
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v)
     }
 
     pub fn child(&self, name: &str) -> Option<&Tree> {
-        self.children.iter().find(|c| c.name.eq_ignore_ascii_case(name))
+        self.children
+            .iter()
+            .find(|c| c.name.eq_ignore_ascii_case(name))
     }
 
     /// The key at `path` below this one, `/`-separated.
@@ -138,13 +158,18 @@ impl Tree {
 /// How deep a tree is read. PNP refuses rules nested deeper than 12, and a
 /// registry has no cycles; this only bounds a pathological tree.
 const MAX_DEPTH: usize = 16;
+// Linux registry errors returned through the Peios ABI.
+const EACCES: i32 = 13;
+const ENOENT: i32 = 2;
 
 const READ: KeyAccess = KeyAccess::QUERY_VALUE.union(KeyAccess::ENUMERATE_SUB_KEYS);
 
 fn read_key(key: &Key, name: &str, depth: usize) -> Result<Tree, String> {
     let mut tree = Tree::new(name);
     for record in key.query_values_batch(None).map_err(|e| e.to_string())? {
-        let Ok(value_name) = String::from_utf8(record.name.clone()) else { continue };
+        let Ok(value_name) = String::from_utf8(record.name.clone()) else {
+            continue;
+        };
         if let Some(value) = Value::decode(record.ty, &record.data) {
             tree.values.push((value_name, value));
         }
@@ -152,11 +177,15 @@ fn read_key(key: &Key, name: &str, depth: usize) -> Result<Tree, String> {
     if depth < MAX_DEPTH {
         for subkey in key.subkeys(None) {
             let subkey = subkey.map_err(|e| e.to_string())?;
-            let Ok(child_name) = String::from_utf8(subkey.name) else { continue };
+            let Ok(child_name) = String::from_utf8(subkey.name) else {
+                continue;
+            };
             match Key::open(Some(key), &child_name, READ, OpenFlags::empty()) {
-                Ok(child) => tree.children.push(read_key(&child, &child_name, depth + 1)?),
+                Ok(child) => tree
+                    .children
+                    .push(read_key(&child, &child_name, depth + 1)?),
                 // A key this person may not read is left out, not fatal.
-                Err(e) if e.raw_os_error() == Some(libc_eacces()) => {}
+                Err(e) if e.raw_os_error() == Some(EACCES) => {}
                 Err(e) => return Err(format!("{child_name}: {e}")),
             }
         }
@@ -164,12 +193,8 @@ fn read_key(key: &Key, name: &str, depth: usize) -> Result<Tree, String> {
     Ok(tree)
 }
 
-fn libc_eacces() -> i32 {
-    13
-}
-
 fn absent(e: &peios::Error) -> bool {
-    e.raw_os_error() == Some(2)
+    e.raw_os_error() == Some(ENOENT)
 }
 
 /// Reads the key at `path` whole, or `None` when there is no such key.
@@ -193,7 +218,13 @@ pub fn value(path: &str, name: &str) -> Option<Value> {
 /// setting values and making subkeys. The registry's own answer, asked
 /// rather than guessed.
 pub fn may_change(path: &str) -> bool {
-    Key::open(None, path, KeyAccess::SET_VALUE | KeyAccess::CREATE_SUB_KEY, OpenFlags::empty()).is_ok()
+    Key::open(
+        None,
+        path,
+        KeyAccess::SET_VALUE | KeyAccess::CREATE_SUB_KEY,
+        OpenFlags::empty(),
+    )
+    .is_ok()
 }
 
 /// One change to a key, in a [`Batch`].
@@ -201,7 +232,11 @@ pub fn may_change(path: &str) -> bool {
 pub enum Edit {
     /// Make the key if it isn't there and set these values. With
     /// `replace`, every other value on it goes.
-    Put { path: String, values: Vec<(String, Value)>, replace: bool },
+    Put {
+        path: String,
+        values: Vec<(String, Value)>,
+        replace: bool,
+    },
     /// Remove these values from the key.
     Unset { path: String, names: Vec<String> },
     /// Remove the key and everything under it.
@@ -225,10 +260,28 @@ const WRITE: KeyAccess = KeyAccess::QUERY_VALUE
 /// the transaction began.
 fn create(hive: &Key, path: &str, txn: &Transaction) -> Result<Key, String> {
     let mut parts = path.split('\\').filter(|p| !p.is_empty()).skip(1);
-    let Some(first) = parts.next() else { return Err(format!("{path}: not a key under a hive")) };
-    let (mut key, _) = Key::create(Some(hive), first, WRITE, CreateFlags::empty(), None, Some(txn)).map_err(|e| format!("{path}: {e}"))?;
+    let Some(first) = parts.next() else {
+        return Err(format!("{path}: not a key under a hive"));
+    };
+    let (mut key, _) = Key::create(
+        Some(hive),
+        first,
+        WRITE,
+        CreateFlags::empty(),
+        None,
+        Some(txn),
+    )
+    .map_err(|e| format!("{path}: {e}"))?;
     for part in parts {
-        let (child, _) = Key::create(Some(&key), part, WRITE, CreateFlags::empty(), None, Some(txn)).map_err(|e| format!("{path}: {e}"))?;
+        let (child, _) = Key::create(
+            Some(&key),
+            part,
+            WRITE,
+            CreateFlags::empty(),
+            None,
+            Some(txn),
+        )
+        .map_err(|e| format!("{path}: {e}"))?;
         key = child;
     }
     Ok(key)
@@ -239,15 +292,30 @@ fn create(hive: &Key, path: &str, txn: &Transaction) -> Result<Key, String> {
 /// when there is no such key.
 fn gather(path: &str) -> Result<Vec<Key>, String> {
     fn under(key: Key, out: &mut Vec<Key>) -> Result<(), String> {
-        let names: Vec<String> = key.subkeys(None).filter_map(|s| s.ok()).filter_map(|s| String::from_utf8(s.name).ok()).collect();
+        let names: Vec<String> = key
+            .subkeys(None)
+            .filter_map(|s| s.ok())
+            .filter_map(|s| String::from_utf8(s.name).ok())
+            .collect();
         for name in names {
-            let child = Key::open(Some(&key), &name, KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS, OpenFlags::OPEN_LINK).map_err(|e| format!("{name}: {e}"))?;
+            let child = Key::open(
+                Some(&key),
+                &name,
+                KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS,
+                OpenFlags::OPEN_LINK,
+            )
+            .map_err(|e| format!("{name}: {e}"))?;
             under(child, out)?;
         }
         out.push(key);
         Ok(())
     }
-    match Key::open(None, path, KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS, OpenFlags::empty()) {
+    match Key::open(
+        None,
+        path,
+        KeyAccess::DELETE | KeyAccess::ENUMERATE_SUB_KEYS,
+        OpenFlags::empty(),
+    ) {
         Ok(key) => {
             let mut out = Vec::new();
             under(key, &mut out).map_err(|e| format!("{path}: {e}"))?;
@@ -258,17 +326,32 @@ fn gather(path: &str) -> Result<Vec<Key>, String> {
     }
 }
 
-fn put(key: &Key, values: &[(String, Value)], replace: bool, txn: &Transaction) -> Result<(), String> {
+fn put(
+    key: &Key,
+    values: &[(String, Value)],
+    replace: bool,
+    txn: &Transaction,
+) -> Result<(), String> {
     if replace {
-        for record in key.query_values_batch(Some(txn)).map_err(|e| e.to_string())? {
-            if !values.iter().any(|(n, _)| n.as_bytes().eq_ignore_ascii_case(&record.name)) {
-                key.delete_value(&record.name, None, Some(txn)).map_err(|e| e.to_string())?;
+        for record in key
+            .query_values_batch(Some(txn))
+            .map_err(|e| e.to_string())?
+        {
+            if !values
+                .iter()
+                .any(|(n, _)| n.as_bytes().eq_ignore_ascii_case(&record.name))
+            {
+                key.delete_value(&record.name, None, Some(txn))
+                    .map_err(|e| e.to_string())?;
             }
         }
     }
     for (name, value) in values {
         let (ty, data) = value.encode();
-        key.set_value(name.as_bytes(), ty, &data).in_txn(txn).call().map_err(|e| format!("{name}: {e}"))?;
+        key.set_value(name.as_bytes(), ty, &data)
+            .in_txn(txn)
+            .call()
+            .map_err(|e| format!("{name}: {e}"))?;
     }
     Ok(())
 }
@@ -299,11 +382,15 @@ impl Batch {
         let mut doomed: Vec<Vec<Key>> = Vec::new();
         for edit in &self.0 {
             let path = match edit {
-                Edit::Put { path, .. } | Edit::Unset { path, .. } | Edit::Delete { path } | Edit::Restore { path, .. } => path,
+                Edit::Put { path, .. }
+                | Edit::Unset { path, .. }
+                | Edit::Delete { path }
+                | Edit::Restore { path, .. } => path,
             };
             let hive = path.split('\\').next().unwrap_or_default().to_string();
             if !hives.iter().any(|(h, _)| *h == hive) {
-                let key = Key::open(None, &hive, WRITE, OpenFlags::empty()).map_err(|e| format!("{hive}: {e}"))?;
+                let key = Key::open(None, &hive, WRITE, OpenFlags::empty())
+                    .map_err(|e| format!("{hive}: {e}"))?;
                 hives.push((hive, key));
             }
             doomed.push(match edit {
@@ -313,15 +400,24 @@ impl Batch {
         }
         let hive = |path: &str| -> &Key {
             let name = path.split('\\').next().unwrap_or_default();
-            &hives.iter().find(|(h, _)| h == name).expect("every hive is opened").1
+            &hives
+                .iter()
+                .find(|(h, _)| h == name)
+                .expect("every hive is opened")
+                .1
         };
         let txn = Transaction::begin().map_err(|e| format!("A change couldn't be started: {e}"))?;
         for (edit, doomed) in self.0.iter().zip(&doomed) {
             for key in doomed {
-                key.delete_key(None, Some(&txn)).map_err(|e| format!("A key couldn't be removed: {e}"))?;
+                key.delete_key(None, Some(&txn))
+                    .map_err(|e| format!("A key couldn't be removed: {e}"))?;
             }
             match edit {
-                Edit::Put { path, values, replace } => {
+                Edit::Put {
+                    path,
+                    values,
+                    replace,
+                } => {
                     let key = create(hive(path), path, &txn)?;
                     put(&key, values, *replace, &txn)?;
                 }
@@ -343,7 +439,8 @@ impl Batch {
                 }
             }
         }
-        txn.commit().map_err(|e| format!("The change couldn't be made: {e}"))
+        txn.commit()
+            .map_err(|e| format!("The change couldn't be made: {e}"))
     }
 }
 
@@ -353,7 +450,14 @@ mod tests {
 
     #[test]
     fn values_survive_their_encoding() {
-        for value in [Value::Int(22), Value::Int(-5), Value::Int(1 << 40), Value::Str("in".into()), Value::List(vec!["8080".into(), "8081".into()]), Value::Bytes(vec![1, 2, 3])] {
+        for value in [
+            Value::Int(22),
+            Value::Int(-5),
+            Value::Int(1 << 40),
+            Value::Str("in".into()),
+            Value::List(vec!["8080".into(), "8081".into()]),
+            Value::Bytes(vec![1, 2, 3]),
+        ] {
             let (ty, data) = value.encode();
             assert_eq!(Value::decode(ty, &data), Some(value));
         }
@@ -365,7 +469,10 @@ mod tests {
         let mut ssh = Tree::new("ssh");
         ssh.children.push(Tree::new("too-fast"));
         root.children.push(ssh);
-        assert_eq!(root.at("SSH/Too-Fast").map(|t| t.name.as_str()), Some("too-fast"));
+        assert_eq!(
+            root.at("SSH/Too-Fast").map(|t| t.name.as_str()),
+            Some("too-fast")
+        );
         assert!(root.at("ssh/none").is_none());
     }
 }
