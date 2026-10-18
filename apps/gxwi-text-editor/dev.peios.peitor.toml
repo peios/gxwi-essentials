@@ -1,0 +1,14 @@
+# What peitor is to a desktop (PGSS Applications): installed as
+# /usr/share/apps/dev.peios.peitor.toml, named for the id, by the package
+# that installs the program.
+title = "Text Editor"
+description = "Read and change files of text"
+program = "/usr/bin/peitor"
+opens = [
+    "text/*",
+    "application/json",
+    "application/toml",
+    "application/xml",
+    "application/x-shellscript",
+    "image/svg+xml",
+]
