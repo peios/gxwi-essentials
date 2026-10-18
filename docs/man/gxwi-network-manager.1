@@ -1,0 +1,83 @@
+.TH GXWI-NETWORK-MANAGER 1 2026-10-19 "Peios gxwi-network-manager 0.1.0"
+.SH NAME
+gxwi-network-manager \- see and change this machine's networks, profiles, name resolution and firewall on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-network-manager
+.SH DESCRIPTION
+Network Manager is the desktop's window on this machine's networking and its firewall.
+Open it from the launcher (type network).
+It takes no arguments.
+Down the side are three groups.
+.PP
+Network: Overview maps each interface to the network it is on and the profile it uses, with its addresses, routes, traffic and DHCP lease, and Renew lease and Reapply.
+Networks names each network the machine has stood on and sets its trust level, Private or Public.
+Profiles and Profile rules edit the profiles and which interface uses which.
+DNS looks a name up and shows the way the question went, flushes resolvd's cache, and sets fallback servers, search domains and static names.
+.PP
+Firewall: Exposure shows which services can be reached from private networks, public networks and this machine, and changes a cell in one step.
+Rules writes the firewall's rules, and Test a connection shows what the firewall would do with one.
+Activity shows what the firewall has been deciding.
+.PP
+System: Port reservations says who can listen on a port.
+Auditing sets the lowest level of audit event recorded.
+Advanced shows the machine's DHCP identity, and who can look at and change netd's and resolvd's settings.
+Permissions..., beside a reservation or beside netd's or resolvd's access, opens the permissions editor, which shows it read-only to anyone who cannot change it.
+.PP
+What it shows comes from netd, resolvd, the kernel and the registry under Machine\eSystem\eNetwork.
+What it changes it writes to the registry, as the person, after checking it as the machine would; what the machine would refuse is not written, and the status line says why.
+A change that would cut a desktop connection that is open now asks first.
+Saving a rule, changing a cell on Exposure, and other changes that could cut the person off show a Keep this change? bar, and are undone after 30 seconds unless kept.
+The countdown runs on the machine, not in the browser.
+.PP
+Firewall listener, connection, counter, and recent-audit panels display constructed example data.
+Each affected section is labeled Example data, and the status line says Example.
+The application judges those examples against real rules and machine context; they are not a live traffic inventory.
+Saved rules and non-firewall network state are real.
+Verify changes with the intended actual connection rather than the example panels.
+.PP
+What a person can change is what the registry lets them write, key by key, asked of the machine.
+Where they cannot, a section is shown read-only and says once that changing it needs an administrator.
+Exposure and Activity are for administrators only.
+Renew lease and Reapply need netd's Network Control right, which Administrators hold.
+It reads the machine again every two seconds, and its settings whenever the registry changes.
+.SH CONFIGURATION
+Network and firewall configuration is read from Machine\eSystem\eNetwork.
+The netd, resolvd, and kernel registry manuals define the settings and their application timing.
+.SH SECURITY
+Registry writes, daemon control, and restricted views use their own access checks.
+The interface does not infer all rights from group membership.
+A guarded network change can revert after 30 seconds; other changes have no automatic rollback.
+.SH EXIT STATUS
+.TP
+.B 0
+The application session ended normally.
+.TP
+.B 1
+A connection, initialization, or application error prevented normal operation.
+.TP
+.B 64
+Invalid command arguments.
+.SH ENVIRONMENT
+.TP
+.B GXWI_DISPLAY
+The display connection supplied by the desktop session.
+Launch through the desktop so inherited session descriptors and identity are available.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-network-manager.toml
+Its application declaration.
+.TP
+.I /run/netd/control.sock
+netd's control socket: its status, renewals, and reapplying.
+.TP
+.I /run/resolvd/resolv.sock
+resolvd's socket: its status, lookups, and flushing its cache.
+.TP
+.I /usr/bin/gxwi-sd-editor
+The permissions editor, which Permissions... opens.
+.SH SEE ALSO
+.BR net (1),
+.BR resolv (1),
+.BR gxwi-sd-editor (1).
+.PP
+Network Manager, at learn.peios.org.

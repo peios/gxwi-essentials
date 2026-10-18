@@ -1,0 +1,74 @@
+.TH GXWI-PRINCIPALS-MANAGER 1 2026-10-19 "Peios gxwi-principals-manager 0.1.0"
+.SH NAME
+gxwi-principals-manager \- see and manage this machine's users and groups on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-principals-manager
+.SH DESCRIPTION
+Principals Manager shows the users and groups this machine knows, and lets an administrator manage the local ones.
+A local principal is one the machine holds itself, in lpsd's store; a built-in one, such as SYSTEM or Administrators, is defined by authd and is the same on every Peios machine.
+It is started from the launcher, and takes no arguments.
+.PP
+Users and Groups, in the bar, switch between the two lists, and Find narrows either.
+Picking one shows it in full beside the list: for a user, their IDs, home, shell, SID, the ways they can sign in, their groups and their claims; for a group, its description, IDs, SID and members.
+An administrator also sees what a local user signs in with and their SSH keys.
+.PP
+An administrator can make, edit, rename, disable, enable, and delete local users and groups; set a user's password, what they sign in with, and the ways they can sign in; add and remove their SSH keys and claims; and put users in groups and take them out, including built-in groups whose members are recorded here, such as Administrators.
+Each change is a request to lpsd, as the person, and a refusal is shown in lpsd's words.
+The machine always keeps an enabled administrator who can sign in, and a change that would leave none is refused.
+Changes to how a user signs in apply from their next sign-in.
+.PP
+Privileges lists this machine's local policy: one record per user or group, under the registry key authd reads at every sign-in.
+Each record can give privileges, an integrity level, an owner, and a default DACL.
+A user's page says what they would get in all if they signed in now.
+Records are made, changed and deleted in the registry directly, as the person.
+.PP
+Anyone can see the users and groups.
+Changing them needs BUILTIN\eAdministrators, enabled in the person's token; without it, the window says You can look, but not change anything, and why.
+The privileges records are changed by whoever the policy key's permissions let, which as shipped is Administrators.
+.PP
+The lists are read again every few seconds, so a change made with
+.BR lps (1),
+.BR reg (1)
+or by another administrator appears by itself; Refresh (F5) reads everything at once.
+.PP
+It needs a desktop: run with no GXWI_DISPLAY, it says so and ends.
+.SH CONFIGURATION
+Sign-in policy records are stored under Machine\eGeneric\eAuthn\ePolicy and are consumed by authd when creating a new token.
+.SH SECURITY
+Local administration requires enabled Administrators membership as enforced by lpsd.
+Local sign-in policy changes use registry write access.
+The backend rejects changes that would remove the last enabled administrator able to sign in.
+.SH EXIT STATUS
+.TP
+.B 0
+The application session ended normally.
+.TP
+.B 1
+A connection, initialization, or application error prevented normal operation.
+.TP
+.B 64
+Invalid command arguments.
+.SH ENVIRONMENT
+.TP
+.B GXWI_DISPLAY
+The display connection supplied by the desktop session.
+Launch through the desktop so inherited session descriptors and identity are available.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-principals-manager.toml
+Its application declaration, which lists it in the launcher.
+.TP
+.I /run/ident.sock
+authd's identity socket, where the users, groups and their details are read.
+.TP
+.I /run/lpsd/admin.sock
+lpsd's admin socket, through which the local store is changed.
+.TP
+.B Machine\eGeneric\eAuthn\ePolicy
+The registry key holding the privileges records.
+.SH SEE ALSO
+.BR lps (1),
+.BR lpsd (8),
+.BR authd (8).
+.PP
+Principals Manager, at learn.peios.org.

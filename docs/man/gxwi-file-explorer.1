@@ -1,0 +1,63 @@
+.TH GXWI-FILE-EXPLORER 1 2026-10-19 "Peios gxwi-file-explorer 0.1.0"
+.SH NAME
+gxwi-file-explorer \- browse and manage files on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-file-explorer
+.RI [ DIRECTORY ]
+.SH DESCRIPTION
+Open a directory in a GXWI session.
+With no path, use HOME when available.
+The window owns navigation, selection, and sorting; devices displaying the same window see that shared state.
+A listing shows at most 2,000 entries and reports when that limit is reached.
+.PP
+Opening a directory navigates into it; opening an executable starts it.
+Other files use an installed application that supports their media type, preferring personal then machine defaults and otherwise the candidates by title.
+The entry menu offers alternative candidates.
+The listing determines media types by name; unknown types can be checked for text when opened.
+.PP
+Entry actions include Rename, Copy path, Cut, Copy, Delete, and Permissions.
+Delete asks first and removes directories recursively without a trash store.
+The directory menu offers Paste, new folders and files, and applications that open directories.
+A pasted copy chooses a copy name when needed; a cut does not overwrite an occupied name.
+.PP
+Cut and copy selections are shared across windows through the session runtime directory.
+Without that directory, they remain local to one window.
+Paths that are not UTF-8 cannot be placed in this clipboard format.
+Concurrent temporary-file collisions do not overwrite unrelated files.
+.SH CONFIGURATION
+Application declarations and personal or machine file-type defaults are read through GXWI's application catalog.
+The session clipboard file retains the name gexora.held for interoperability.
+.SH SECURITY
+Local actions retain native filename bytes independently of their display labels.
+Shared clipboard operations refuse non-UTF-8 paths explicitly.
+Unknown-type text detection reads at most 4 KiB from a regular file and does not wait on a pipe or device.
+Filesystem operations use the session account.
+Permission edits use a retained object handle and the rights available when it was opened.
+Delete removes a directory recursively without a trash store.
+Copy, move, and rename refuse occupied destinations, including concurrent creation.
+.SH EXIT STATUS
+.TP
+.B 0
+The application session ended normally.
+.TP
+.B 1
+A connection, initialization, or application error prevented normal operation.
+.SH ENVIRONMENT
+.TP
+.B GXWI_DISPLAY
+The display connection supplied by the desktop session.
+Launch through the desktop so inherited session descriptors and identity are available.
+.TP
+.B HOME
+The initial or fallback home-directory location.
+.TP
+.B GXWI_RUNTIME_DIR
+Session-private directory containing the shared cut or copy selection in gexora.held.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-file-explorer.toml
+The application declaration.
+.SH SEE ALSO
+.BR gxwi-text-editor (1),
+.BR gxwi-terminal (1),
+.BR gxwi-sd-editor (1).

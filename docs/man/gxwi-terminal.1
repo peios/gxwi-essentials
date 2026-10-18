@@ -1,0 +1,83 @@
+.TH GXWI-TERMINAL 1 2026-10-19 "Peios gxwi-terminal 0.1.0"
+.SH NAME
+gxwi-terminal \- GXWI terminal
+.SH SYNOPSIS
+.B gxwi-terminal
+.RI [ directory ]
+.br
+.B gxwi-terminal
+.I program
+.RI [ argument ...]
+.SH DESCRIPTION
+Opens a window on the GXWI desktop with a shell in it, on a pseudoterminal.
+The shell is the one named by
+.B SHELL
+as an absolute path in the environment, or
+.I /bin/sh
+if none is named, and it is started in the home directory of whoever signed in.
+.PP
+Given one argument that is an absolute directory, the shell is started there instead.
+Given anything else, the first argument is run in place of the shell and the rest are passed to it.
+.PP
+The terminal belongs to the program and not to the browser showing it: a page that is closed and opened again, or another device looking at the same session, is shown the terminal as it stands.
+.PP
+The window closes when the shell ends.
+Closing the window hangs the terminal up on whatever is running in it.
+.SH INPUT
+Each browser page buffers at most 1 MiB of pending input and sends it in order
+in 16 KiB chunks, waiting for each chunk to be written to the pseudoterminal.
+The application separately limits queued input and input being written across
+pages to 1 MiB. Each incoming websocket message and frame is limited to 1 MiB.
+A write acknowledgment means that the pseudoterminal accepted the bytes,
+not that the program finished processing them.
+.PP
+If the page buffer fills, typing pauses while output continues.
+A paste larger than the remaining space is refused in full with a visible message.
+.PP
+A broken connection with pending input produces an interruption warning.
+Unconfirmed input is not replayed after reconnection; some bytes might already
+have reached the program, and application-side input might still be written.
+Check the terminal before entering commands again.
+.SH KEYS
+.TP
+.B Ctrl+Shift+C
+Copy what is selected.
+.TP
+.B Ctrl+Shift+V, Shift+Insert
+Paste.
+.PP
+The desktop's own chords are the desktop's while the keyboard is in the terminal.
+.SH SECURITY
+The child runs with the session account's authority and inherited session environment.
+Closing the application window hangs up the terminal; this is different from disconnecting a browser.
+.SH EXIT STATUS
+.TP
+.B 0
+The application session ended normally.
+.TP
+.B 1
+A connection, initialization, or application error prevented normal operation.
+.SH ENVIRONMENT
+.TP
+.B TERM
+Set to
+.I xterm-256color
+for what is started.
+.TP
+.B GXWI_DISPLAY
+Names the desktop.
+It is left in the environment of what is started, so a program run from the terminal can open windows of its own.
+.TP
+.B HOME
+Initial working directory when it exists; otherwise use the filesystem root.
+.TP
+.B SHELL
+Absolute shell path; a missing or nonabsolute value selects /bin/sh.
+.TP
+.B COLORTERM
+Set to truecolor for the child.
+.SH NOTES
+Runs within a GXWI session.
+Its parent supplies the session descriptors and identity; launch it through the desktop.
+.SH SEE ALSO
+The Peios learn documentation.
