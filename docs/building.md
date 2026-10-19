@@ -185,7 +185,7 @@ installed-desktop qualification remain separate from the hosted CI job.
 ## Check documentation
 
 Use Trail revision `1d662e98cbcbdd5c51c01533afcab7f5723a2eff` or a compatible
-version with root-anthology and recursive-merge support:
+version with recursive-merge support:
 
 ```sh
 TRAIL=/absolute/path/to/trail tools/check-docs
@@ -193,6 +193,6 @@ TRAIL=/absolute/path/to/trail tools/check-docs
 
 The check lints `docs/learn/`, builds it strictly into a temporary directory,
 and removes that output. It does not start desktop applications or execute
-management procedures. Panorama merges the suite's `peios.antho` into its
+management procedures. Panorama merges the suite's `peios.product` into its
 shared Peios tree. Check the combined documentation when changing links or
 hierarchy, keeping generated output outside the source tree.
