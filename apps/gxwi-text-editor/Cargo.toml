@@ -8,4 +8,4 @@ publish = false
 
 [dependencies]
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }

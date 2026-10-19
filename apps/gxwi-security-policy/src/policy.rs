@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
 use gxwi_file_dialog::{Filter, Mode, Request as Choose};
-use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
-use libgxwi::{Facts, Fields, Live, Surface, Value};
+use gxwi::settings::{self, Glyph, Nav, Section, Tile};
+use gxwi::{Facts, Fields, Live, Surface, Value};
 use trust::{Details, cert};
 
 use crate::store::{self, Known, LOOK_ONLY, Store};

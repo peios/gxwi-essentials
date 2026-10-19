@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 
 use crate::rules::{self, Layer, Verdict};
 
-pub use libgxwi::escape as h;
+pub use gxwi::escape as h;
 
 /// Line icons on a 24-unit grid.
 pub fn path(name: &str) -> &'static str {

@@ -10,7 +10,7 @@ publish = false
 gxwi-file-dialog = { workspace = true, default-features = false }
 gxwi-sd-editor = { workspace = true, features = ["registry", "splice"], default-features = false }
 jiff = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 libtrust = { workspace = true }
 peios = { workspace = true }
 trust = { workspace = true }

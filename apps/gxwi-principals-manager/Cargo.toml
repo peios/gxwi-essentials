@@ -10,5 +10,5 @@ publish = false
 auth-core = { workspace = true, features = ["client"] }
 auth-policy = { workspace = true, features = ["write"] }
 jiff = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 peios = { workspace = true }

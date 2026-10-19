@@ -1,7 +1,7 @@
 //! Every network this machine has stood on, and what the person says of
 //! each: a name, and a trust level, which rules read.
 
-use libgxwi::Fields;
+use gxwi::Fields;
 
 use crate::engine::{self, Context, Judge};
 use crate::live;

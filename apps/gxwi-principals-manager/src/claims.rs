@@ -9,7 +9,7 @@
 
 use auth_core::claim::{Claim, Values};
 use auth_core::client::admin::Admin;
-use libgxwi::{Fields, escape};
+use gxwi::{Fields, escape};
 
 use crate::accounts::{Account, form};
 use crate::directory::Directory;

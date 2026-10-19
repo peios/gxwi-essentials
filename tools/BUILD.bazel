@@ -10,6 +10,7 @@ filegroup(
     srcs = glob(
         ["**"],
         exclude = [
+            "**/.ruff_cache/**",
             "**/__pycache__/**",
             "**/*.pyc",
         ],

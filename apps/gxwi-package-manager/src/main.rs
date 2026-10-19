@@ -6,7 +6,7 @@
 //! daemon: Package Manager runs it, as the person, reading its queries'
 //! JSON and holding a conversation with its driven mode for each change.
 
-use libgxwi::App;
+use gxwi::App;
 
 mod changes;
 mod manager;
@@ -21,7 +21,7 @@ use manager::Manager;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-package-manager.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-package-manager");
+gxwi::icon!(b"dev.peios.gxwi-package-manager");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
@@ -38,7 +38,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    libgxwi::settings::stylesheet(&mut app);
+    gxwi::settings::stylesheet(&mut app);
     app.stylesheet(
         "/gxwi-package-manager.css",
         include_str!("gxwi-package-manager.css"),

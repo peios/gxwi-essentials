@@ -1,6 +1,6 @@
 //! The pages about change: the updates waiting, and what was done before.
 
-use libgxwi::settings::{self, Glyph, Kind, Tile, Tone};
+use gxwi::settings::{self, Glyph, Kind, Tile, Tone};
 
 use crate::peipkg::{Operation, Transaction};
 use crate::store::{Store, Updates};

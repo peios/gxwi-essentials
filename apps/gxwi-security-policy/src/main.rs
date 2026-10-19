@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use libgxwi::App;
+use gxwi::App;
 
 mod certificates;
 mod keys;
@@ -25,7 +25,7 @@ use store::Known;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-security-policy.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-security-policy");
+gxwi::icon!(b"dev.peios.gxwi-security-policy");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
@@ -42,7 +42,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    libgxwi::settings::stylesheet(&mut app);
+    gxwi::settings::stylesheet(&mut app);
     app.stylesheet(
         "/gxwi-security-policy.css",
         include_str!("gxwi-security-policy.css"),

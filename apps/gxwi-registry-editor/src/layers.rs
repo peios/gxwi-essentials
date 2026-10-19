@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::sync::Weak;
 
 use gxwi_sd_editor::names::Names;
-use libgxwi::{Facts, Fields, Live, Surface, Value, escape};
+use gxwi::{Facts, Fields, Live, Surface, Value, escape};
 use peios::registry::layers::{self, BASE, LAYERS, Layer};
 use peios::registry::{Key, KeyAccess, OpenFlags};
 use peios::security::Privileges;

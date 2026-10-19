@@ -12,7 +12,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use libgxwi::{App, Surface};
+use gxwi::{App, Surface};
 
 mod definition;
 mod fields;
@@ -28,7 +28,7 @@ use manager::Manager;
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-services-manager.svg` at the repo root, installed as the base
 // theme's.
-libgxwi::icon!(b"dev.peios.gxwi-services-manager");
+gxwi::icon!(b"dev.peios.gxwi-services-manager");
 
 /// How often the window looks again at what the services are doing. peinit
 /// says nothing when a service changes state, so the window asks.

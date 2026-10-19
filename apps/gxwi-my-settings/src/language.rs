@@ -2,8 +2,8 @@
 //! which the kernel routes `CurrentUser\Locale` to, and which is yours to
 //! write. Each session reads it as it starts.
 
-use libgxwi::Fields;
-use libgxwi::settings::{self, Glyph, Tile};
+use gxwi::Fields;
+use gxwi::settings::{self, Glyph, Tile};
 use session_preferences::locale::{self, Available};
 use peios::registry::Data;
 

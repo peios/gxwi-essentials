@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 axum = { workspace = true, features = ["ws"] }
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 vt100 = { workspace = true }

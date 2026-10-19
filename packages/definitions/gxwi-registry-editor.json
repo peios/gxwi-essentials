@@ -14,7 +14,8 @@
         "org.gnu.glibc": "*",
         "org.gnu.gcc-libgcc": "*",
         "dev.peios.gxwi-sd-editor": "= 0.1.0-1",
-        "dev.peios.gxwi-file-dialog": "= 0.1.0-1"
+        "dev.peios.gxwi-file-dialog": "= 0.1.0-1",
+        "dev.peios.libgxwi": ">= 0.0.7-1"
     },
     "files": {
         "stage:runtime/gxwi-registry-editor/usr/**": "usr",

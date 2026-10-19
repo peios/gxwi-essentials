@@ -1,8 +1,8 @@
 //! The pages about where software comes from and goes: repositories, the
 //! roles packages fill, and the installation roots.
 
-use libgxwi::Fields;
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
+use gxwi::Fields;
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
 
 use crate::manager::Asking;
 use crate::peipkg::{Repository, Root};
@@ -67,9 +67,9 @@ fn repository_row(r: &Repository, asking: Option<&Asking>, may: bool, now: i64) 
             More::Asking,
             &format!(
                 "<p>Trust {}? It was set up on this machine without being confirmed. Trusting it fetches what it offers and checks that against the key given for it, then installs and updates from it.</p><p>{}</p>{}{}",
-                libgxwi::escape(&r.name),
-                libgxwi::escape(&keys),
-                if key.is_empty() { String::new() } else { format!(r#"<p><code class="st-mono">{}</code></p>"#, libgxwi::escape(&key)) },
+                gxwi::escape(&r.name),
+                gxwi::escape(&keys),
+                if key.is_empty() { String::new() } else { format!(r#"<p><code class="st-mono">{}</code></p>"#, gxwi::escape(&key)) },
                 settings::actions(&format!(
                     "{}{}",
                     focused("Cancel", "cancel", &[], Kind::Plain),
@@ -83,7 +83,7 @@ fn repository_row(r: &Repository, asking: Option<&Asking>, may: bool, now: i64) 
             More::Asking,
             &format!(
                 "<p>Remove {}? Software installed from it stays installed, but nothing updates it.</p>{}",
-                libgxwi::escape(&r.name),
+                gxwi::escape(&r.name),
                 settings::actions(&format!(
                     "{}{}",
                     focused("Cancel", "cancel", &[], Kind::Plain),

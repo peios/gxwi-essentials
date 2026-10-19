@@ -2,8 +2,8 @@
 //! with, as it lists them in `kacs/signing_keys`. They are compiled into
 //! the kernel, so nothing here changes them; only a new kernel does.
 
-use libgxwi::settings::{self, Glyph, Tile};
-use libgxwi::escape;
+use gxwi::settings::{self, Glyph, Tile};
+use gxwi::escape;
 
 /// Where the kernel lists its keys.
 pub const LISTING: &str = "/sys/kernel/security/kacs/signing_keys";

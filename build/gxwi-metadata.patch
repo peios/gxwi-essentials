@@ -2,13 +2,13 @@
 +++ b/Cargo.toml
 @@ -1,10 +1,10 @@
  [package]
- name = "libgxwi"
+ name = "gxwi"
  description = "What a program uses to have windows on a GXWI desktop."
 -version.workspace = true
 -edition.workspace = true
 -license.workspace = true
 -publish.workspace = true
-+version = "0.0.5"
++version = "0.0.7"
 +edition = "2024"
 +license = "MIT"
 +publish = false

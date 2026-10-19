@@ -1,8 +1,8 @@
 //! The certificates pages: every certificate in force, one of them, one
 //! being added, and those distrusted.
 
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
+use gxwi::{Fields, escape};
 use libtrust::{Health, Source};
 
 use crate::policy::{Asking, Candidate};

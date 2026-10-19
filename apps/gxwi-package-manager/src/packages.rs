@@ -1,8 +1,8 @@
 //! The software pages: what is installed, what the repositories offer, and
 //! one package.
 
-use libgxwi::settings::{self, Glyph, Kind, Tile, Tone};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Kind, Tile, Tone};
+use gxwi::{Fields, escape};
 
 use crate::peipkg::{File, Offer, Package};
 use crate::store::{Store, Updates};

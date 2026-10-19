@@ -16,7 +16,7 @@ required-features = ["program"]
 
 [features]
 default = ["program"]
-program = ["names", "dep:libgxwi", "dep:libc", "dep:sha1"]
+program = ["names", "dep:gxwi", "dep:libc", "dep:sha1"]
 names = ["dep:peios", "dep:auth-core"]
 splice = ["dep:peios"]
 registry = ["dep:peios"]
@@ -26,7 +26,7 @@ propagate = ["dep:peios"]
 auth-core = { workspace = true, optional = true, features = ["client"] }
 base64 = { workspace = true }
 libc = { workspace = true, optional = true }
-libgxwi = { workspace = true, optional = true }
+gxwi = { workspace = true, optional = true }
 peios = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

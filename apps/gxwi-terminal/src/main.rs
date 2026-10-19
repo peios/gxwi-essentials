@@ -22,7 +22,7 @@
 
 use std::path::PathBuf;
 
-use libgxwi::App;
+use gxwi::App;
 
 mod input;
 mod page;
@@ -35,7 +35,7 @@ use terminal::Terminal;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-terminal.svg`, installed as the base theme's `dev.peios.gxwi-terminal.svg`.
-libgxwi::icon!(b"dev.peios.gxwi-terminal");
+gxwi::icon!(b"dev.peios.gxwi-terminal");
 
 /// What the emulator in the page is, to the programs that ask.
 const TERM: &str = "xterm-256color";

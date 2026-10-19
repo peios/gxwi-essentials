@@ -13,7 +13,7 @@ serde_json = "1"
 auth-core = { workspace = true, features = ["client"] }
 jiff = { workspace = true }
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 libnetd = { workspace = true }
 libtimed = { workspace = true }
 peinit2 = { workspace = true, default-features = false }

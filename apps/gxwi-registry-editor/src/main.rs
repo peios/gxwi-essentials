@@ -10,7 +10,7 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::sync::{Arc, Weak};
 
 use gxwi_sd_editor::names::Names;
-use libgxwi::{App, Surface};
+use gxwi::{App, Surface};
 use peios::registry::{Key, NotifyFilter, WatchEventType};
 
 mod docs;
@@ -27,7 +27,7 @@ use layers::LayersWindow;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-registry-editor.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-registry-editor");
+gxwi::icon!(b"dev.peios.gxwi-registry-editor");
 
 /// How long a wait on the registry lasts before the window is asked again
 /// which keys are in sight.

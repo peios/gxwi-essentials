@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 gxwi-sd-editor = { workspace = true, features = ["names", "splice"], default-features = false }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 libnetd = { workspace = true, features = ["policy"] }
 libresolv = { workspace = true }
 ntfe = { workspace = true }

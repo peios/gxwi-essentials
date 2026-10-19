@@ -1,7 +1,7 @@
 //! The settings page: whether trustd also writes the certificate files
 //! under /etc/ssl, how it is faring, and who may change trust.
 
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
 use libtrust::Health;
 
 use crate::policy::Asking;

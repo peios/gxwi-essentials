@@ -58,3 +58,11 @@ in the listing. Local navigation, rename, and deletion retain the original
 filename bytes, so identical-looking labels do not identify the same entry.
 The shared clipboard accepts only UTF-8 paths and reports other paths as
 unsupported rather than silently changing their names.
+
+## Filenames and launching applications
+
+File Explorer keeps the original filename when selecting or changing a file.
+The application launch protocol carries UTF-8 text. If a filename cannot be
+represented as UTF-8, File Explorer reports that it cannot open the file
+through another application. It does not change the filename or launch a
+different file. The same check applies when opening a terminal in a folder.

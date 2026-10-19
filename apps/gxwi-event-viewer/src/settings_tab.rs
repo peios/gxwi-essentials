@@ -4,7 +4,7 @@
 
 use std::sync::Weak;
 
-use libgxwi::{Fields, Surface, escape};
+use gxwi::{Fields, Surface, escape};
 
 use crate::chart::{self, Unit};
 use crate::policy::{self, Entry, Policy, Space};

@@ -6,7 +6,7 @@
 //! the privileged disk service, which doesn't exist yet: until it does,
 //! every change is designed in full and makes nothing (`service`).
 
-use libgxwi::App;
+use gxwi::App;
 
 mod disks;
 mod manager;
@@ -20,7 +20,7 @@ use manager::Manager;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-disk-manager.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-disk-manager");
+gxwi::icon!(b"dev.peios.gxwi-disk-manager");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
@@ -37,7 +37,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    libgxwi::settings::stylesheet(&mut app);
+    gxwi::settings::stylesheet(&mut app);
     app.stylesheet(
         "/gxwi-disk-manager.css",
         include_str!("gxwi-disk-manager.css"),

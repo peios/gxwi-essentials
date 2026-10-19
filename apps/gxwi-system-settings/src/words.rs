@@ -1,6 +1,6 @@
 //! What the window says, in words.
 
-use libgxwi::settings::Tone;
+use gxwi::settings::Tone;
 use libtimed::{SourceState, Status, Sync};
 
 /// How well the clock is being kept, in a sentence.

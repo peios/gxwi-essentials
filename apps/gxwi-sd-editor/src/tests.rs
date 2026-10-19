@@ -2,7 +2,7 @@
 //! pressing and typing does to the descriptor it sends.
 
 use gxwi_sd_editor::{Can, Generic, Object, Request, Right};
-use libgxwi::{Facts, Fields, Live};
+use gxwi::{Facts, Fields, Live};
 use peios::security::sddl;
 use serde_json::json;
 

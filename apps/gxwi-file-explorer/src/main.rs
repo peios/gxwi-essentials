@@ -62,13 +62,13 @@ use std::sync::Weak;
 use std::time::SystemTime;
 
 use gxwi_sd_editor::{Can, Children, Generic, Object, Parent, Part, Request, Right};
-use libgxwi::apps::defaults::Defaults;
-use libgxwi::apps::{Application, Catalogue};
+use gxwi::apps::defaults::Defaults;
+use gxwi::apps::{Application, Catalogue};
 use peios::access::AccessCheck;
 use peios::file::{File, SecInfo};
 use peios::security::{AccessMask, SecurityDescriptor};
-use libgxwi::icons::{self, Themes};
-use libgxwi::{App, Facts, Fields, Live, Surface, Value, escape};
+use gxwi::icons::{self, Themes};
+use gxwi::{App, Facts, Fields, Live, Surface, Value, escape};
 
 mod held;
 mod show;
@@ -78,7 +78,7 @@ use held::{Held, Holding};
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-file-explorer.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-file-explorer");
+gxwi::icon!(b"dev.peios.gxwi-file-explorer");
 
 /// The most entries drawn at once. A directory with more says so.
 const MOST: usize = 2000;
@@ -91,7 +91,7 @@ struct Entry {
     /// Whether opening it starts it: a regular file this process may run.
     program: bool,
     icon: String,
-    /// Its media type, as far as libgxwi can tell from its name.
+    /// Its media type, as far as gxwi can tell from its name.
     media: Option<String>,
     size: u64,
     modified: Option<SystemTime>,
@@ -472,11 +472,12 @@ impl Explorer {
                 })
                 .flatten();
             match text {
-                Some((program, arguments)) => {
+                Some(Ok((program, arguments))) => {
                     if let Err(e) = start(&program, &arguments) {
                         self.trouble = Some(format!("{} could not be opened: {e}.", entry.name));
                     }
                 }
+                Some(Err(why)) => self.trouble = Some(why),
                 None => {
                     self.trouble = Some("Nothing installed says it opens files like this.".into())
                 }
@@ -495,7 +496,13 @@ impl Explorer {
             self.trouble = Some("This directory cannot be opened with that.".into());
             return;
         };
-        let (program, arguments) = application.command(Some(&self.at));
+        let (program, arguments) = match application.command(Some(&self.at)) {
+            Ok(command) => command,
+            Err(why) => {
+                self.trouble = Some(why);
+                return;
+            }
+        };
         if let Err(e) = start(&program, &arguments) {
             self.trouble = Some(format!("{} could not be started: {e}.", application.title));
         }
@@ -516,7 +523,14 @@ impl Explorer {
             self.trouble = Some(format!("{} cannot be opened with that.", entry.name));
             return;
         };
-        let (program, arguments) = application.command(Some(&self.at.join(&entry.native_name)));
+        let (program, arguments) =
+            match application.command(Some(&self.at.join(&entry.native_name))) {
+                Ok(command) => command,
+                Err(why) => {
+                    self.trouble = Some(why);
+                    return;
+                }
+            };
         if let Err(e) = start(&program, &arguments) {
             self.trouble = Some(format!("{} could not be started: {e}.", application.title));
         }

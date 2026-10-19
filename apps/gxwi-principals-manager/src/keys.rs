@@ -32,7 +32,7 @@ pub fn render(account: &Account, said: &str) -> String {
 }
 
 /// Saves the form adding a key.
-pub fn save(admin: &Admin, account: &Account, fields: &libgxwi::Fields) -> Result<String, String> {
+pub fn save(admin: &Admin, account: &Account, fields: &gxwi::Fields) -> Result<String, String> {
     let key = fields.get("key").trim();
     if key.is_empty() {
         return Err("Paste their public key.".into());

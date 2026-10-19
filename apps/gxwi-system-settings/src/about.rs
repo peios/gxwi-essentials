@@ -4,8 +4,8 @@
 //! `/proc`, `/sys` — except the name, which is
 //! `Machine\System\Network Hostname`, which netd applies as it changes.
 
-use libgxwi::Fields;
-use libgxwi::settings::{self, Glyph, Kind, Tile, Tone, Width};
+use gxwi::Fields;
+use gxwi::settings::{self, Glyph, Kind, Tile, Tone, Width};
 use libnetd::NETWORK_KEY;
 use libnetd::hostname::{self, HOSTNAME_VALUE};
 use peios::registry::Data;

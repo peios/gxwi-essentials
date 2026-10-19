@@ -11,7 +11,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use auth_core::client::ident::Ident;
-use libgxwi::{App, Surface};
+use gxwi::{App, Surface};
 
 mod about;
 mod language;
@@ -25,7 +25,7 @@ use settings::{Read, Settings};
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-system-settings.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-system-settings");
+gxwi::icon!(b"dev.peios.gxwi-system-settings");
 
 /// How often the clock is looked at, and how many of those between reading
 /// everything again. Nothing tells a program when a setting changes, so the
@@ -86,7 +86,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    libgxwi::settings::stylesheet(&mut app);
+    gxwi::settings::stylesheet(&mut app);
     app.stylesheet(
         "/gxwi-system-settings.css",
         include_str!("gxwi-system-settings.css"),

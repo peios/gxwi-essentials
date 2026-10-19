@@ -88,6 +88,9 @@ class FamilyTests(unittest.TestCase):
     def test_debug_pairs_and_suite_dependencies_are_exact(self) -> None:
         for name in APPLICATIONS:
             runtime = self.packages[name]
+            self.assertEqual(
+                runtime["package_metadata"]["dependencies"]["dev.peios.libgxwi"], ">= 0.0.7-1"
+            )
             for suffix in ("-debuginfo", "-debugsource"):
                 info = self.packages[name + suffix]
                 self.assertIn(

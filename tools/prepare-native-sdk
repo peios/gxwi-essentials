@@ -18,8 +18,25 @@ pkg-config --atleast-version=0.5.10 peios || {
 libdir=$(pkg-config --variable=libdir peios)
 includedir=$(pkg-config --variable=includedir peios)
 readelf -dW "$libdir/libpeios.so" | grep -E '\(SONAME\).*\[libpeios\.so\.0\]' >/dev/null
-mkdir -p "$sdk/include" "$sdk/lib"
+pkg-config --atleast-version=0.0.7 gxwi
+gxwi_libdir=$(pkg-config --variable=libdir gxwi)
+gxwi_includedir=$(pkg-config --variable=includedir gxwi)
+[ -f "$gxwi_includedir/peios/gxwi.h" ] || {
+    echo "Missing GXWI SDK header: $gxwi_includedir/peios/gxwi.h" >&2
+    exit 1
+}
+readelf -dW "$gxwi_libdir/libgxwi.so" | grep -E '\(SONAME\).*\[libgxwi\.so\.1\]' >/dev/null
+mkdir -p "$sdk/include/peios" "$sdk/lib"
 ln -s "$includedir/peios.h" "$sdk/include/peios.h"
-ln -s "$includedir/peios" "$sdk/include/peios"
+# The two development packages may use different installation prefixes.
+# Keep the directory local so the GXWI header always comes from its package.
+for header in "$includedir"/peios/*; do
+    [ -e "$header" ] || [ -L "$header" ] || continue
+    name=${header##*/}
+    [ "$name" != gxwi.h ] || continue
+    ln -s "$header" "$sdk/include/peios/$name"
+done
+ln -s "$gxwi_includedir/peios/gxwi.h" "$sdk/include/peios/gxwi.h"
 ln -s /usr/include/pkm "$sdk/include/pkm"
 ln -s "$libdir/libpeios.so.0" "$sdk/lib/libpeios.so.0"
+ln -s "$gxwi_libdir/libgxwi.so.1" "$sdk/lib/libgxwi.so.1"

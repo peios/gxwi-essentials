@@ -8,17 +8,23 @@ lock; Cargo supplies additional contributor diagnostics.
 
 ## Prepare the SDK and dependencies
 
-Select exact libpeios and kernel revisions and create a new SDK directory:
+Select exact libpeios and kernel revisions. Check out GXWI at the revision
+recorded in `[workspace.dependencies.gxwi]` in `Cargo.toml`, then create a
+new SDK directory:
 
 ```sh
 tools/prepare-dev-sdk /path/to/libpeios /path/to/kernel/include/uapi /tmp/gxwi-essentials-sdk
+tools/prepare-gxwi-sdk /path/to/gxwi /tmp/gxwi-essentials-sdk
 export PEIOS_SDK=/tmp/gxwi-essentials-sdk
 ```
 
 The helper builds libpeios with its own Cargo interface and copies its
 headers, kernel UAPI, and `libpeios.so.0` into the SDK. It does not install
 on the host. Keep the selected source revisions with qualification records.
-CI pins its SDK sources in `.github/workflows/check.yml`.
+CI pins libpeios and kernel sources in `.github/workflows/check.yml`.
+The GXWI helper builds `libgxwi.so.1` with Bazel and adds it and its C header
+to the same SDK. The Rust `gxwi` crate uses that shared library; the suite
+does not include a private copy of the desktop protocol implementation.
 
 The locked GXWI dependency is in the private `peios/gxwi` repository.
 Configure read access before fetching. When authentication uses Git's
@@ -91,8 +97,12 @@ fixed disk and removable USB storage. A GXWI VM launcher that accepts
 `VM_EXTRA` can consume the saved arguments:
 
 ```sh
-VM_EXTRA="$(cat /tmp/gxwi-test-disks.args)" /path/to/gxwi/dev/boot.sh
+GXWI_VM_RUNNER=/absolute/path/to/drive.py \
+    VM_EXTRA="$(cat /tmp/gxwi-test-disks.args)" /path/to/gxwi/dev/boot.sh
 ```
+
+Set `GXWI_VM_RUNNER` to the selected image runner's absolute path. The
+runner and image must match the desktop stack being qualified.
 
 Reuse that argument file to retain guest changes. For fresh fixtures, run
 the helper with a different directory. These images support viewing and
@@ -146,7 +156,8 @@ tools/offline-build acquire /absolute/path/gxwi-essentials-inputs
 
 Use an isolated Peios userspace with its CET-enabled Rust 1.98.1 compiler
 and standard library, C toolchain, Python, binutils, kernel headers, and
-libpeios 0.5.10 or newer development files. The permissions editor needs
+libpeios 0.5.10 or newer and libgxwi 0.0.7 or newer development files.
+The permissions editor needs
 the NULL ACL corrections introduced in 0.5.10. Copy the exact suite source,
 including `MODULE.bazel.lock`. Mount the acquired snapshot read-only and
 provide a private writable work directory. Inside that environment:

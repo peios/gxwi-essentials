@@ -15,6 +15,7 @@ SHELL_SOURCES = (
     "tools/offline-build",
     "tools/prepare-dev-sdk",
     "tools/prepare-native-sdk",
+    "tools/prepare-gxwi-sdk",
     "tools/prepare-test-disks",
 )
 

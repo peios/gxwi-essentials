@@ -12,7 +12,7 @@ pub mod ports;
 pub mod profiles;
 pub mod trace;
 
-use libgxwi::Fields;
+use gxwi::Fields;
 
 use crate::manager::{Drawer, Manager, Modal, View};
 use crate::rules::{self, Layer};

@@ -12,8 +12,8 @@
 use std::sync::Weak;
 
 use auth_core::client::ident::Ident;
-use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
-use libgxwi::{Facts, Fields, Live, Surface, Value};
+use gxwi::settings::{self, Glyph, Nav, Section, Tile};
+use gxwi::{Facts, Fields, Live, Surface, Value};
 use libtimed::zone::Listed;
 
 use crate::about::{self, About};

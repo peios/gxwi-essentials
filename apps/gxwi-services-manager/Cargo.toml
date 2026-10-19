@@ -12,6 +12,6 @@ serde_json = "1"
 [dependencies]
 gxwi-sd-editor = { workspace = true, features = ["splice", "registry"], default-features = false }
 jiff = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 peinit2 = { workspace = true, default-features = false }
 peios = { workspace = true }

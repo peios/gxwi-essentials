@@ -13,8 +13,8 @@ use std::collections::HashSet;
 use std::sync::{Mutex, Weak};
 use std::time::Duration;
 
-use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
-use libgxwi::{Facts, Fields, Live, Surface, Value};
+use gxwi::settings::{self, Glyph, Nav, Section, Tile};
+use gxwi::{Facts, Fields, Live, Surface, Value};
 
 use crate::disks::{self, Kind, Machine, PolicyKind};
 use crate::service::{self, Change, Format, Heard, MountPolicy, PartitionType, Startup};

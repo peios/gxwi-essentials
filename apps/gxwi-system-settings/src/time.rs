@@ -9,8 +9,8 @@
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
+use gxwi::{Fields, escape};
 use libtimed::servers::parse_server;
 use libtimed::zone::{self, Listed};
 use libtimed::{

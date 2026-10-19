@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use eventd_client::access::{self, Namespace, Readable};
 use eventd_client::{Error, Record, Tail, Tailed, Value};
-use libgxwi::{Facts, Fields, Live, Surface, escape};
+use gxwi::{Facts, Fields, Live, Surface, escape};
 
 use crate::metrics::Metrics;
 use crate::policy::Space;
@@ -886,7 +886,7 @@ impl Live for Viewer {
         )
     }
 
-    fn event(&mut self, name: &str, value: &libgxwi::Value, fields: &mut Fields) {
+    fn event(&mut self, name: &str, value: &gxwi::Value, fields: &mut Fields) {
         let row = value["row"]
             .as_str()
             .and_then(|row| row.parse::<u64>().ok());

@@ -12,7 +12,7 @@ use std::sync::Weak;
 
 use gxwi_sd_editor::names::Names;
 use jiff::tz::TimeZone;
-use libgxwi::{Facts, Fields, Live, Surface, Value, escape};
+use gxwi::{Facts, Fields, Live, Surface, Value, escape};
 use peios::registry::layers::{BASE, Layer};
 use peios::registry::{Data, ValueType};
 use peios::security::Sid;

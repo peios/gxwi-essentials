@@ -11,8 +11,8 @@ use std::path::PathBuf;
 use std::sync::Weak;
 
 use gxwi_file_dialog::{Filter, Mode, Request as Choose};
-use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
-use libgxwi::{Facts, Fields, Live, Surface, Value};
+use gxwi::settings::{self, Glyph, Nav, Section, Tile};
+use gxwi::{Facts, Fields, Live, Surface, Value};
 
 use crate::packages::{self, Looking};
 use crate::peipkg::{self, Event, File, Problem};

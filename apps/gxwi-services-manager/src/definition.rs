@@ -24,7 +24,7 @@
 use std::collections::BTreeMap;
 use std::sync::Weak;
 
-use libgxwi::{Closer, Facts, Fields, Live, Surface, Value, escape};
+use gxwi::{Closer, Facts, Fields, Live, Surface, Value, escape};
 use peinit::client::{
     Definition, FIELDS, FieldGroup, FieldInfo, FieldKind, Problem, State, TakesEffect, changes,
     service_field,

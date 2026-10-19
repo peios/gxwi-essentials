@@ -8,7 +8,7 @@
 
 use auth_core::ident::Record;
 use auth_core::client::admin::Admin;
-use libgxwi::{Fields, escape};
+use gxwi::{Fields, escape};
 
 use crate::accounts::{self, Doing, form, options, short};
 use crate::directory;

@@ -13,7 +13,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use libgxwi::Surface;
+use gxwi::Surface;
 use libtrust::{
     ADD_KEY, CERTIFICATE_VALUE, CERTIFICATES_KEY, Request, Root, SHARE_BUNDLE, SOCKET_PATH, Status,
 };

@@ -1,6 +1,6 @@
 load("@crates//:crates.bzl", "all_crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//build:checks.bzl", "host_test")
+load("//build:checks.bzl", "host_test", "shared_test")
 load("//build:version.bzl", "VERSION")
 
 package(default_visibility = ["//visibility:public"])
@@ -41,10 +41,11 @@ rust_binary(
 )
 
 rust_test(
-    name = "tests",
+    name = "tests-binary",
     size = "small",
     crate = ":gxwi-terminal",
     proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+    tags = ["manual"],
     deps = all_crate_deps(normal_dev = True),
 )
 
@@ -60,4 +61,11 @@ host_test(
         "//build:native": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
+)
+
+shared_test(
+    name = "tests",
+    size = "small",
+    binary = ":tests-binary",
+    libraries = ["@peios_sdk//:libraries"],
 )

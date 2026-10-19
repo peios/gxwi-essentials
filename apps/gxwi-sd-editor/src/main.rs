@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use gxwi_sd_editor::names::Names;
 use gxwi_sd_editor::{Can, FromEditor, Part, Request, ToEditor, Walked, line};
-use libgxwi::{App, Closer, Facts, Fields, Live, Value};
+use gxwi::{App, Closer, Facts, Fields, Live, Value};
 use peios::security::Sid;
 
 mod adv;
@@ -47,7 +47,7 @@ use view::{NamingDef, Obj, PartDef, Simple};
 
 // What this program looks like on its dialog's strip. The icon itself is
 // `gxwi-sd-editor.svg`, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-sd-editor");
+gxwi::icon!(b"dev.peios.gxwi-sd-editor");
 
 /// The dialog's own tabs.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -783,7 +783,7 @@ impl Editor {
         self.seen
             .borrow_mut()
             .push((name.to_string(), value.to_string()));
-        format!("name=\"{}\"", libgxwi::escape(name))
+        format!("name=\"{}\"", gxwi::escape(name))
     }
 
     /// What a text field shows: what is being typed in it, or `value`.

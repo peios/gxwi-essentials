@@ -13,8 +13,8 @@ use auth_core::Secret;
 use auth_core::credential::Policy;
 use auth_core::client::credential::{Abandon, Collector, Credentials, Refusal, Round};
 use auth_core::client::own::{Own, OwnAccount};
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
+use gxwi::{Fields, escape};
 
 /// The account as lpsd has it, or why it can't be read.
 pub type Account = Result<OwnAccount, String>;

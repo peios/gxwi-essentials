@@ -8,6 +8,6 @@ publish = false
 
 [dependencies]
 gxwi-process.workspace = true
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

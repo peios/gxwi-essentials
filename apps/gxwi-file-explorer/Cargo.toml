@@ -11,5 +11,5 @@ gxwi-fs.workspace = true
 gxwi-sd-editor = { workspace = true, features = ["propagate"], default-features = false }
 jiff = { workspace = true }
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 peios = { workspace = true }

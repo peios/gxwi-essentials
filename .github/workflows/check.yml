@@ -73,8 +73,27 @@ jobs:
                   path: .ci-sdk/kernel
                   sparse-checkout: include/uapi/pkm
                   persist-credentials: false
+            - name: Read the locked GXWI revision
+              id: gxwi
+              run: |
+                  python3 - <<'PY_REVISION' >> "$GITHUB_OUTPUT"
+                  import tomllib
+                  from pathlib import Path
+                  config = tomllib.loads(Path("Cargo.toml").read_text())
+                  print("revision=" + config["workspace"]["dependencies"]["gxwi"]["rev"])
+                  PY_REVISION
+            - name: Check out the shared GXWI library
+              uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+              with:
+                  repository: peios/gxwi
+                  ref: ${{ steps.gxwi.outputs.revision }}
+                  token: ${{ secrets.PEIOS_DEPENDENCIES_TOKEN }}
+                  path: .ci-sdk/gxwi
+                  persist-credentials: false
             - name: Prepare the development SDK
-              run: tools/prepare-dev-sdk .ci-sdk/libpeios .ci-sdk/kernel/include/uapi "$RUNNER_TEMP/peios-sdk"
+              run: |
+                  tools/prepare-dev-sdk .ci-sdk/libpeios .ci-sdk/kernel/include/uapi "$RUNNER_TEMP/peios-sdk"
+                  tools/prepare-gxwi-sdk .ci-sdk/gxwi "$RUNNER_TEMP/peios-sdk"
             - name: Check style, build, tests and packages
               env:
                   PEIOS_DEPENDENCIES_TOKEN: ${{ secrets.PEIOS_DEPENDENCIES_TOKEN }}

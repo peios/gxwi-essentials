@@ -14,7 +14,7 @@ use auth_core::credential::Policy;
 use auth_core::ident::{Fields as Asked, Record, Value};
 use auth_core::lps::{self, KeyInfo, LogonTypes};
 use auth_core::client::admin::Admin;
-use libgxwi::{Fields, escape};
+use gxwi::{Fields, escape};
 
 use crate::{claims, directory, keys, words};
 

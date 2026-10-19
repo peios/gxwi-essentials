@@ -71,7 +71,7 @@ impl Store {
     /// show.
     pub fn banner(&self) -> (String, bool) {
         match self.look.as_ref().err().or(self.may.as_ref().err()) {
-            Some(why) => (libgxwi::settings::banner(why), self.look.is_err()),
+            Some(why) => (gxwi::settings::banner(why), self.look.is_err()),
             None => (String::new(), false),
         }
     }

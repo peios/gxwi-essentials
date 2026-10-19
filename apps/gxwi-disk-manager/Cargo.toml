@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 gxwi-sd-editor = { workspace = true, features = ["names"], default-features = false }
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 peios = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

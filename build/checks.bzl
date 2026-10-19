@@ -33,3 +33,39 @@ host_test = rule(
     toolchains = ["@rules_rust//rust:toolchain_type"],
     doc = "Run a host check with pinned rustc; tag external and no-remote.",
 )
+
+def _shared_test_impl(ctx):
+    binary = ctx.attr.binary[DefaultInfo]
+    libraries = ctx.files.libraries
+    launcher = ctx.actions.declare_file(ctx.label.name + ".sh")
+    commands = [
+        "#!/bin/bash",
+        "set -euo pipefail",
+        'cd "${RUNFILES_DIR:-$0.runfiles}/%s"' % ctx.workspace_name,
+        'library_path=""',
+    ]
+
+    # short_path identifies files inside runfiles, including external repositories.
+    commands += [
+        'library_path="$library_path:$(dirname "$PWD/%s")"' % library.short_path
+        for library in libraries
+    ]
+    commands += [
+        'export LD_LIBRARY_PATH="${library_path#:}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"',
+        'exec "$PWD/%s" "$@"' % ctx.executable.binary.short_path,
+    ]
+    ctx.actions.write(launcher, "\n".join(commands) + "\n", is_executable = True)
+    return [DefaultInfo(
+        executable = launcher,
+        runfiles = ctx.runfiles(files = libraries + [ctx.executable.binary]).merge(binary.default_runfiles),
+    )]
+
+shared_test = rule(
+    implementation = _shared_test_impl,
+    attrs = {
+        "binary": attr.label(executable = True, cfg = "target", mandatory = True),
+        "libraries": attr.label_list(allow_files = True, mandatory = True),
+    },
+    test = True,
+    doc = "Run a test against explicitly declared shared libraries.",
+)

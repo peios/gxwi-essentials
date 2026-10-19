@@ -662,3 +662,88 @@ fn unchanged_lossy_address_keeps_the_open_native_directory() {
     assert_eq!(explorer.at, path);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+// If a regression reaches process spawning, fail without recursively starting
+// this test executable. Catalogue lookup still sees a regular program file.
+fn prevent_test_process_launch(directory: &Path) {
+    let program = directory.join("not-executable");
+    std::fs::write(&program, "not executable").unwrap();
+    for entry in std::fs::read_dir(directory.join("apps")).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let text = text
+            .lines()
+            .map(|line| {
+                if line.starts_with("program = ") {
+                    format!("program = {:?}", program)
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(path, text).unwrap();
+    }
+}
+
+#[test]
+fn launching_a_native_filename_never_substitutes_a_replacement_character_path() {
+    use std::os::unix::ffi::OsStringExt;
+    let (mut explorer, dir) = explorer("native-command");
+    prevent_test_process_launch(&dir);
+    let native = std::ffi::OsString::from_vec(b"note-\xff.txt".to_vec());
+    let literal = "note-�.txt";
+    let at = dir.join("files");
+    std::fs::write(at.join(&native), "native bytes").unwrap();
+    std::fs::write(at.join(literal), "literal replacement").unwrap();
+    let mut fields = Fields::default();
+    explorer.reread();
+    let index = explorer
+        .entries
+        .iter()
+        .position(|entry| entry.native_name == native)
+        .unwrap();
+    explorer.open_with(index, "org.example.a", &mut fields);
+    assert!(explorer.trouble.as_deref().unwrap().contains("UTF-8"));
+    assert_eq!(
+        std::fs::read_to_string(at.join(&native)).unwrap(),
+        "native bytes"
+    );
+    assert_eq!(
+        std::fs::read_to_string(at.join(literal)).unwrap(),
+        "literal replacement"
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn text_probe_launch_rejects_unrepresentable_paths() {
+    use std::os::unix::ffi::OsStringExt;
+    let (mut explorer, dir) = explorer("native-text-command");
+    prevent_test_process_launch(&dir);
+    let native = std::ffi::OsString::from_vec(b"note-\xff".to_vec());
+    std::fs::write(dir.join("files").join(&native), "plain text").unwrap();
+    explorer.reread();
+    let index = explorer
+        .entries
+        .iter()
+        .position(|entry| entry.native_name == native)
+        .unwrap();
+    explorer.open(index, &mut Fields::default());
+    assert!(explorer.trouble.as_deref().unwrap().contains("UTF-8"));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn opening_a_native_directory_reports_the_protocol_limitation() {
+    use std::os::unix::ffi::OsStringExt;
+    let (mut explorer, dir) = explorer("native-directory-command");
+    prevent_test_process_launch(&dir);
+    let native = std::ffi::OsString::from_vec(b"directory-\xff".to_vec());
+    let directory = dir.join("files").join(native);
+    std::fs::create_dir(&directory).unwrap();
+    explorer.go(directory, &mut Fields::default());
+    explorer.open_here("dev.peios.gxwi-file-explorer");
+    assert!(explorer.trouble.as_deref().unwrap().contains("UTF-8"));
+    std::fs::remove_dir_all(dir).unwrap();
+}

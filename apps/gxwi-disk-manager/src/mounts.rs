@@ -1,8 +1,8 @@
 //! Everything mounted, a mount's own page with its policy, and what is
 //! mounted at every startup.
 
-use libgxwi::escape;
-use libgxwi::settings::{self, Glyph, Kind as Button, More, Tile, Tone, Width};
+use gxwi::escape;
+use gxwi::settings::{self, Glyph, Kind as Button, More, Tile, Tone, Width};
 
 use crate::disks::{Mount, Origin, PolicyKind};
 use crate::manager::Asking;

@@ -47,14 +47,20 @@ crate.annotation(
     repositories = ["crates"],
 )
 
-# GXWI's settings widgets compile their owned stylesheet into the crate.
+# The Rust helper crate links the explicitly selected libgxwi.so.1 SDK.
 crate.annotation(
     compile_data_glob = ["src/**/*.css"],
-    crate = "libgxwi",
-    # crate_universe strips the workspace root. Preserve its exact version and
-    # license from GXWI e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76 for packaging.
+    crate = "gxwi",
+    gen_build_script = "off",
+    link_deps = ["@peios_sdk//:gxwi"],
     patch_args = ["-p1"],
-    patches = ["//build:libgxwi-metadata.patch"],
+    patches = ["//build:gxwi-metadata.patch"],
+    repositories = ["crates"],
+)
+crate.annotation(
+    crate = "gxwi-abi",
+    patch_args = ["-p1"],
+    patches = ["//build:gxwi-abi-metadata.patch"],
     repositories = ["crates"],
 )
 

@@ -1,4 +1,4 @@
-"""Import an explicit, installed Peios development SDK into the build graph."""
+"""Import explicit, installed libpeios and libgxwi SDKs into the build graph."""
 
 def _sdk_repository_impl(ctx):
     sdk = ctx.os.environ.get("PEIOS_SDK")
@@ -9,7 +9,8 @@ def _sdk_repository_impl(ctx):
 def _missing_impl(_ctx):
     fail(
         "Set PEIOS_SDK to an absolute SDK directory containing include/peios.h, " +
-        "include/pkm and lib/libpeios.so.0. See docs/building.md for SDK setup.",
+        "include/pkm, include/peios/gxwi.h, lib/libpeios.so.0 and lib/libgxwi.so.1. " +
+        "See docs/building.md for SDK setup.",
     )
 missing_sdk = rule(implementation = _missing_impl)
 """)
@@ -19,22 +20,27 @@ package(default_visibility = ["//visibility:public"])
 missing_sdk(name = "files")
 missing_sdk(name = "root")
 missing_sdk(name = "peios")
+missing_sdk(name = "gxwi")
+missing_sdk(name = "libraries")
 """)
         return
     if not sdk.startswith("/"):
         fail("PEIOS_SDK must be an absolute directory.")
-    for name in ["include/peios.h", "include/pkm", "lib/libpeios.so.0"]:
+    for name in ["include/peios.h", "include/pkm", "lib/libpeios.so.0", "lib/libgxwi.so.1", "include/peios/gxwi.h"]:
         if not ctx.path(sdk + "/" + name).exists:
             fail("Missing Peios SDK input: " + sdk + "/" + name)
     ctx.symlink(sdk + "/include", "include")
     ctx.symlink(sdk + "/lib/libpeios.so.0", "lib/libpeios.so.0")
     ctx.symlink("lib/libpeios.so.0", "lib/libpeios.so")
+    ctx.symlink(sdk + "/lib/libgxwi.so.1", "lib/libgxwi.so.1")
+    ctx.symlink("lib/libgxwi.so.1", "lib/libgxwi.so")
     ctx.file("root", "")
     ctx.file("BUILD.bazel", """
 load("@rules_cc//cc:defs.bzl", "cc_import")
 package(default_visibility = ["//visibility:public"])
 exports_files(["root"])
 filegroup(name = "files", srcs = glob(["include/**", "lib/**"]))
+filegroup(name = "libraries", srcs = ["lib/libpeios.so.0", "lib/libgxwi.so.1"])
 cc_import(
     name = "peios",
     shared_library = select({"%s": None, "%s": None, "//conditions:default": "lib/libpeios.so.0"}),
@@ -43,7 +49,19 @@ cc_import(
     hdrs = glob(["include/**"]),
     includes = ["include"],
 )
+cc_import(
+    name = "gxwi",
+    shared_library = select({"%s": None, "%s": None, "//conditions:default": "lib/libgxwi.so.1"}),
+    interface_library = "lib/libgxwi.so",
+    system_provided = select({"%s": True, "%s": True, "//conditions:default": False}),
+    hdrs = ["include/peios/gxwi.h"],
+    includes = ["include"],
+)
 """ % (
+        ctx.attr.native_config,
+        ctx.attr.package_config,
+        ctx.attr.native_config,
+        ctx.attr.package_config,
         ctx.attr.native_config,
         ctx.attr.package_config,
         ctx.attr.native_config,
@@ -51,7 +69,7 @@ cc_import(
     ))
 
 sdk_repository = repository_rule(
-    doc = "Import PEIOS_SDK headers and libpeios; defer missing-SDK failure until target analysis.",
+    doc = "Import PEIOS_SDK headers, libpeios and libgxwi; defer missing-SDK failure until target analysis.",
     implementation = _sdk_repository_impl,
     environ = ["PEIOS_SDK"],
     attrs = {

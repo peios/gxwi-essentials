@@ -17,7 +17,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
-use libgxwi::{Value, escape};
+use gxwi::{Value, escape};
 
 use crate::words;
 

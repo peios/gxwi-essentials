@@ -11,8 +11,8 @@
 
 use auth_core::ident::{Fields as Asked, Kind};
 use auth_core::client::ident::Ident;
-use libgxwi::settings::{self, Glyph, Kind as Weight, Tile, Width};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Kind as Weight, Tile, Width};
+use gxwi::{Fields, escape};
 use peinit::client::{Boot, ControlClient};
 use peios::registry::Data;
 

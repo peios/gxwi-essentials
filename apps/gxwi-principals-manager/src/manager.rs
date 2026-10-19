@@ -12,7 +12,7 @@ use auth_core::ident::{Fields, Record, Value, WithheldReason};
 use auth_core::wire::LogonTypes;
 use auth_core::client::admin::Admin;
 use auth_core::client::ident::Ident;
-use libgxwi::{Facts, Fields as Typed, Live, Surface, Value as Pressed, escape};
+use gxwi::{Facts, Fields as Typed, Live, Surface, Value as Pressed, escape};
 
 use auth_core::credential::Policy as CredentialPolicy;
 use auth_core::lps::KeyInfo;

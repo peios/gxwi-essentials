@@ -19,7 +19,7 @@ use std::time::SystemTime;
 /// The most text the editor holds, in bytes. A field of a live surface
 /// holds so many bytes and a page counts what is typed another way, in
 /// which one may be three bytes: a third of a field is what always fits.
-pub const MOST: usize = libgxwi::MAX_FIELD_BYTES / 3;
+pub const MOST: usize = gxwi::MAX_FIELD_BYTES / 3;
 
 /// How the lines of a file end.
 #[derive(Clone, Copy, Debug, PartialEq)]

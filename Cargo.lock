@@ -400,12 +400,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "gxwi"
+version = "0.0.7"
+source = "git+https://github.com/peios/gxwi.git?rev=ca8276eb842e83c35c5472535457ac5306254533#ca8276eb842e83c35c5472535457ac5306254533"
+dependencies = [
+ "axum",
+ "gxwi-abi",
+ "hyper",
+ "hyper-util",
+ "libc",
+ "peios",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+]
+
+[[package]]
+name = "gxwi-abi"
+version = "0.0.7"
+source = "git+https://github.com/peios/gxwi.git?rev=ca8276eb842e83c35c5472535457ac5306254533#ca8276eb842e83c35c5472535457ac5306254533"
+
+[[package]]
 name = "gxwi-disk-manager"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-sd-editor",
  "libc",
- "libgxwi",
  "peios",
  "serde",
  "serde_json",
@@ -416,9 +438,9 @@ name = "gxwi-event-viewer"
 version = "0.1.0"
 dependencies = [
  "eventd-client",
+ "gxwi",
  "gxwi-sd-editor",
  "jiff",
- "libgxwi",
  "libregman",
  "peios",
  "serde_json",
@@ -428,8 +450,8 @@ dependencies = [
 name = "gxwi-feature-manager"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-process",
- "libgxwi",
  "serde",
  "serde_json",
 ]
@@ -438,10 +460,10 @@ dependencies = [
 name = "gxwi-file-dialog"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-fs",
  "jiff",
  "libc",
- "libgxwi",
  "peios",
  "serde",
  "serde_json",
@@ -451,11 +473,11 @@ dependencies = [
 name = "gxwi-file-explorer"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-fs",
  "gxwi-sd-editor",
  "jiff",
  "libc",
- "libgxwi",
  "peios",
 ]
 
@@ -471,8 +493,8 @@ name = "gxwi-my-settings"
 version = "0.1.0"
 dependencies = [
  "auth-core",
+ "gxwi",
  "jiff",
- "libgxwi",
  "peios",
  "serde_json",
  "session-preferences",
@@ -482,8 +504,8 @@ dependencies = [
 name = "gxwi-network-manager"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-sd-editor",
- "libgxwi",
  "libnetd",
  "libresolv",
  "ntfe",
@@ -495,10 +517,10 @@ dependencies = [
 name = "gxwi-package-manager"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-file-dialog",
  "gxwi-process",
  "jiff",
- "libgxwi",
  "serde",
  "serde_json",
 ]
@@ -509,8 +531,8 @@ version = "0.1.0"
 dependencies = [
  "auth-core",
  "auth-policy",
+ "gxwi",
  "jiff",
- "libgxwi",
  "peios",
 ]
 
@@ -526,11 +548,11 @@ dependencies = [
 name = "gxwi-registry-editor"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-file-dialog",
  "gxwi-sd-editor",
  "jiff",
  "libc",
- "libgxwi",
  "libreg",
  "libregman",
  "peios",
@@ -543,8 +565,8 @@ version = "0.1.0"
 dependencies = [
  "auth-core",
  "base64",
+ "gxwi",
  "libc",
- "libgxwi",
  "peios",
  "serde",
  "serde_json",
@@ -555,10 +577,10 @@ dependencies = [
 name = "gxwi-security-policy"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-file-dialog",
  "gxwi-sd-editor",
  "jiff",
- "libgxwi",
  "libtrust",
  "peios",
  "trust",
@@ -568,9 +590,9 @@ dependencies = [
 name = "gxwi-services-manager"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-sd-editor",
  "jiff",
- "libgxwi",
  "peinit2",
  "peios",
  "serde_json",
@@ -581,9 +603,9 @@ name = "gxwi-system-settings"
 version = "0.1.0"
 dependencies = [
  "auth-core",
+ "gxwi",
  "jiff",
  "libc",
- "libgxwi",
  "libnetd",
  "libtimed",
  "peinit2",
@@ -598,10 +620,10 @@ version = "0.1.0"
 dependencies = [
  "auth-core",
  "auth-policy",
+ "gxwi",
  "gxwi-sd-editor",
  "jiff",
  "libc",
- "libgxwi",
  "peinit2",
  "peios",
  "serde_json",
@@ -613,8 +635,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
+ "gxwi",
  "libc",
- "libgxwi",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
@@ -625,16 +647,16 @@ dependencies = [
 name = "gxwi-text-editor"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "libc",
- "libgxwi",
 ]
 
 [[package]]
 name = "gxwi-upgrade-peios"
 version = "0.1.0"
 dependencies = [
+ "gxwi",
  "gxwi-process",
- "libgxwi",
  "serde",
  "serde_json",
 ]
@@ -830,22 +852,6 @@ name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
-
-[[package]]
-name = "libgxwi"
-version = "0.0.5"
-source = "git+https://github.com/peios/gxwi.git?rev=e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76#e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76"
-dependencies = [
- "axum",
- "hyper",
- "hyper-util",
- "libc",
- "peios",
- "serde",
- "serde_json",
- "tokio",
- "toml",
-]
 
 [[package]]
 name = "libloading"

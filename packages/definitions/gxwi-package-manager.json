@@ -13,7 +13,8 @@
         "dev.peios.libpeios": ">= 0.5.8-1",
         "org.gnu.glibc": "*",
         "org.gnu.gcc-libgcc": "*",
-        "dev.peios.gxwi-file-dialog": "= 0.1.0-1"
+        "dev.peios.gxwi-file-dialog": "= 0.1.0-1",
+        "dev.peios.libgxwi": ">= 0.0.7-1"
     },
     "files": {
         "stage:runtime/gxwi-package-manager/usr/**": "usr",

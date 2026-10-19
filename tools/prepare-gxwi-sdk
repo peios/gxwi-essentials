@@ -1,0 +1,24 @@
+#!/bin/sh
+# Add the selected GXWI shared library to an existing Peios development SDK.
+set -eu
+source=$(realpath "${1:?GXWI source directory required}")
+sdk=$(realpath "${2:?Peios SDK directory required}")
+[ -f "$sdk/lib/libpeios.so.0" ] || {
+    echo "Prepare the Peios SDK before adding GXWI." >&2
+    exit 1
+}
+[ ! -e "$sdk/lib/libgxwi.so.1" ] || {
+    echo "GXWI is already present; use a fresh SDK to avoid mixing versions." >&2
+    exit 1
+}
+(
+    cd "$source"
+    PEIOS_SDK="$sdk" ./bazel build --//build:package-mode=true //libgxwi:soname
+)
+readelf -dW "$source/bazel-bin/libgxwi/libgxwi.so.1" | grep -F '[libgxwi.so.1]' >/dev/null
+mkdir -p "$sdk/include/peios"
+install -m 755 "$source/bazel-bin/libgxwi/libgxwi.so.1" "$sdk/lib/libgxwi.so.1"
+ln -s libgxwi.so.1 "$sdk/lib/libgxwi.so"
+install -m 644 "$source/libgxwi/include/peios/gxwi.h" "$sdk/include/peios/gxwi.h"
+sha256sum "$sdk/lib/libgxwi.so.1" >"$sdk/gxwi.sha256"
+printf 'GXWI source: %s\n' "$source"

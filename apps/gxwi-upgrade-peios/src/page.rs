@@ -2,8 +2,8 @@
 //! happening — looking for a newer one, the one found and its plan, or the
 //! upgrade to it, with each question peipkg asks put as it asks it.
 
-use libgxwi::escape;
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
+use gxwi::escape;
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
 
 use crate::manager::{Check, Ended, Manager, Purpose, Run};
 use crate::tool::{Operation, Plan, Progress, Question, Status};

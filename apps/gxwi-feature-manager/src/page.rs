@@ -2,8 +2,8 @@
 //! the changes that apply to it, with a change being made shown on its own
 //! feature's card.
 
-use libgxwi::escape;
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
+use gxwi::escape;
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
 
 use crate::feat::{Feature, State};
 use crate::manager::{Failure, Listing, Manager, Run, Verb};

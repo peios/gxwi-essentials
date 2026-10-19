@@ -5,7 +5,7 @@
 //! window, and the stylesheet alone shows, on the one the pointer is over,
 //! every line's value in that window.
 
-use libgxwi::escape;
+use gxwi::escape;
 
 /// One line: what it stands for, and what it read in each window, if it
 /// read anything there.

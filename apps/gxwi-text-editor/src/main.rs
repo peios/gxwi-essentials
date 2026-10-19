@@ -23,7 +23,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use libgxwi::{App, Closer, Facts, Fields, Live, Value, escape};
+use gxwi::{App, Closer, Facts, Fields, Live, Value, escape};
 
 mod file;
 
@@ -31,7 +31,7 @@ use file::{Endings, Seen};
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-text-editor.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-text-editor");
+gxwi::icon!(b"dev.peios.gxwi-text-editor");
 
 /// How often the file is looked at for what something else did to it.
 const LOOKS: Duration = Duration::from_secs(2);

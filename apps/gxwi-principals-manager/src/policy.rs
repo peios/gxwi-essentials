@@ -15,7 +15,7 @@
 use auth_core::wire::LogonType;
 use auth_policy::write::{self, Draft};
 use auth_policy::{Policy, Record, TIERS, well_known};
-use libgxwi::{Fields, escape};
+use gxwi::{Fields, escape};
 use peios::security::{IntegrityLevel, Privileges, Sid, SidRef};
 
 use crate::accounts::{Doing, form};

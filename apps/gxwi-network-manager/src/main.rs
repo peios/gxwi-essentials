@@ -10,7 +10,7 @@
 //! interface a program may read yet: until it does, it is example data,
 //! behind one seam (`live`), and said to be.
 
-use libgxwi::App;
+use gxwi::App;
 
 mod engine;
 mod live;
@@ -26,7 +26,7 @@ use manager::Manager;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-network-manager.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-network-manager");
+gxwi::icon!(b"dev.peios.gxwi-network-manager");
 
 fn main() {
     if std::env::args().nth(1).is_some() {
@@ -43,7 +43,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    libgxwi::settings::stylesheet(&mut app);
+    gxwi::settings::stylesheet(&mut app);
     app.stylesheet(
         "/gxwi-network-manager.css",
         include_str!("gxwi-network-manager.css"),

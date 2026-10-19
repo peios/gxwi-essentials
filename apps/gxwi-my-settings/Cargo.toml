@@ -12,6 +12,6 @@ serde_json = "1"
 [dependencies]
 auth-core = { workspace = true, features = ["client"] }
 jiff = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 peios = { workspace = true }
 session-preferences = { workspace = true }

@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use auth_core::client::admin::Admin;
 use auth_core::client::ident::Ident;
-use libgxwi::{App, Surface};
+use gxwi::{App, Surface};
 
 mod accounts;
 mod claims;
@@ -26,7 +26,7 @@ use manager::{Heard, Manager};
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-principals-manager.svg` at the repo root, installed as the base
 // theme's.
-libgxwi::icon!(b"dev.peios.gxwi-principals-manager");
+gxwi::icon!(b"dev.peios.gxwi-principals-manager");
 
 /// How often the lists are read again. Nothing tells a client when a
 /// principal changes, so the window looks.

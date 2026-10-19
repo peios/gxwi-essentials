@@ -6,8 +6,8 @@
 //! starts. The layout is `Machine\System\Console Keymap`, loaded by the
 //! console-keymap service, which is restarted to load a new one.
 
-use libgxwi::settings::{self, Glyph, Tile};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Tile};
+use gxwi::{Fields, escape};
 use session_preferences::locale::{self, Available};
 use peinit::client::{Command, ControlClient, ServiceAccess};
 use peios::registry::Data;

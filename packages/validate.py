@@ -43,6 +43,7 @@ def validate_elf(stage: Path, component: str, relative: str, *, native: bool) ->
     require(len(stack) == 1 and bool(re.search(r"\sRW\s", stack[0])), f"{elf}: executable stack")
     require(bool(re.search(r"FLAGS_1.*\bPIE\b", dynamic)), f"{elf}: missing PIE flag")
     require("Shared library: [libpeios.so.0]" in dynamic, f"{elf}: missing libpeios ABI linkage")
+    require("Shared library: [libgxwi.so.1]" in dynamic, f"{elf}: missing libgxwi ABI linkage")
     require(not re.search(r"\((RPATH|RUNPATH|TEXTREL)\)", dynamic), f"{elf}: unsafe dynamic tag")
     require(".debug_info" not in sections, f"{elf}: unsplit debug information")
     if native:

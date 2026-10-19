@@ -7,8 +7,8 @@
 //! the safe answer the keyboard's. Nothing is answered for them, except
 //! the proceed of a change they have already chosen in a list.
 
-use libgxwi::escape;
-use libgxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
+use gxwi::escape;
+use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
 
 use crate::peipkg::{Answers, Event, Operation, Plan, Progress, Question};
 use crate::words;

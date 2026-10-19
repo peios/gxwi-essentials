@@ -12,7 +12,8 @@
     "dependencies": {
         "dev.peios.libpeios": ">= 0.5.8-1",
         "org.gnu.glibc": "*",
-        "org.gnu.gcc-libgcc": "*"
+        "org.gnu.gcc-libgcc": "*",
+        "dev.peios.libgxwi": ">= 0.0.7-1"
     },
     "files": {
         "stage:runtime/gxwi-text-editor/usr/**": "usr",

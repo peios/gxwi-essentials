@@ -13,6 +13,6 @@ serde_json = "1"
 eventd-client = { workspace = true }
 gxwi-sd-editor = { workspace = true, features = ["names", "splice"], default-features = false }
 jiff = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 libregman = { workspace = true }
 peios = { workspace = true }

@@ -1,0 +1,16 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -1,9 +1,9 @@
+ [package]
+ name = "gxwi-abi"
+ description = "Shared layouts for the GXWI desktop client C ABI."
+-version.workspace = true
+-edition.workspace = true
+-license.workspace = true
+-publish.workspace = true
++version = "0.0.7"
++edition = "2024"
++license = "MIT"
++publish = false
+ 
+ [dependencies]

@@ -8,8 +8,8 @@
 
 use std::sync::Weak;
 
-use libgxwi::settings;
-use libgxwi::{Facts, Fields, Live, Surface, Value};
+use gxwi::settings;
+use gxwi::{Facts, Fields, Live, Surface, Value};
 
 use crate::feat::{self, Event, Feature};
 use crate::page;

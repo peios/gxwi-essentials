@@ -29,7 +29,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
 use gxwi_sd_editor::Part;
-use libgxwi::{Facts, Fields, Live, Surface, Value, escape};
+use gxwi::{Facts, Fields, Live, Surface, Value, escape};
 use peinit::client::{Admission, Command, Failure, State, Status, Summary, Timer, admission};
 
 use crate::permissions::{self, Which};

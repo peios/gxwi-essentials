@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use libgxwi::App;
+use gxwi::App;
 
 mod chart;
 mod dashboards;
@@ -28,7 +28,7 @@ use viewer::Viewer;
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-event-viewer.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-event-viewer");
+gxwi::icon!(b"dev.peios.gxwi-event-viewer");
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();

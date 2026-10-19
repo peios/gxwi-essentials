@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use gxwi_sd_editor::names::Names;
-use libgxwi::{App, Surface};
+use gxwi::{App, Surface};
 use peinit::client::{ControlClient, State};
 use peios::token::Session;
 
@@ -26,7 +26,7 @@ use manager::{Manager, Seen};
 
 // What this program looks like, to whatever lists it. The icon itself is
 // `gxwi-task-manager.svg` at the repo root, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-task-manager");
+gxwi::icon!(b"dev.peios.gxwi-task-manager");
 
 /// How often the machine is looked at again. Nothing tells a program when a
 /// process starts or ends, or how much CPU it used, so the window looks.

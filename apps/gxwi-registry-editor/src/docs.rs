@@ -7,7 +7,7 @@
 //! not the registry: a value can be documented and not set, set and not
 //! documented, or set to a type the manual doesn't expect.
 
-use libgxwi::escape;
+use gxwi::escape;
 use libregman::fold::fold;
 use libregman::fragment::{Kind, Record};
 use libregman::query;

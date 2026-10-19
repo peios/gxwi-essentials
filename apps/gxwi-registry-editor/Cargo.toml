@@ -11,7 +11,7 @@ gxwi-file-dialog = { workspace = true, default-features = false }
 gxwi-sd-editor = { workspace = true, features = ["names", "splice", "registry", "propagate"], default-features = false }
 jiff = { workspace = true }
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 libreg = { workspace = true }
 libregman = { workspace = true }
 peios = { workspace = true }

@@ -5,8 +5,8 @@
     "git+https://github.com/peios/eventd.git?rev=d9833bff0ebb0707add6bfb1fd78dd5d49261eaf#d9833bff0ebb0707add6bfb1fd78dd5d49261eaf": {
         "third-party/eventd-d9833bff0ebb/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"
     },
-    "git+https://github.com/peios/gxwi.git?rev=e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76#e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76": {
-        "third-party/gxwi-e9d86e56e8d7/LICENSE": "f2e13dfaed084ae47cd23808d8015fa8d04de7ec777c66437cf2c54949976aa4"
+    "git+https://github.com/peios/gxwi.git?rev=ca8276eb842e83c35c5472535457ac5306254533#ca8276eb842e83c35c5472535457ac5306254533": {
+        "third-party/gxwi-ca8276eb842e/LICENSE": "f2e13dfaed084ae47cd23808d8015fa8d04de7ec777c66437cf2c54949976aa4"
     },
     "git+https://github.com/peios/netd.git?rev=23af1f6b84f3764d9327eb009ced56b2a16b7aa8#23af1f6b84f3764d9327eb009ced56b2a16b7aa8": {
         "third-party/netd-23af1f6b84f3/LICENSE": "772430941b962e36ab9cfbd33bc1dee6d47cae5e7ad5f4443b08610ed30f7ae6"

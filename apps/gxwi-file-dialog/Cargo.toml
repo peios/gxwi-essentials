@@ -16,13 +16,13 @@ required-features = ["program"]
 
 [features]
 default = ["program"]
-program = ["dep:libgxwi", "dep:libc", "dep:peios", "dep:jiff"]
+program = ["dep:gxwi", "dep:libc", "dep:peios", "dep:jiff"]
 
 [dependencies]
 gxwi-fs.workspace = true
 jiff = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
-libgxwi = { workspace = true, optional = true }
+gxwi = { workspace = true, optional = true }
 peios = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

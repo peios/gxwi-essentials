@@ -8,7 +8,7 @@
 //! down again. An entry of a type this editor does not know can only be
 //! moved or removed, and goes back exactly as it came.
 
-use libgxwi::{Fields, Value, escape as h};
+use gxwi::{Fields, Value, escape as h};
 use peios::file::SecInfo;
 use peios::security::{GenericMapping, Sid};
 

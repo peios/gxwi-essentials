@@ -10,6 +10,7 @@ python3 tools/style-check.py
 ./bazel test //...
 
 # Cargo supplies strict lint diagnostics and the public client library doctests.
+export PEIOS_GXWI_LIB_DIR="$PEIOS_SDK/lib"
 export PEIOS_LIB_DIR="$PEIOS_SDK/lib"
 export PEIOS_INCLUDE="$PEIOS_SDK/include"
 export PKM_UAPI="$PEIOS_SDK/include"

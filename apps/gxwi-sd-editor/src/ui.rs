@@ -6,7 +6,7 @@
 use std::fmt::Write as _;
 
 use gxwi_sd_editor::{PartKind, Right};
-use libgxwi::{Fields, Value, escape as h};
+use gxwi::{Fields, Value, escape as h};
 use peios::security::Sid;
 
 use crate::claim::{self, ClaimType};

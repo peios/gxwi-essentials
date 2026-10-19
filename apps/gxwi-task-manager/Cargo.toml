@@ -15,6 +15,6 @@ auth-policy = { workspace = true }
 gxwi-sd-editor = { workspace = true, features = ["names"], default-features = false }
 jiff = { workspace = true }
 libc = { workspace = true }
-libgxwi = { workspace = true }
+gxwi = { workspace = true }
 peinit2 = { workspace = true, default-features = false }
 peios = { workspace = true }

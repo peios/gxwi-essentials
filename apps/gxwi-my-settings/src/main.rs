@@ -10,8 +10,8 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
-use libgxwi::{App, Facts, Fields, Live, Surface, Value};
+use gxwi::settings::{self, Glyph, Nav, Section, Tile};
+use gxwi::{App, Facts, Fields, Live, Surface, Value};
 use session_preferences::locale::{self, Available};
 
 mod account;
@@ -21,7 +21,7 @@ mod reg;
 use account::{Account, Removing};
 use language::Language;
 
-libgxwi::icon!(b"dev.peios.gxwi-my-settings");
+gxwi::icon!(b"dev.peios.gxwi-my-settings");
 
 /// How often the account is read again: nothing says when it changes.
 const LOOK_AGAIN: Duration = Duration::from_secs(5);

@@ -11,7 +11,7 @@ use std::os::fd::OwnedFd;
 use std::sync::Weak;
 use std::time::{Duration, Instant, SystemTime};
 
-use libgxwi::{Facts, Fields, Live, Surface, Value, escape};
+use gxwi::{Facts, Fields, Live, Surface, Value, escape};
 use peinit::client::{
     Admission, CgroupMember, Command, ControlClient, Status, SubmittedJob, Summary, admission,
 };

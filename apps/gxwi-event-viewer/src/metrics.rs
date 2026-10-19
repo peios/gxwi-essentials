@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use eventd_client::access::{self, Namespace, Readable};
 use eventd_client::{Error, Record, Value};
-use libgxwi::{Fields, Surface, escape};
+use gxwi::{Fields, Surface, escape};
 
 use crate::chart::{self, Line, Plot, Reading, Unit};
 use crate::dashboards::{self, Chart, Dashboard, Function, Span, Transform};

@@ -18,7 +18,7 @@ use std::sync::Arc;
 use gxwi_file_dialog::{Answer, Mode, Request, line};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use libgxwi::{App, Closer, Facts, Fields, Live, Value, escape};
+use gxwi::{App, Closer, Facts, Fields, Live, Value, escape};
 
 mod folder;
 
@@ -26,7 +26,7 @@ use folder::{Entry, May};
 
 // What this program looks like on its dialog's strip. The icon itself is
 // `gxwi-file-dialog.svg`, installed as the base theme's.
-libgxwi::icon!(b"dev.peios.gxwi-file-dialog");
+gxwi::icon!(b"dev.peios.gxwi-file-dialog");
 
 /// What the dialog is doing besides showing the folder.
 #[derive(Debug, Clone, PartialEq, Eq)]

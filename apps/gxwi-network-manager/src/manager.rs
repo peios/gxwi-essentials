@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::Weak;
 use std::time::{Duration, Instant};
 
-use libgxwi::{Facts, Fields, Live as Surfaced, Surface, Value};
+use gxwi::{Facts, Fields, Live as Surfaced, Surface, Value};
 
 use crate::engine::{self, Conn, Context, Judge, Policy};
 use crate::live::{self, Live};

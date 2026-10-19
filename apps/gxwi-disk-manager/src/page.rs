@@ -2,8 +2,8 @@
 //! partition's (or a whole disk's filesystem's) page, with the forms and
 //! questions that change them.
 
-use libgxwi::settings::{self, Glyph, Kind as Button, More, Tile, Tone, Width};
-use libgxwi::{Fields, escape};
+use gxwi::settings::{self, Glyph, Kind as Button, More, Tile, Tone, Width};
+use gxwi::{Fields, escape};
 
 use crate::disks::{Disk, Filesystem, Kind, Mount, PolicyKind, Stretch, Volume, MIB};
 use crate::manager::{Asking, Manager};
