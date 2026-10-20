@@ -59,6 +59,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="gxwi-reference-docs-") as temporary:
         root = Path(temporary)
         shutil.copyfile(ROOT / "docs/learn/trail.toml", root / "trail.toml")
+        shutil.copyfile(ROOT / "docs/learn/banned-words.txt", root / "banned-words.txt")
         output = root / "review.product"
         output.mkdir()
         for source in sorted((ROOT / "docs/man").glob("*.1")):
