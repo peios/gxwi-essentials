@@ -1,5 +1,5 @@
 ---
-title: Managing Local Accounts
+title: Managing Accounts in Principals Manager
 type: how-to
 description: Inspect an identity before changing membership or sign-in settings.
 ---

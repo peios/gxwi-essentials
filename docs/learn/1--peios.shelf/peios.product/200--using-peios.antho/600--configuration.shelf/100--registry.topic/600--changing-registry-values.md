@@ -1,5 +1,5 @@
 ---
-title: Changing Registry Values
+title: Changing Values in Registry Editor
 type: how-to
 description: Choose the write layer and verify both storage and application.
 ---

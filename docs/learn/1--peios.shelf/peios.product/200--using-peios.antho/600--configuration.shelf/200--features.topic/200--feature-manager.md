@@ -1,5 +1,5 @@
 ---
-title: Managing Features
+title: Managing Features in Feature Manager
 type: how-to
 description: Configure installed feature definitions without confusing them with packages.
 ---

@@ -1,5 +1,5 @@
 ---
-title: Managing Certificate Trust
+title: Managing Certificate Trust in Security Policy
 type: how-to
 description: Inspect a certificate before adding it to machine trust.
 ---

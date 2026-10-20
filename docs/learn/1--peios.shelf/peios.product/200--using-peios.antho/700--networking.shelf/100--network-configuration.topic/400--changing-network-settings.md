@@ -1,5 +1,5 @@
 ---
-title: Changing Network Settings
+title: Changing Network Settings in Network Manager
 type: how-to
 description: Review a network change and verify it before keeping it.
 ---

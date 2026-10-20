@@ -1,5 +1,5 @@
 ---
-title: Managing Services
+title: Managing Services in Services Manager
 type: how-to
 description: Inspect a service and control its runtime or edit its definition.
 ---
