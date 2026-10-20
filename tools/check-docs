@@ -7,5 +7,20 @@ trail=${TRAIL:-trail}
 "$trail" lint docs/learn
 output=$(mktemp -d "${TMPDIR:-/tmp}/gxwi-essentials-learn.XXXXXXXX")
 trap 'rm -rf -- "$output"' EXIT HUP INT TERM
-"$trail" build docs/learn --strict --no-cache --out "$output"
+"$trail" build docs/learn --strict --allow-dangling-links --no-cache \
+    --out "$output/site" 2> "$output/diagnostics.txt"
+python3 - "$repo/docs/external-links.json" "$output/diagnostics.txt" <<'PYTHON'
+import difflib
+import json
+import sys
+from pathlib import Path
+
+expected = json.loads(Path(sys.argv[1]).read_text())
+observed = sorted(line for line in Path(sys.argv[2]).read_text().splitlines() if line)
+if observed != expected:
+    print("Documentation diagnostics changed:", file=sys.stderr)
+    print("\n".join(difflib.unified_diff(expected, observed)), file=sys.stderr)
+    raise SystemExit(1)
+print(f"Matched {len(expected)} external links; verify them in the merged Learn build.")
+PYTHON
 python3 tools/check-reference-docs.py "$trail"

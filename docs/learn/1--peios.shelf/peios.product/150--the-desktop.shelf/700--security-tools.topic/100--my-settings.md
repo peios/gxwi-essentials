@@ -37,3 +37,15 @@ locale override. Locale choices are written under `CurrentUser\Locale`
 and apply at the next sign-in. A restricted registry key makes the
 section read-only. Account state refreshes every five seconds.
 See `gxwi-my-settings(1)` for interfaces and file locations.
+
+## Language and formats together
+
+The form writes `LANG` and the time, number, money, measurement, and paper
+format categories together. Changing **Language** can therefore replace or
+remove individually configured format overrides. Use `reg` for a deliberate
+single-value edit instead.
+
+**Match Language** removes personal category values; it does not remove
+machine category values. For one locale across these formats despite machine
+overrides, select it in both lists. Verify a fresh session as described in
+[Choosing Session Locales](~peios/session-settings/session-locales).

@@ -24,6 +24,17 @@ records. Know the approximate time, origin, or event type involved.
 4. Use **Show older** to extend the displayed history and **Resume** when
    you want live updates again.
 
+The initial time range is the last 24 hours. Select a range containing the
+incident before paging backward; **any time** removes the time restriction
+but cannot restore records removed by retention. Apply typed filters with
+**Enter** or **Apply**. An errors-only filter selects standard error, which
+is not proof that each selected line reports a failure.
+
+If following stops, preserve the notice before selecting **Show the newest**.
+Resuming at the newest records does not establish what happened in the gap.
+Use **Copy** on relevant rows to preserve their visible fields with the job,
+boot, time range, and filters.
+
 ## Check the result
 
 Read the record's time, type or origin, and fields, together with any
@@ -33,3 +44,8 @@ or `evctl` when your investigation needs a different range or query shape.
 If eventd refuses the connection, address that refusal rather than treating
 the empty display as a result. If records remain absent, check the filter,
 retention, and read policy before concluding that nothing was recorded.
+
+For a systematic check of scope, access, retention, and collection failures,
+follow [Finding Missing Records](~peios/reading-records/finding-missing-records).
+Keep a visibility notice with the evidence: it describes readable names or an
+unknown policy, not proof that hidden matching records exist.

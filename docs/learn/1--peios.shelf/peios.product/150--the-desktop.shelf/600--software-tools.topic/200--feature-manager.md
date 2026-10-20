@@ -37,3 +37,14 @@ An approved operation continues until completion when the window is asked
 to close. The window stays open with an explanation and closes afterward.
 Feature Manager delegates authority and state changes to `feat`; it does
 not grant privileges. See `gxwi-feature-manager(1)`.
+
+## Missing definitions and limited access
+
+If a definition is missing, restore its package before asking `feat` to run
+the feature's cleanup. Removing a package does not undo the configuration its
+feature created. Keep the package available until the feature is removed.
+
+The read-only view can show feature states without offering change buttons.
+Permission to change state does not supply every privilege a feature script
+needs. Read the failed script's output and investigate its access requirements
+before retrying; the app does not elevate it automatically.
