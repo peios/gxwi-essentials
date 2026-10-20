@@ -30,6 +30,6 @@ marked `release_ready: false`. Host tests and native userspace checks are
 separate from installed-desktop qualification.
 
 Read the [user guides](docs/learn/), [manuals](docs/man/), and the two registry
-references in `docs/`. Panorama merges the Learn contribution into the shared
-Peios documentation. The [build guide](docs/building.md) covers contributor
+references in `docs/`. Peios Learn merges the Learn contribution into the
+shared Peios documentation. The [build guide](docs/building.md) covers contributor
 checks, private dependency access, offline native builds, and CI.
