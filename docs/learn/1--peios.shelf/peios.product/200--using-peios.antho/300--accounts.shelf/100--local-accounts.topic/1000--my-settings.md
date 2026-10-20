@@ -48,4 +48,4 @@ single-value edit instead.
 **Match Language** removes personal category values; it does not remove
 machine category values. For one locale across these formats despite machine
 overrides, select it in both lists. Verify a fresh session as described in
-[Choosing Session Locales](~peios/session-settings/session-locales).
+[Choosing Session Locales](~peios/command-line-basics/session-locales).

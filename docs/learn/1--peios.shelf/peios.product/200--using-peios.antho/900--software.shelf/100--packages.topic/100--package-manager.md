@@ -15,7 +15,7 @@ session, and the relevant repository or package file. Reading package
 records and changing installed software are separate permissions.
 
 If the package supplies a configured feature, remove the feature's setup in
-[Feature Manager](~peios/software-tools/feature-manager) first. Keep the
+[Feature Manager](~peios/features/feature-manager) first. Keep the
 package installed until cleanup reaches **Not Installed**; its scripts are
 needed to undo the configuration. If cleanup fails, preserve its output and
 resolve the feature state before removing the package.

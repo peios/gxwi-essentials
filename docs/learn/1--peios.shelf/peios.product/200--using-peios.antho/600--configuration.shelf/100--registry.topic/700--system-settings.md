@@ -43,4 +43,4 @@ See `gxwi-system-settings(1)` and each setting's registry manual.
 The language and format selections save `LANG` with the time, number, money,
 measurement, and paper categories. Use `reg` when changing one independently
 configured category. For personal precedence and new-session checks, follow
-[Choosing Session Locales](~peios/session-settings/session-locales).
+[Choosing Session Locales](~peios/command-line-basics/session-locales).
