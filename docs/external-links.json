@@ -1,5 +1,5 @@
 [
-  "trail: warning: /peios/desktop-event-viewer/reading-events-and-logs: link '~peios/reading-records/finding-missing-records' matches no page in product 'peios'",
-  "trail: warning: /peios/security-tools/my-settings: link '~peios/session-settings/session-locales' matches no page in product 'peios'",
-  "trail: warning: /peios/system-tools/system-settings: link '~peios/session-settings/session-locales' matches no page in product 'peios'"
+  "trail: warning: /peios/using-peios/desktop-event-viewer/reading-events-and-logs: link '~peios/reading-records/finding-missing-records' matches no page in product 'peios'",
+  "trail: warning: /peios/using-peios/security-tools/my-settings: link '~peios/session-settings/session-locales' matches no page in product 'peios'",
+  "trail: warning: /peios/using-peios/system-tools/system-settings: link '~peios/session-settings/session-locales' matches no page in product 'peios'"
 ]
