@@ -10,7 +10,7 @@
 
 use gxwi_sd_editor::registry::{self as key_permissions, Apply};
 use gxwi_sd_editor::{Can, Children, Generic, Object, Part, Request, Right, splice};
-use libtrust::{CONTROL_SECURITY_VALUE, TRUST_ALL_ACCESS, TRUST_CONTROL, TRUST_KEY, TRUST_QUERY};
+use trust_client::{CONTROL_SECURITY_VALUE, TRUST_ALL_ACCESS, TRUST_CONTROL, TRUST_KEY, TRUST_QUERY};
 use peios::registry::{Key, KeyAccess, OpenFlags, ValueType};
 use peios::security::AccessMask;
 
@@ -32,7 +32,8 @@ fn control_security() -> Result<Vec<u8>, String> {
     match key.query_value(CONTROL_SECURITY_VALUE.as_bytes(), None) {
         Ok(value) => Ok(value.data),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            Ok(libtrust::default_control_security().as_bytes().to_vec())
+            trust_client::default_control_security()
+                .map_err(|e| format!("its default couldn't be had ({e})"))
         }
         Err(e) => Err(format!("it couldn't be read ({e})")),
     }

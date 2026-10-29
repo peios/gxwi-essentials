@@ -7,15 +7,10 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-RUST_ROOTS = ("apps", "crates", "packages")
+RUST_ROOTS = ("apps", "crates")
 SHELL_SOURCES = (
-    "bazel",
     "tools/check",
     "tools/check-docs",
-    "tools/offline-build",
-    "tools/prepare-dev-sdk",
-    "tools/prepare-native-sdk",
-    "tools/prepare-gxwi-sdk",
     "tools/prepare-test-disks",
 )
 
@@ -50,9 +45,7 @@ def main() -> None:
         str(path.relative_to(ROOT)) for name in RUST_ROOTS for path in (ROOT / name).rglob("*.rs")
     )
     python = sorted(
-        str(path.relative_to(ROOT))
-        for name in ("tools", "packages")
-        for path in (ROOT / name).rglob("*.py")
+        str(path.relative_to(ROOT)) for name in ("tools",) for path in (ROOT / name).rglob("*.py")
     )
     run(
         [
@@ -80,7 +73,6 @@ def main() -> None:
         for path in (ROOT / name).rglob(pattern)
         if "vendor" not in path.parts and "third-party" not in path.parts
     )
-    styles.extend(str(path.relative_to(ROOT)) for path in (ROOT / "packages").rglob("*.json"))
     styles.extend(str(path.relative_to(ROOT)) for path in (ROOT / ".github").rglob("*.yml"))
     run(
         [

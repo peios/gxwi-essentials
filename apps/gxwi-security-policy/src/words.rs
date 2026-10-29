@@ -110,7 +110,7 @@ mod tests {
         );
         assert_eq!(suggested_name("  --DigiCert, Inc.  "), "digicert-inc");
         assert_eq!(suggested_name("!!!"), "added-ca");
-        assert!(trust::usable_name(&suggested_name("a/b\\c")));
+        assert!(trust_client::usable_name(&suggested_name("a/b\\c")).unwrap());
     }
 
     #[test]

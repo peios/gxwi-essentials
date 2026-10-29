@@ -2,7 +2,7 @@
 //! under /etc/ssl, how it is faring, and who may change trust.
 
 use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
-use libtrust::Health;
+use trust_client::Health;
 
 use crate::policy::Asking;
 use crate::store::Store;

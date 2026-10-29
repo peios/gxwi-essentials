@@ -317,11 +317,13 @@ fn a_value_holding_a_descriptor_is_shown_as_one_and_opens_in_the_editor() {
 
 #[test]
 fn what_the_manual_says_is_shown_and_a_documented_value_can_be_set_from_it() {
-    let (records, _) = libregman::fragment::parse(
+    let records = peios_regman::parse(
         "--- machine\\app\ncanonical: Machine\\App\n\nThe app's **settings**.\n\n\
          --- machine\\app theme\ncanonical: Machine\\App Theme\ntype: REG_SZ\ndefault: dark\napplies: live\n\nIts colours.\n\n\
          --- machine\\app size\ncanonical: Machine\\App Size\ntype: REG_DWORD\ndefault: 12\n\nIts size.\n",
-    );
+    )
+    .unwrap()
+    .records;
     let values = vec![value("Theme", Data::Dword(1))];
     let mut editor = seen(
         r"Machine\App",
@@ -425,9 +427,11 @@ fn what_the_manual_says_is_shown_and_a_documented_value_can_be_set_from_it() {
 
 #[test]
 fn a_key_with_only_documented_values_lists_them_and_one_with_none_says_so() {
-    let (records, _) = libregman::fragment::parse(
+    let records = peios_regman::parse(
         "--- machine\\app mode\ncanonical: Machine\\App Mode\ntype: REG_SZ\ndefault: (none)\n\nIts mode.\n",
-    );
+    )
+    .unwrap()
+    .records;
     let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", listing(&[]))]);
     assert_eq!(
         editor.listing(),
@@ -557,9 +561,8 @@ fn files_are_offered_as_far_as_the_privileges_and_the_layer_allow() {
 #[test]
 fn an_import_says_where_it_writes_before_it_does() {
     let mut editor = seen(r"Machine\App", &[], vec![(r"Machine\App", listing(&[]))]);
-    let doc: Document =
-        serde_json::from_str(r#"{"keys":[{"path":"Machine\\App"},{"path":"Machine\\App\\Sub"}]}"#)
-            .unwrap();
+    let doc = Document::parse(r#"{"keys":[{"path":"Machine\\App"},{"path":"Machine\\App\\Sub"}]}"#)
+        .unwrap();
     editor.doing = Doing::Importing {
         doc,
         file: "/home/dana/App.json".into(),

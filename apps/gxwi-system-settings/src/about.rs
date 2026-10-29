@@ -6,8 +6,7 @@
 
 use gxwi::Fields;
 use gxwi::settings::{self, Glyph, Kind, Tile, Tone, Width};
-use libnetd::NETWORK_KEY;
-use libnetd::hostname::{self, HOSTNAME_VALUE};
+use netd_client::{HOSTNAME_MAX, HOSTNAME_VALUE, NETWORK_KEY};
 use peios::registry::Data;
 
 use crate::{reg, words};
@@ -244,7 +243,7 @@ pub fn render(about: &About, fields: &Fields) -> String {
     let configured = about.configured.as_deref().unwrap_or(&about.name);
     let changed = typed.trim() != configured;
     let problem = if changed && !typed.trim().is_empty() {
-        hostname::check(typed).err()
+        check_hostname(typed).err()
     } else {
         None
     };
@@ -256,7 +255,7 @@ pub fn render(about: &About, fields: &Fields) -> String {
         may,
         &format!(
             r#"autocomplete="off" spellcheck="false" maxlength="{}" placeholder="Not set""#,
-            hostname::MAX
+            HOSTNAME_MAX
         ),
     );
     if may && changed {
@@ -370,8 +369,14 @@ pub fn render(about: &About, fields: &Fields) -> String {
     )
 }
 
+/// The machine's name, trimmed, if netd would accept it; otherwise what is
+/// wrong with it, in words for the person typing it.
+fn check_hostname(typed: &str) -> Result<String, String> {
+    netd_client::check_hostname(typed).map_err(|e| e.message)
+}
+
 pub fn save_name(fields: &Fields) -> Result<String, String> {
-    let name = hostname::check(fields.get("hostname"))?;
+    let name = check_hostname(fields.get("hostname"))?;
     reg::set(
         NETWORK_KEY,
         "the machine's name",

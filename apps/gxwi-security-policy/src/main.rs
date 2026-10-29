@@ -4,9 +4,9 @@
 //! person looking may see and change it.
 //!
 //! It asks trustd, the only one that knows the set in force, over its own
-//! socket, and changes the registry keys trustd reads through the `trust`
-//! library, with no more authority than the person has: the same steps the
-//! `trust` command takes.
+//! socket, and changes the registry keys trustd reads, through libtrust's
+//! client crate, with no more authority than the person has: the same steps
+//! the `trust` command takes.
 
 use std::sync::Arc;
 

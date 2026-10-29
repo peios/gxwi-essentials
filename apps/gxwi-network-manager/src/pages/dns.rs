@@ -1,7 +1,7 @@
 //! Name resolution: where a name goes, what resolvd has been doing, and
 //! the machine's own servers, domains and names.
 
-use libresolv::Outcome;
+use resolvd_client::Outcome;
 
 use crate::manager::Manager;
 use crate::ui::{alert, donut, h, locked, number, phead, values, LOCKED};

@@ -26,7 +26,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "auth-core"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa#a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa"
+source = "git+https://github.com/peios/authd.git?rev=89dbfeccf77800a7cd287bde5aab6ba26201a680#89dbfeccf77800a7cd287bde5aab6ba26201a680"
 dependencies = [
  "libc",
 ]
@@ -34,7 +34,7 @@ dependencies = [
 [[package]]
 name = "auth-policy"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa#a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa"
+source = "git+https://github.com/peios/authd.git?rev=89dbfeccf77800a7cd287bde5aab6ba26201a680#89dbfeccf77800a7cd287bde5aab6ba26201a680"
 dependencies = [
  "auth-core",
  "peios",
@@ -291,7 +291,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 [[package]]
 name = "eventd-client"
 version = "0.1.11"
-source = "git+https://github.com/peios/eventd.git?rev=d9833bff0ebb0707add6bfb1fd78dd5d49261eaf#d9833bff0ebb0707add6bfb1fd78dd5d49261eaf"
+source = "git+https://github.com/peios/eventd.git?rev=68a4849e1ab4a4b2bbef0533b19e326b9ae067c2#68a4849e1ab4a4b2bbef0533b19e326b9ae067c2"
 dependencies = [
  "libc",
  "peios",
@@ -402,7 +402,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 [[package]]
 name = "gxwi"
 version = "0.0.7"
-source = "git+https://github.com/peios/gxwi.git?rev=ca8276eb842e83c35c5472535457ac5306254533#ca8276eb842e83c35c5472535457ac5306254533"
+source = "git+https://github.com/peios/gxwi.git?rev=e5c1d095e68242099c137ca330d0f5be93308999#e5c1d095e68242099c137ca330d0f5be93308999"
 dependencies = [
  "axum",
  "gxwi-abi",
@@ -419,7 +419,7 @@ dependencies = [
 [[package]]
 name = "gxwi-abi"
 version = "0.0.7"
-source = "git+https://github.com/peios/gxwi.git?rev=ca8276eb842e83c35c5472535457ac5306254533#ca8276eb842e83c35c5472535457ac5306254533"
+source = "git+https://github.com/peios/gxwi.git?rev=e5c1d095e68242099c137ca330d0f5be93308999#e5c1d095e68242099c137ca330d0f5be93308999"
 
 [[package]]
 name = "gxwi-disk-manager"
@@ -441,8 +441,8 @@ dependencies = [
  "gxwi",
  "gxwi-sd-editor",
  "jiff",
- "libregman",
  "peios",
+ "peios-regman",
  "serde_json",
 ]
 
@@ -506,11 +506,11 @@ version = "0.1.0"
 dependencies = [
  "gxwi",
  "gxwi-sd-editor",
- "libnetd",
- "libresolv",
+ "netd-client",
  "ntfe",
  "peios",
  "pnp-core",
+ "resolvd-client",
 ]
 
 [[package]]
@@ -553,9 +553,9 @@ dependencies = [
  "gxwi-sd-editor",
  "jiff",
  "libc",
- "libreg",
- "libregman",
  "peios",
+ "peios-reg",
+ "peios-regman",
  "serde_json",
 ]
 
@@ -581,9 +581,8 @@ dependencies = [
  "gxwi-file-dialog",
  "gxwi-sd-editor",
  "jiff",
- "libtrust",
  "peios",
- "trust",
+ "trust-client",
 ]
 
 [[package]]
@@ -606,12 +605,12 @@ dependencies = [
  "gxwi",
  "jiff",
  "libc",
- "libnetd",
- "libtimed",
+ "netd-client",
  "peinit2",
  "peios",
  "serde_json",
  "session-preferences",
+ "timed-client",
 ]
 
 [[package]]
@@ -864,56 +863,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libnetd"
-version = "0.1.8"
-source = "git+https://github.com/peios/netd.git?rev=23af1f6b84f3764d9327eb009ced56b2a16b7aa8#23af1f6b84f3764d9327eb009ced56b2a16b7aa8"
-dependencies = [
- "peios",
- "pnp-core",
-]
-
-[[package]]
-name = "libreg"
-version = "0.8.17"
-source = "git+https://github.com/peios/peiosutils.git?rev=67ffede760dc1c5767fbb3c6c66e5fc5e12b7314#67ffede760dc1c5767fbb3c6c66e5fc5e12b7314"
-dependencies = [
- "peios",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "libregman"
-version = "0.8.17"
-source = "git+https://github.com/peios/peiosutils.git?rev=67ffede760dc1c5767fbb3c6c66e5fc5e12b7314#67ffede760dc1c5767fbb3c6c66e5fc5e12b7314"
-dependencies = [
- "memchr",
- "memmap2",
- "thiserror",
-]
-
-[[package]]
-name = "libresolv"
-version = "0.1.6"
-source = "git+https://github.com/peios/resolvd.git?rev=9c96d693c9672e635cc40ee1e2ea8122e64f017e#9c96d693c9672e635cc40ee1e2ea8122e64f017e"
-
-[[package]]
-name = "libtimed"
-version = "0.1.10"
-source = "git+https://github.com/peios/timed.git?rev=c1db503a60108542c8586c574802e5f2339dbcb4#c1db503a60108542c8586c574802e5f2339dbcb4"
-dependencies = [
- "peios",
-]
-
-[[package]]
-name = "libtrust"
-version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=2fd7d86aac00e207320bda1ae11045aec3d61fbf#2fd7d86aac00e207320bda1ae11045aec3d61fbf"
-dependencies = [
- "peios",
-]
-
-[[package]]
 name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -930,15 +879,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "memmap2"
-version = "0.9.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "mime"
@@ -961,6 +901,29 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys",
+]
+
+[[package]]
+name = "netd-abi"
+version = "0.1.8"
+source = "git+https://github.com/peios/netd.git?rev=055102c3cead34cf560aed6e9191d2128ee496b6#055102c3cead34cf560aed6e9191d2128ee496b6"
+
+[[package]]
+name = "netd-client"
+version = "0.1.8"
+source = "git+https://github.com/peios/netd.git?rev=055102c3cead34cf560aed6e9191d2128ee496b6#055102c3cead34cf560aed6e9191d2128ee496b6"
+dependencies = [
+ "libc",
+ "netd-abi",
+ "netd-core",
+]
+
+[[package]]
+name = "netd-core"
+version = "0.1.8"
+source = "git+https://github.com/peios/netd.git?rev=055102c3cead34cf560aed6e9191d2128ee496b6#055102c3cead34cf560aed6e9191d2128ee496b6"
+dependencies = [
+ "peios",
 ]
 
 [[package]]
@@ -989,7 +952,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "peinit2"
 version = "0.0.12"
-source = "git+https://github.com/peios/peinit.git?rev=0e20fef16f3c170d8fba0e3a169b617e7b4da3aa#0e20fef16f3c170d8fba0e3a169b617e7b4da3aa"
+source = "git+https://github.com/peios/peinit.git?rev=ce169d9ec30860d2e6a90c3371c2cd9795ca8e25#ce169d9ec30860d2e6a90c3371c2cd9795ca8e25"
 dependencies = [
  "jiff",
  "libc",
@@ -1000,7 +963,7 @@ dependencies = [
 [[package]]
 name = "peios"
 version = "0.4.0"
-source = "git+https://github.com/peios/peios-rs.git?rev=f8c84930f2b71763bcf0550df0b1420a0f63b21e#f8c84930f2b71763bcf0550df0b1420a0f63b21e"
+source = "git+https://github.com/peios/peios-rs.git?rev=b2282f654758831e4a2e34c7b35c26e61a6ebe1c#b2282f654758831e4a2e34c7b35c26e61a6ebe1c"
 dependencies = [
  "bitflags 2.13.2",
  "libc",
@@ -1008,9 +971,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "peios-reg"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "utility-client",
+ "utility-ffi",
+]
+
+[[package]]
+name = "peios-regman"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "libc",
+ "utility-client",
+ "utility-ffi",
+]
+
+[[package]]
 name = "peios-sys"
 version = "0.3.0"
-source = "git+https://github.com/peios/peios-rs.git?rev=f8c84930f2b71763bcf0550df0b1420a0f63b21e#f8c84930f2b71763bcf0550df0b1420a0f63b21e"
+source = "git+https://github.com/peios/peios-rs.git?rev=b2282f654758831e4a2e34c7b35c26e61a6ebe1c#b2282f654758831e4a2e34c7b35c26e61a6ebe1c"
 dependencies = [
  "bindgen",
  "pkg-config",
@@ -1162,6 +1144,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "resolvd-abi"
+version = "0.1.6"
+source = "git+https://github.com/peios/resolvd.git?rev=422302282a293643fb7a0c90e157d28719082d62#422302282a293643fb7a0c90e157d28719082d62"
+
+[[package]]
+name = "resolvd-client"
+version = "0.1.6"
+source = "git+https://github.com/peios/resolvd.git?rev=422302282a293643fb7a0c90e157d28719082d62#422302282a293643fb7a0c90e157d28719082d62"
+dependencies = [
+ "libc",
+ "resolvd-abi",
+ "resolvd-core",
+]
+
+[[package]]
+name = "resolvd-core"
+version = "0.1.6"
+source = "git+https://github.com/peios/resolvd.git?rev=422302282a293643fb7a0c90e157d28719082d62#422302282a293643fb7a0c90e157d28719082d62"
+
+[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1251,7 +1253,7 @@ dependencies = [
 [[package]]
 name = "session-preferences"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa#a014fa4c74f17ce4f67ba964eefce33a1a3dbdfa"
+source = "git+https://github.com/peios/authd.git?rev=89dbfeccf77800a7cd287bde5aab6ba26201a680#89dbfeccf77800a7cd287bde5aab6ba26201a680"
 dependencies = [
  "peios",
 ]
@@ -1362,6 +1364,30 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "timed-abi"
+version = "0.1.10"
+source = "git+https://github.com/peios/timed.git?rev=70e9f86f4cf6719dc3160e131b17f563c3e8e326#70e9f86f4cf6719dc3160e131b17f563c3e8e326"
+
+[[package]]
+name = "timed-client"
+version = "0.1.10"
+source = "git+https://github.com/peios/timed.git?rev=70e9f86f4cf6719dc3160e131b17f563c3e8e326#70e9f86f4cf6719dc3160e131b17f563c3e8e326"
+dependencies = [
+ "libc",
+ "timed-abi",
+ "timed-core",
+]
+
+[[package]]
+name = "timed-core"
+version = "0.1.10"
+source = "git+https://github.com/peios/timed.git?rev=70e9f86f4cf6719dc3160e131b17f563c3e8e326#70e9f86f4cf6719dc3160e131b17f563c3e8e326"
+dependencies = [
+ "libc",
+ "peios",
 ]
 
 [[package]]
@@ -1525,24 +1551,26 @@ dependencies = [
 ]
 
 [[package]]
-name = "trust"
+name = "trust-abi"
 version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=2fd7d86aac00e207320bda1ae11045aec3d61fbf#2fd7d86aac00e207320bda1ae11045aec3d61fbf"
+source = "git+https://github.com/peios/trustd.git?rev=7d830b926910ebe0197bc9611e7bfdf79028f22d#7d830b926910ebe0197bc9611e7bfdf79028f22d"
+
+[[package]]
+name = "trust-client"
+version = "0.1.6"
+source = "git+https://github.com/peios/trustd.git?rev=7d830b926910ebe0197bc9611e7bfdf79028f22d#7d830b926910ebe0197bc9611e7bfdf79028f22d"
 dependencies = [
  "libc",
- "libtrust",
- "peios",
- "trustd",
+ "trust-abi",
+ "trust-core",
 ]
 
 [[package]]
-name = "trustd"
+name = "trust-core"
 version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=2fd7d86aac00e207320bda1ae11045aec3d61fbf#2fd7d86aac00e207320bda1ae11045aec3d61fbf"
+source = "git+https://github.com/peios/trustd.git?rev=7d830b926910ebe0197bc9611e7bfdf79028f22d#7d830b926910ebe0197bc9611e7bfdf79028f22d"
 dependencies = [
  "der",
- "libc",
- "libtrust",
  "peios",
  "sha1",
  "sha2",
@@ -1588,6 +1616,23 @@ name = "unicode-width"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
+
+[[package]]
+name = "utility-client"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "libc",
+ "utility-ffi",
+]
+
+[[package]]
+name = "utility-ffi"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "version_check"

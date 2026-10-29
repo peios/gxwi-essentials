@@ -4,7 +4,7 @@
 //! laws the kernel and netd apply when they read it: pnp-core's ingestion
 //! for each packet layer and across them, the limits NTFE adds on top
 //! (depth, count, value types), and netd's own build of the interface
-//! layer and the profiles (libnetd's `policy`), including the tie between
+//! layer and the profiles (netd-client's `Policy`), including the tie between
 //! two profiles that netd refuses. A change the machine would refuse is
 //! refused here, with the reason, and never reaches the registry.
 //!
@@ -15,7 +15,7 @@
 
 use std::net::IpAddr;
 
-use libnetd::raw::{RawKey, RawValue};
+use netd_client::{InterfaceFacts, RawKey, RawValue};
 use pnp_core::{
     CondKey, CondOp, Direction, EndpointKind, EvalContext, FactId, OwnedPrincipal, RegValue,
     RuleInput, Sid, Snapshot, TimeFacts,
@@ -272,12 +272,12 @@ pub fn raw(tree: &Tree) -> RawKey {
 }
 
 /// The interface layer and profiles, as netd builds them.
-pub fn interface_policy(policy: &Policy) -> Result<libnetd::policy::Policy, String> {
+pub fn interface_policy(policy: &Policy) -> Result<netd_client::Policy, String> {
     let mut layer = Tree::new("Interface");
     layer.children = policy.interface.iter().map(Rule::tree).collect();
     let rules = (!policy.interface.is_empty()).then(|| raw(&layer));
     let profiles = policy.profiles.as_ref().map(raw);
-    libnetd::policy::build(rules.as_ref(), profiles.as_ref()).map_err(netd_words)
+    netd_client::Policy::build(rules.as_ref(), profiles.as_ref()).map_err(|e| netd_words(e.message))
 }
 
 /// netd's reasons are terse; the person reads them as a sentence.
@@ -332,9 +332,15 @@ pub fn check(policy: &Policy, subjects: &[Subject]) -> Report {
         Ok(netd) => {
             report
                 .lints
-                .extend(netd.lints.iter().map(|l| netd_words(l.clone())));
+                .extend(netd.lints().into_iter().map(netd_words));
             for subject in subjects {
-                let judged = netd.judge(&interface_snapshot(subject));
+                let judged = match netd.judge(&interface_facts(subject)) {
+                    Ok(judged) => judged,
+                    Err(e) => {
+                        report.refusals.push(netd_words(e.message));
+                        continue;
+                    }
+                };
                 if judged.conflict {
                     report.refusals.push(format!("On {}, rules {} have the same priority and choose different profiles. Give one a higher priority.", subject.name, judged.rule.replace(" vs ", " and ")));
                 }
@@ -358,41 +364,42 @@ fn mac(text: &str) -> Option<[u8; 6]> {
 }
 
 /// An interface as the interface layer sees it.
-pub fn interface_snapshot(subject: &Subject) -> Snapshot<'static> {
-    let opt = |s: &str| (!s.is_empty()).then(|| pkm(s));
-    Snapshot {
-        interface: Some(pkm(&subject.name)),
+pub fn interface_facts(subject: &Subject) -> InterfaceFacts {
+    let opt = |s: &str| (!s.is_empty()).then(|| s.to_string());
+    InterfaceFacts {
+        interface: Some(subject.name.clone()),
         interface_kind: opt(&subject.kind),
         interface_id: opt(&subject.id),
         interface_mac: mac(&subject.mac),
         interface_path: opt(&subject.path),
         interface_driver: opt(&subject.driver),
-        network_id: subject.network.id.as_deref().map(pkm),
-        network_name: subject.network.name.as_deref().map(pkm),
-        network_trust: subject.network.trust.as_deref().map(pkm),
-        network_kind: subject.network.kind.as_deref().map(pkm),
-        ..Snapshot::default()
+        network_id: subject.network.id.clone(),
+        network_name: subject.network.name.clone(),
+        network_trust: subject.network.trust.clone(),
+        network_kind: subject.network.kind.clone(),
     }
 }
 
 /// How the interface layer judges `subject`: the verdict, the rule that
 /// spoke (`None` for the backstop), and whether rules tied.
 pub fn judge_interface(
-    netd: &libnetd::policy::Policy,
+    netd: &netd_client::Policy,
     subject: &Subject,
-) -> (Verdict, Option<String>, bool) {
-    use libnetd::policy::Outcome;
-    let judged = netd.judge(&interface_snapshot(subject));
+) -> Result<(Verdict, Option<String>, bool), String> {
+    use netd_client::Outcome;
+    let judged = netd
+        .judge(&interface_facts(subject))
+        .map_err(|e| netd_words(e.message))?;
     let verdict = match &judged.outcome {
         Outcome::Join(p) => Verdict::Join(p.path.clone()),
         Outcome::Down => Verdict::Down,
         Outcome::Ignore => Verdict::Ignore,
     };
-    (
+    Ok((
         verdict,
         (!judged.backstop).then_some(judged.rule),
         judged.conflict,
-    )
+    ))
 }
 
 /// A connection, as the firewall judges it.
@@ -1278,11 +1285,11 @@ pub mod tests {
         let netd = interface_policy(&policy).unwrap();
         let mut subject = eth0();
         assert_eq!(
-            judge_interface(&netd, &subject).0,
+            judge_interface(&netd, &subject).unwrap().0,
             Verdict::Join("default".into())
         );
         subject.network.name = Some("Heron Cottage".into());
-        let (verdict, by, _) = judge_interface(&netd, &subject);
+        let (verdict, by, _) = judge_interface(&netd, &subject).unwrap();
         assert_eq!(
             (verdict, by.as_deref()),
             (Verdict::Join("default/home".into()), Some("wired/home"))

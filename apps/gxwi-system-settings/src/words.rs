@@ -1,7 +1,7 @@
 //! What the window says, in words.
 
 use gxwi::settings::Tone;
-use libtimed::{SourceState, Status, Sync};
+use timed_client::{SourceState, Status, Sync};
 
 /// How well the clock is being kept, in a sentence.
 pub fn keeping(status: &Status) -> String {

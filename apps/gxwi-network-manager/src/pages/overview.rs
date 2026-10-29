@@ -2,7 +2,7 @@
 //! network on the other side, and whether that leads out; then the
 //! interface chosen, in full.
 
-use libnetd::Level;
+use netd_client::Level;
 
 use crate::machine::{Interface, Source};
 use crate::manager::Manager;
