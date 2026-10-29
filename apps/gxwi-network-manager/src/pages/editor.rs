@@ -257,8 +257,12 @@ fn impact(m: &Manager, d: &RuleDraft, policy: &Policy) -> String {
         };
         for i in &m.state.interfaces {
             let subject = i.subject(&m.config);
-            let (was, _, _) = engine::judge_interface(&before, &subject);
-            let (will, _, tie) = engine::judge_interface(&after, &subject);
+            let (Ok((was, _, _)), Ok((will, _, tie))) = (
+                engine::judge_interface(&before, &subject),
+                engine::judge_interface(&after, &subject),
+            ) else {
+                continue;
+            };
             if tie {
                 rows += &format!(
                     r#"<div class="ir cut"><span class="grow">{}</span><span>Conflicts with another rule at the same priority</span></div>"#,

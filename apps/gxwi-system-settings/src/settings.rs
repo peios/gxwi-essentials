@@ -14,7 +14,7 @@ use std::sync::Weak;
 use auth_core::client::ident::Ident;
 use gxwi::settings::{self, Glyph, Nav, Section, Tile};
 use gxwi::{Facts, Fields, Live, Surface, Value};
-use libtimed::zone::Listed;
+use timed_client::Listed;
 
 use crate::about::{self, About};
 use crate::language::{self, Installed, Language};
@@ -96,7 +96,7 @@ impl Settings {
             ident,
             view: View::Time,
             time: read.time,
-            zones: libtimed::zone::list(),
+            zones: timed_client::zones().unwrap_or_default(),
             language: read.language,
             installed: language::installed(),
             about: read.about,

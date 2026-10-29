@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn every_setting_is_one_netd_knows() {
-        use libnetd::raw::{RawKey, RawValue};
+        use netd_client::{RawKey, RawValue};
         for s in SETTINGS {
             let value = match s.shape {
                 Shape::Switch | Shape::Tri => RawValue::Int(1),
@@ -848,7 +848,11 @@ mod tests {
                 values: vec![],
                 children: vec![profile],
             };
-            assert!(libnetd::profile::resolve(&root).is_ok(), "{}", s.key());
+            assert!(
+                netd_client::Policy::resolve_profiles(&root).is_ok(),
+                "{}",
+                s.key()
+            );
         }
     }
 }

@@ -12,17 +12,16 @@
 //!   connection that is closed at once (PEI-1329).
 
 use std::collections::BTreeMap;
-use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use libnetd::{InterfaceStatus, Level};
-use libresolv::StatusReport;
+use netd_client::{InterfaceStatus, Level};
+use resolvd_client::StatusReport;
 
 use crate::engine::{Conn, Context, Policy, Subject};
 use crate::registry::{self, Tree, Value};
 use crate::rules::{self, Layer};
 
-pub const NETWORK_KEY: &str = libnetd::NETWORK_KEY;
+pub const NETWORK_KEY: &str = netd_client::NETWORK_KEY;
 pub const RESERVATIONS_KEY: &str = "Machine\\System\\Network\\TcpIp\\PortReservations";
 const GXWI_KEY: &str = "Machine\\Software\\GXWI";
 /// Where the desktop listens when it isn't told otherwise.
@@ -393,7 +392,7 @@ pub fn read_config() -> Config {
         };
     }
     config.duid = sz(&root, "Duid");
-    config.hostname = sz(&root, libnetd::hostname::HOSTNAME_VALUE);
+    config.hostname = sz(&root, netd_client::HOSTNAME_VALUE);
     config.netd_security = match root.value("ControlSecurity") {
         Some(Value::Bytes(b)) if !b.is_empty() => Some(b.clone()),
         _ => None,
@@ -582,45 +581,43 @@ impl State {
 
 const TIMEOUT: Duration = Duration::from_secs(2);
 
-fn netd_status() -> Result<libnetd::Status, String> {
-    let mut stream = UnixStream::connect(libnetd::CONTROL_SOCKET_PATH)
-        .map_err(|e| format!("netd isn't answering ({e})."))?;
-    let _ = stream.set_read_timeout(Some(TIMEOUT));
-    let _ = stream.set_write_timeout(Some(TIMEOUT));
-    match libnetd::call(&mut stream, &libnetd::Request::Status) {
-        Ok(libnetd::Reply::Status(s)) => Ok(s),
-        Ok(libnetd::Reply::Error(e)) => Err(e),
-        Ok(_) => Err("netd answered something else.".into()),
-        Err(e) => Err(format!("netd's answer couldn't be read ({e}).")),
-    }
+fn netd_status() -> Result<netd_client::Status, String> {
+    netd_client::Client::system(TIMEOUT)
+        .map_err(|e| format!("netd can't be asked ({e})."))?
+        .status()
+        .map_err(|e| e.to_string())
+}
+
+/// What the person asks netd to do.
+pub enum NetdRequest {
+    /// A fresh lease for an interface.
+    Renew { interface: String },
+    /// Every interface made to match its profile again.
+    Reconcile,
 }
 
 /// Asks netd for something: a renewal, a reconcile.
-pub fn netd(request: &libnetd::Request) -> Result<(), String> {
-    let mut stream = UnixStream::connect(libnetd::CONTROL_SOCKET_PATH)
-        .map_err(|e| format!("netd isn't answering ({e})."))?;
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-    match libnetd::call(&mut stream, request) {
-        Ok(libnetd::Reply::Ok) => Ok(()),
-        Ok(libnetd::Reply::Error(e)) if e.contains("denied") || e.contains("access") => Err(
-            "netd refused: this needs the Network Control right, which Administrators hold.".into(),
-        ),
-        Ok(libnetd::Reply::Error(e)) => Err(format!("netd refused: {e}")),
-        Ok(_) => Err("netd answered something else.".into()),
-        Err(e) => Err(format!("netd's answer couldn't be read ({e}).")),
-    }
+pub fn netd(request: &NetdRequest) -> Result<(), String> {
+    let client = netd_client::Client::system(Duration::from_secs(10))
+        .map_err(|e| format!("netd can't be asked ({e})."))?;
+    let done = match request {
+        NetdRequest::Renew { interface } => client.renew(interface),
+        NetdRequest::Reconcile => client.reconcile(),
+    };
+    done.map_err(|e| {
+        if std::io::Error::from_raw_os_error(e.code).kind() == std::io::ErrorKind::PermissionDenied
+        {
+            "netd refused: this needs the Network Control right, which Administrators hold.".into()
+        } else {
+            format!("netd refused: {e}")
+        }
+    })
 }
 
-/// Asks resolvd something.
-pub fn resolvd(request: &libresolv::Request) -> Result<libresolv::Reply, String> {
-    let mut stream = UnixStream::connect(libresolv::SOCKET_PATH)
-        .map_err(|e| format!("resolvd isn't answering ({e})."))?;
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(8)));
-    match libresolv::call(&mut stream, request) {
-        Ok(libresolv::Reply::Error(e)) => Err(e),
-        Ok(reply) => Ok(reply),
-        Err(e) => Err(format!("resolvd's answer couldn't be read ({e}).")),
-    }
+/// A client of resolvd's socket, which waits eight seconds for each answer.
+pub fn resolvd() -> Result<resolvd_client::Client, String> {
+    resolvd_client::Client::system(Duration::from_secs(8))
+        .map_err(|e| format!("resolvd can't be asked ({e})."))
 }
 
 fn sys(name: &str, what: &str) -> Option<String> {
@@ -918,11 +915,7 @@ pub fn read_state(config: &Config) -> State {
     state
         .interfaces
         .sort_by(|a, b| a.status.name.cmp(&b.status.name));
-    state.resolvd = match resolvd(&libresolv::Request::Status) {
-        Ok(libresolv::Reply::Status(s)) => Ok(s),
-        Ok(_) => Err("resolvd answered something else.".into()),
-        Err(e) => Err(e),
-    };
+    state.resolvd = resolvd().and_then(|client| client.status().map_err(|e| e.to_string()));
     state.sessions = sessions(config.desktop_port, &state.interfaces, config);
     state
 }
@@ -946,7 +939,7 @@ mod tests {
     #[test]
     fn an_address_is_known_by_where_it_came_from() {
         let status = InterfaceStatus {
-            lease: Some(libnetd::LeaseStatus::default()),
+            lease: Some(netd_client::LeaseStatus::default()),
             ..InterfaceStatus::default()
         };
         assert_eq!(source("10.0.2.15/24", &status, &[], None), Source::Leased);

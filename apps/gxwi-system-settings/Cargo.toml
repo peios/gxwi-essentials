@@ -14,8 +14,8 @@ auth-core = { workspace = true, features = ["client"] }
 jiff = { workspace = true }
 libc = { workspace = true }
 gxwi = { workspace = true }
-libnetd = { workspace = true }
-libtimed = { workspace = true }
+netd-client = { workspace = true }
+timed-client = { workspace = true }
 peinit2 = { workspace = true, default-features = false }
 peios = { workspace = true }
 session-preferences = { workspace = true }

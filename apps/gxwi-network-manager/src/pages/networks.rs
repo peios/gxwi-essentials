@@ -109,12 +109,16 @@ fn impact(m: &Manager, id: &str, after: &Context) -> Vec<(String, String, String
             .filter(|i| i.status.network.as_deref() == Some(id))
         {
             let mut subject = i.subject(&m.config);
-            let was = engine::judge_interface(&netd, &subject).0;
+            let Ok((was, ..)) = engine::judge_interface(&netd, &subject) else {
+                continue;
+            };
             subject.network = Context {
                 kind: subject.network.kind.clone(),
                 ..after.clone()
             };
-            let will = engine::judge_interface(&netd, &subject).0;
+            let Ok((will, ..)) = engine::judge_interface(&netd, &subject) else {
+                continue;
+            };
             if was != will {
                 let words = |v: &crate::rules::Verdict| match v {
                     crate::rules::Verdict::Join(p) => p.replace('/', " › "),

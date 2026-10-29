@@ -6,16 +6,14 @@
 //! writes it and timed acts within a second. Setting the clock is a request
 //! to timed, which only it carries out, and only while `Automatic` is 0.
 
-use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
 use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone};
 use gxwi::{Fields, escape};
-use libtimed::servers::parse_server;
-use libtimed::zone::{self, Listed};
-use libtimed::{
-    ALLOW_UNAUTHENTICATED_VALUE, AUTOMATIC_VALUE, MAX_POLL_VALUE, MIN_POLL_VALUE, Reply, Request,
+use timed_client::{
+    ALLOW_UNAUTHENTICATED_VALUE, AUTOMATIC_VALUE, Client, Listed, MAX_POLL_VALUE, MIN_POLL_VALUE,
     SERVERS_VALUE, SourceInfo, SourceState, Status, TIME_KEY, TIME_ZONE_VALUE, USE_FROM_DHCP_VALUE,
+    parse_server,
 };
 use peios::registry::Data;
 
@@ -60,47 +58,20 @@ pub fn read() -> Time {
         max_poll: reg::number(TIME_KEY, MAX_POLL_VALUE),
     };
     Time {
-        status: ask(Request::Status).and_then(|reply| match reply {
-            Reply::Status(status) => Ok(status),
-            Reply::Error(e) => Err(e),
-            other => Err(format!("timed answered {other:?}")),
-        }),
+        status: client().and_then(|timed| timed.status().map_err(|e| e.to_string())),
         sources: sources().unwrap_or_default(),
         policy,
         may: reg::may_change(TIME_KEY, "the time settings"),
     }
 }
 
-fn connect() -> Result<UnixStream, String> {
-    let stream = UnixStream::connect(libtimed::SOCKET_PATH)
-        .map_err(|e| format!("timed can't be reached: {e}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .map_err(|e| e.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(5)))
-        .map_err(|e| e.to_string())?;
-    Ok(stream)
-}
-
-fn ask(request: Request) -> Result<Reply, String> {
-    libtimed::call(&mut connect()?, &request).map_err(|e| e.to_string())
+/// A client of timed's socket, which waits five seconds for each answer.
+fn client() -> Result<Client, String> {
+    Client::system(Duration::from_secs(5)).map_err(|e| format!("timed can't be reached: {e}"))
 }
 
 fn sources() -> Result<Vec<SourceInfo>, String> {
-    let mut stream = connect()?;
-    libtimed::send(&mut stream, &Request::Sources.encode()).map_err(|e| e.to_string())?;
-    let mut replies = Vec::new();
-    loop {
-        let reply = Reply::decode(&libtimed::recv(&mut stream).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-        let more = matches!(&reply, Reply::Sources { more: true, .. });
-        replies.push(reply);
-        if !more {
-            break;
-        }
-    }
-    libtimed::sources_of(replies)
+    client()?.sources().map_err(|e| e.to_string())
 }
 
 /// Puts the policy in the fields.
@@ -327,7 +298,7 @@ pub fn render(
                 let mut lines = vec![(
                     format!(
                         "{} · offset {} · last heard {}",
-                        if s.auth == libtimed::Auth::Nts {
+                        if s.auth == timed_client::Auth::Nts {
                             "Authenticated (NTS)"
                         } else {
                             "Unauthenticated"
@@ -420,7 +391,7 @@ pub fn save_zone(fields: &Fields) -> Result<String, String> {
         reg::set(TIME_KEY, "the time zone", &[(TIME_ZONE_VALUE, None)])?;
         return Ok("Time zone set to UTC.".into());
     }
-    zone::installed(chosen)?;
+    timed_client::installed_zone(chosen).map_err(|e| e.message)?;
     reg::set(
         TIME_KEY,
         "the time zone",
@@ -458,15 +429,10 @@ pub fn set_clock(time: &Time, fields: &Fields) -> Result<String, String> {
         .to_zoned(shown_zone(time))
         .map_err(|e| format!("That time doesn't exist here: {e}."))?;
     let at = zoned.timestamp();
-    let request = Request::Set {
-        seconds: at.as_second(),
-        nanos: at.subsec_nanosecond().max(0) as u32,
-    };
-    match ask(request)? {
-        Reply::Ok => Ok(format!("Clock set to {}.", zoned.strftime("%H:%M:%S on %A %-d %B %Y"))),
-        Reply::Error(why) if why == "not permitted" => Err("timed won't set the clock for you: its control right is needed, which as shipped only Administrators have.".into()),
-        Reply::Error(why) => Err(format!("timed didn't set the clock: {why}.")),
-        other => Err(format!("timed answered {other:?}.")),
+    match client()?.set(at.as_second(), at.subsec_nanosecond().max(0) as u32) {
+        Ok(()) => Ok(format!("Clock set to {}.", zoned.strftime("%H:%M:%S on %A %-d %B %Y"))),
+        Err(e) if std::io::Error::from_raw_os_error(e.code).kind() == std::io::ErrorKind::PermissionDenied => Err("timed won't set the clock for you: its control right is needed, which as shipped only Administrators have.".into()),
+        Err(e) => Err(format!("timed didn't set the clock: {e}.")),
     }
 }
 

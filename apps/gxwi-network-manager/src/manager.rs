@@ -228,7 +228,7 @@ pub type NetworkEdit = (String, Option<String>, Option<String>, Option<String>);
 pub struct Lookup {
     pub name: String,
     pub aaaa: bool,
-    pub answer: Option<Result<libresolv::Answer, String>>,
+    pub answer: Option<Result<resolvd_client::Answer, String>>,
     pub asking: bool,
 }
 
@@ -484,7 +484,9 @@ impl Manager {
                     continue;
                 };
                 let mut subject = i.subject(&self.config);
-                let was = engine::judge_interface(&before, &subject).0;
+                let Ok((was, ..)) = engine::judge_interface(&before, &subject) else {
+                    continue;
+                };
                 if let Some((id, ctx)) = &network
                     && subject.network.id.as_deref() == Some(*id)
                 {
@@ -493,7 +495,9 @@ impl Manager {
                         ..ctx.clone()
                     };
                 }
-                let will = engine::judge_interface(&after, &subject).0;
+                let Ok((will, ..)) = engine::judge_interface(&after, &subject) else {
+                    continue;
+                };
                 if matches!(was, Verdict::Join(_)) && !matches!(will, Verdict::Join(_)) {
                     out.push(format!(
                         "{} to port {} ({} would stop being managed)",
@@ -1309,16 +1313,11 @@ impl Manager {
         };
         let window = self.window.clone();
         std::thread::spawn(move || {
-            let asked = machine::resolvd(&libresolv::Request::Resolve {
-                name,
-                rtype: if aaaa { 28 } else { 1 },
-                no_cache: false,
+            let answer = machine::resolvd().and_then(|client| {
+                client
+                    .resolve(&name, if aaaa { 28 } else { 1 }, false)
+                    .map_err(|e| e.to_string())
             });
-            let answer = match asked {
-                Ok(libresolv::Reply::Answer(a)) => Ok(a),
-                Ok(_) => Err("resolvd answered something else.".to_string()),
-                Err(e) => Err(e),
-            };
             if let Some(window) = window.upgrade() {
                 window.update(|m, _| {
                     m.lookup.answer = Some(answer);
@@ -2008,11 +2007,11 @@ impl Manager {
             "renew" | "reconcile" => {
                 let interface = v("i");
                 let request = if name == "renew" {
-                    libnetd::Request::Renew {
+                    machine::NetdRequest::Renew {
                         interface: interface.clone(),
                     }
                 } else {
-                    libnetd::Request::Reconcile
+                    machine::NetdRequest::Reconcile
                 };
                 self.renewing = Some(if name == "renew" {
                     interface.clone()
@@ -2407,7 +2406,8 @@ impl Manager {
             "flush" => {
                 let window = self.window.clone();
                 std::thread::spawn(move || {
-                    let done = machine::resolvd(&libresolv::Request::Flush);
+                    let done = machine::resolvd()
+                        .and_then(|client| client.flush().map_err(|e| e.to_string()));
                     if let Some(window) = window.upgrade() {
                         window.update(|m, _| {
                             m.said = Some(

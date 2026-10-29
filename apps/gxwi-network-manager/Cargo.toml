@@ -9,8 +9,8 @@ publish = false
 [dependencies]
 gxwi-sd-editor = { workspace = true, features = ["names", "splice"], default-features = false }
 gxwi = { workspace = true }
-libnetd = { workspace = true, features = ["policy"] }
-libresolv = { workspace = true }
+netd-client = { workspace = true }
+resolvd-client = { workspace = true }
 ntfe = { workspace = true }
 peios = { workspace = true }
 pnp-core = { workspace = true }
