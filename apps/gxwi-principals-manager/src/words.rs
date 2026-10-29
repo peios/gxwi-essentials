@@ -105,7 +105,15 @@ pub const PRIVILEGES: &[(&str, &str)] = &[
         "SeSecurityPrivilege",
         "Read and change what any object audits.",
     ),
+    (
+        "SeTakeOwnershipPrivilege",
+        "Take ownership of anything, whatever its permissions.",
+    ),
     ("SeLoadDriverPrivilege", "Load and unload kernel modules."),
+    (
+        "SeSystemProfilePrivilege",
+        "Profile the whole system, protected processes included.",
+    ),
     ("SeSystemtimePrivilege", "Set the system clock."),
     (
         "SeProfileSingleProcessPrivilege",
@@ -144,6 +152,10 @@ pub const PRIVILEGES: &[(&str, &str)] = &[
     (
         "SeImpersonatePrivilege",
         "Act as a client who connects to it.",
+    ),
+    (
+        "SeRelabelPrivilege",
+        "Give an object a higher integrity level than their own.",
     ),
     ("SeCreateSymbolicLinkPrivilege", "Make symbolic links."),
 ];

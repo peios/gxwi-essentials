@@ -8,17 +8,15 @@
 //! bundle Peios ships, or among this machine's additions, where it is one.
 
 use std::collections::HashMap;
-use std::io::{ErrorKind, Read as _};
-use std::os::unix::net::UnixStream;
+use std::io::ErrorKind;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use gxwi::Surface;
-use libtrust::{
-    ADD_KEY, CERTIFICATE_VALUE, CERTIFICATES_KEY, Request, Root, SHARE_BUNDLE, SOCKET_PATH, Status,
-};
 use peios::registry::{Key, KeyAccess, OpenFlags};
-use trust::{Details, cert};
+use trust_client::{
+    ADD_KEY, CERTIFICATE_VALUE, CERTIFICATES_KEY, Client, Details, Root, SHARE_BUNDLE, Status,
+};
 
 use crate::policy::Policy;
 
@@ -53,10 +51,8 @@ impl Cert {
             || self.details.unit.as_deref().is_some_and(found)
             || found(&self.details.subject)
             || self.root.name.as_deref().is_some_and(found)
-            || self
-                .root
-                .fingerprint
-                .starts_with(&trust::normalise_fingerprint(words))
+            || trust_client::normalise_fingerprint(words)
+                .is_ok_and(|typed| self.root.fingerprint.starts_with(&typed))
     }
 }
 
@@ -123,9 +119,15 @@ impl Known {
     pub fn read() -> Known {
         let shipped = std::fs::read_to_string(SHARE_BUNDLE)
             .map(|text| {
-                cert::from_pem(&text)
+                trust_client::from_pem(&text)
+                    .unwrap_or_default()
                     .into_iter()
-                    .filter_map(|der| Some((cert::fingerprint(&der), cert::describe(&der).ok()?)))
+                    .filter_map(|der| {
+                        Some((
+                            trust_client::fingerprint(&der).ok()?,
+                            trust_client::inspect(&der).ok()?,
+                        ))
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -159,20 +161,32 @@ fn added() -> HashMap<String, Details> {
         let Ok(value) = entry.query_value(CERTIFICATE_VALUE.as_bytes(), None) else {
             continue;
         };
-        if let Ok(details) = cert::describe(&value.data) {
-            out.insert(cert::fingerprint(&value.data), details);
+        if let (Ok(fingerprint), Ok(details)) = (
+            trust_client::fingerprint(&value.data),
+            trust_client::inspect(&value.data),
+        ) {
+            out.insert(fingerprint, details);
         }
     }
     out
 }
 
+/// How long the window waits for trustd to answer, as `trust` waits.
+const ANSWER: Duration = Duration::from_secs(10);
+
+/// trustd, at its socket.
+pub fn trustd() -> Result<Client, trust_client::Error> {
+    Client::system(ANSWER)
+}
+
 /// What trustd says is in force, each certificate described.
 fn roots() -> Result<Vec<Cert>, String> {
-    let mut certs: Vec<Cert> = trust::roots(true, None)
+    let mut certs: Vec<Cert> = trustd()
+        .and_then(|trustd| trustd.roots(true, None))
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|mut root| {
-            let details = cert::describe(&root.der).unwrap_or_else(|_| Details {
+            let details = trust_client::inspect(&root.der).unwrap_or_else(|_| Details {
                 subject: root.subject.clone(),
                 ..Details::default()
             });
@@ -204,7 +218,7 @@ pub fn read_all(known: &Known) -> Store {
 
 fn read_with(known: &Known, roots: Result<Vec<Cert>, String>) -> Store {
     let added = added();
-    let distrusted = trust::distrusted()
+    let distrusted = trust_client::distrusted()
         .map_err(|e| e.to_string())
         .map(|entries| {
             let mut refused: Vec<Refused> = entries
@@ -225,11 +239,11 @@ fn read_with(known: &Known, roots: Result<Vec<Cert>, String>) -> Store {
         });
     Store {
         roots,
-        status: trust::status().ok(),
+        status: trustd().and_then(|trustd| trustd.status()).ok(),
         distrusted,
-        may: trust::may_change().map_err(|_| LOOK_ONLY.to_string()),
-        may_compat: trust::may_set_compat().map_err(|_| LOOK_ONLY.to_string()),
-        may_reload: trust::may_reload(),
+        may: trust_client::may_change().map_err(|_| LOOK_ONLY.to_string()),
+        may_compat: trust_client::may_set_compat().map_err(|_| LOOK_ONLY.to_string()),
+        may_reload: trust_client::may_reload().unwrap_or(false),
         keys: crate::keys::read(),
     }
 }
@@ -243,19 +257,11 @@ const QUIET: Duration = Duration::from_secs(10);
 /// changes, what is cheap to read is read every little while.
 pub fn follow(window: Weak<Surface<Policy>>, known: Arc<Known>) {
     loop {
-        let subscribed = UnixStream::connect(SOCKET_PATH).and_then(|mut stream| {
-            stream.set_read_timeout(Some(QUIET))?;
-            libtrust::send(
-                &mut stream,
-                &Request::Subscribe { with_der: false }.encode(),
-            )
-            .map_err(std::io::Error::other)?;
-            Ok(stream)
-        });
         // A subscriber is sent the set as it is at once; that is not news.
-        let Ok(mut stream) =
-            subscribed.and_then(|mut stream| next_set(&mut stream).map(|()| stream))
-        else {
+        let subscribed = trustd()
+            .and_then(|trustd| trustd.subscribe(false))
+            .and_then(|mut subscription| subscription.next(ANSWER).map(|_| subscription));
+        let Ok(mut subscription) = subscribed else {
             std::thread::sleep(QUIET);
             if !tell(&window, read(&known, None)) {
                 return;
@@ -263,16 +269,18 @@ pub fn follow(window: Weak<Surface<Policy>>, known: Arc<Known>) {
             continue;
         };
         loop {
-            match next_set(&mut stream) {
-                Ok(()) => {
+            match subscription.next(QUIET) {
+                Ok(_) => {
                     if !tell(&window, read_all(&known)) {
                         return;
                     }
                 }
-                // Quiet for a while: what is cheap is read, and the
-                // subscription is made afresh, since a wait that ran out
-                // may have ended part way through a message.
-                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                // Quiet for a while: what is cheap is read. A wait that
+                // runs out keeps what had arrived, so the subscription
+                // goes on.
+                Err(e)
+                    if std::io::Error::from_raw_os_error(e.code).kind() == ErrorKind::TimedOut =>
+                {
                     let before = window
                         .upgrade()
                         .map(|shown| shown.look(|policy, _, _| policy.store().clone()));
@@ -280,33 +288,13 @@ pub fn follow(window: Weak<Surface<Policy>>, known: Arc<Known>) {
                     if !tell(&window, read(&known, Some(&before))) {
                         return;
                     }
-                    break;
                 }
-                // trustd went away; connect again when it is back.
+                // trustd went away; subscribe again when it is back.
                 Err(_) => {
                     std::thread::sleep(QUIET);
                     break;
                 }
             }
-        }
-    }
-}
-
-/// Waits for a whole set to arrive: messages until one says no more follow.
-fn next_set(stream: &mut UnixStream) -> std::io::Result<()> {
-    loop {
-        let mut len = [0u8; 4];
-        stream.read_exact(&mut len)?;
-        let len = u32::from_le_bytes(len) as usize;
-        if len > libtrust::MAX_MESSAGE_BYTES {
-            return Err(std::io::Error::other("a message past the ceiling"));
-        }
-        let mut payload = vec![0u8; len];
-        stream.read_exact(&mut payload)?;
-        match libtrust::Reply::decode(&payload) {
-            Ok(libtrust::Reply::Roots { more: true, .. }) => continue,
-            Ok(_) => return Ok(()),
-            Err(e) => return Err(std::io::Error::other(e.to_string())),
         }
     }
 }

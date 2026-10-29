@@ -3,7 +3,7 @@
 
 use gxwi::settings::{self, Glyph, Kind, More, Tile, Tone, Width};
 use gxwi::{Fields, escape};
-use libtrust::{Health, Source};
+use trust_client::{Health, Source};
 
 use crate::policy::{Asking, Candidate};
 use crate::store::{Cert, Store};
@@ -221,7 +221,7 @@ fn long(label: &str, shown: &str, copy: Option<&str>) -> String {
 }
 
 /// Who issued it, in words: a root certificate issues itself.
-fn issuer(details: &trust::Details) -> String {
+fn issuer(details: &trust_client::Details) -> String {
     if details.issuer == details.subject {
         "Itself (a root certificate)".to_string()
     } else {
@@ -231,7 +231,7 @@ fn issuer(details: &trust::Details) -> String {
 
 /// What a certificate says about itself beyond its name, which is shown
 /// above it.
-fn facts(details: &trust::Details, fingerprint: &str) -> String {
+fn facts(details: &trust_client::Details, fingerprint: &str) -> String {
     let mut rows = String::new();
     if let Some(unit) = &details.unit {
         rows.push_str(&settings::fact("Unit", unit, false));

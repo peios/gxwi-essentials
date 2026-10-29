@@ -13,7 +13,6 @@ use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
 
 use gxwi_file_dialog::{Filter, Mode, Request};
-use libreg::Document;
 use peios::registry::{Key, KeyAccess, OpenFlags};
 use peios::security::Privileges;
 use peios::token::{Token, TokenAccess};
@@ -107,30 +106,65 @@ pub fn request(purpose: Purpose, path: &str) -> Request {
     }
 }
 
+/// A registry document read from a file: its JSON, which libreg read and
+/// will apply, and the path of each key it writes, in order.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Document {
+    pub json: String,
+    pub keys: Vec<String>,
+}
+
+impl Document {
+    /// The document in `json`, if libreg reads it as one.
+    pub fn parse(json: &str) -> Result<Self, String> {
+        let read = peios_reg::Document::parse(json).map_err(|e| e.to_string())?;
+        let keys = paths(read.json())?;
+        Ok(Self {
+            json: read.json().to_string(),
+            keys,
+        })
+    }
+}
+
+/// The path of each key a document's JSON writes.
+fn paths(json: &str) -> Result<Vec<String>, String> {
+    let value: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    Ok(value["keys"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|key| key["path"].as_str().map(str::to_string))
+        .collect())
+}
+
 /// Writes the key at `path`, and everything under it, to `file` as a
 /// registry document, and says how many keys.
 pub fn export(path: &str, file: &Path) -> Result<usize, String> {
-    let doc = libreg::export(path).map_err(|e| e.to_string())?;
-    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+    let doc = peios_reg::Document::export(path).map_err(|e| e.to_string())?;
+    let value: serde_json::Value = serde_json::from_str(doc.json()).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     std::fs::write(file, text + "\n").map_err(|e| unwritten(&e, file))?;
-    Ok(doc.keys.len())
+    Ok(paths(doc.json())?.len())
 }
 
 /// Reads the registry document in `file`.
 pub fn read(file: &Path) -> Result<Document, String> {
     let text = std::fs::read_to_string(file).map_err(|e| unread(&e, file))?;
-    serde_json::from_str(&text)
+    Document::parse(&text)
         .map_err(|e| format!("{} is not a registry document: {e}.", file.display()))
 }
 
 /// Writes `doc` into the registry, into `layer`, all or nothing.
 pub fn import(doc: &Document, layer: Option<&str>) -> Result<usize, String> {
-    libreg::apply(doc, layer).map_err(|e| match &e {
-        libreg::Error::Registry { source, .. } if source.raw_os_error() == Some(EACCES) => {
-            format!("Nothing was imported: you may not {e}.")
-        }
-        _ => format!("Nothing was imported: {e}."),
-    })
+    peios_reg::Document::parse(&doc.json)
+        .and_then(|read| read.apply(layer))
+        .map_err(|e| {
+            if e.code == EACCES {
+                format!("Nothing was imported: you may not {e}.")
+            } else {
+                format!("Nothing was imported: {e}.")
+            }
+        })
 }
 
 /// Copies the key at `path`, and everything under it, to `file`.
@@ -161,10 +195,10 @@ pub fn restore(path: &str, file: &Path) -> Result<(), String> {
 pub fn reach(doc: &Document) -> String {
     match doc.keys.as_slice() {
         [] => "nothing".into(),
-        [only] => only.path.clone(),
+        [only] => only.clone(),
         [first, rest @ ..] => format!(
             "{} and {} more {}",
-            first.path,
+            first,
             rest.len(),
             if rest.len() == 1 { "key" } else { "keys" }
         ),
@@ -216,7 +250,7 @@ mod tests {
 
     #[test]
     fn a_document_says_where_it_writes() {
-        let doc: Document = serde_json::from_str(
+        let doc = Document::parse(
             r#"{"keys":[{"path":"Machine\\A"},{"path":"Machine\\A\\B"},{"path":"Machine\\A\\C"}]}"#,
         )
         .unwrap();

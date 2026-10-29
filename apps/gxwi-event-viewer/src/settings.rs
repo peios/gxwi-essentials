@@ -15,7 +15,6 @@
 
 use std::collections::BTreeMap;
 
-use libregman::fragment;
 use peios::registry::{Key, KeyAccess, OpenFlags, ValueType};
 
 pub const REGMAN: &str = "/usr/share/regman/eventd.regman";
@@ -58,8 +57,11 @@ impl Setting {
 
 /// eventd's values, from its regman page's text: the records documenting
 /// one value of `Machine\System\eventd`, as regman's own reader parses them.
+/// A page libregman can't read documents nothing.
 pub fn documented(page: &str) -> Vec<Setting> {
-    let (records, _) = fragment::parse(page);
+    let records = peios_regman::parse(page)
+        .map(|manual| manual.records)
+        .unwrap_or_default();
     records
         .into_iter()
         .filter_map(|record| {
@@ -78,7 +80,7 @@ pub fn documented(page: &str) -> Vec<Setting> {
                 .split_whitespace()
                 .collect::<Vec<_>>()
                 .join(" ");
-            let kind = match record.type_.as_deref() {
+            let kind = match record.type_name.as_deref() {
                 Some("REG_DWORD") => Kind::Dword,
                 Some("REG_QWORD") => Kind::Qword,
                 Some("REG_SZ") => Kind::Text,
@@ -87,7 +89,7 @@ pub fn documented(page: &str) -> Vec<Setting> {
             Some(Setting {
                 name,
                 kind,
-                default: record.default.unwrap_or_default(),
+                default: record.default_value.unwrap_or_default(),
                 valid: record.valid.unwrap_or_default(),
                 applies: record.applies.unwrap_or_default(),
                 about,

@@ -47,21 +47,20 @@ jiff = { version = "0.2.29" }
 libc = { version = "0.2" }
 gxwi = { git = "https://github.com/peios/gxwi.git", rev = "e5c1d095e68242099c137ca330d0f5be93308999" }
 netd-client = { git = "https://github.com/peios/netd.git", rev = "055102c3cead34cf560aed6e9191d2128ee496b6" }
-libreg = { git = "https://github.com/peios/peiosutils.git", rev = "61b14715a23111f81dce6fbb6e4a9ba6195df665" }
-libregman = { git = "https://github.com/peios/peiosutils.git", rev = "61b14715a23111f81dce6fbb6e4a9ba6195df665" }
 resolvd-client = { git = "https://github.com/peios/resolvd.git", rev = "422302282a293643fb7a0c90e157d28719082d62" }
 timed-client = { git = "https://github.com/peios/timed.git", rev = "70e9f86f4cf6719dc3160e131b17f563c3e8e326" }
-libtrust = { git = "https://github.com/peios/trustd.git", rev = "6eb04223e0c6510f9853c71ea73ba3d660e705eb" }
 ntfe = { path = "vendor/kernel/peios/rust/ntfe" }
 peinit2 = { git = "https://github.com/peios/peinit.git", rev = "ce169d9ec30860d2e6a90c3371c2cd9795ca8e25", default-features = false }
 peios = { git = "https://github.com/peios/peios-rs.git", rev = "b2282f654758831e4a2e34c7b35c26e61a6ebe1c", package = "peios" }
+peios-reg = { git = "https://github.com/peios/peiosutils.git", rev = "c15f096cd2b50a2f27f57cd5a921a099c0cebb85" }
+peios-regman = { git = "https://github.com/peios/peiosutils.git", rev = "c15f096cd2b50a2f27f57cd5a921a099c0cebb85" }
 pnp-core = { path = "vendor/kernel/peios/rust/pnp-core" }
 serde = { version = "1" }
 serde_json = { version = "1" }
 session-preferences = { git = "https://github.com/peios/authd.git", rev = "89dbfeccf77800a7cd287bde5aab6ba26201a680" }
 sha1 = { version = "0.10" }
 tokio = { version = "1.53.1" }
-trust = { git = "https://github.com/peios/trustd.git", rev = "6eb04223e0c6510f9853c71ea73ba3d660e705eb" }
+trust-client = { git = "https://github.com/peios/trustd.git", rev = "7d830b926910ebe0197bc9611e7bfdf79028f22d" }
 vt100 = { version = "0.16" }
 
 [patch."https://github.com/peios/pkm.git"]

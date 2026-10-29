@@ -18,12 +18,12 @@ use peios::registry::{Data, ValueType};
 use peios::security::Sid;
 
 use crate::docs::{self, Docs};
-use libregman::fragment::Record;
+use crate::files::Document;
+use peios_regman::Record;
 use crate::edit::{self, Base, Form};
 use crate::files::{self, Held, Purpose};
 use crate::keys::{self, May, Origin, Read};
 use crate::{permissions, words};
-use libreg::Document;
 use std::path::PathBuf;
 
 pub struct Editor {
@@ -318,14 +318,11 @@ impl Editor {
         let Some(values) = self.values() else {
             return Vec::new();
         };
-        let set: HashSet<String> = values
-            .iter()
-            .map(|value| libregman::fold::fold(&value.name))
-            .collect();
+        let set: HashSet<String> = values.iter().map(|value| docs::fold(&value.name)).collect();
         self.docs
             .values
             .iter()
-            .filter(|(name, _)| !set.contains(&libregman::fold::fold(name)))
+            .filter(|(name, _)| !set.contains(&docs::fold(name)))
             .collect()
     }
 
@@ -493,7 +490,7 @@ impl Editor {
         for (name, record) in unset {
             let kind = docs::ty(record)
                 .map(words::kind)
-                .or_else(|| record.type_.clone())
+                .or_else(|| record.type_name.clone())
                 .unwrap_or_default();
             let data = match docs::default(record) {
                 Some(default) => format!("Not set · default {default}"),
@@ -725,7 +722,7 @@ impl Editor {
         let row = |name: &str, said: &str| format!("<dt>{name}</dt><dd>{}</dd>", escape(said));
         let mut facts = String::new();
         let mut notes = String::new();
-        if let Some(documented) = record.type_.as_deref() {
+        if let Some(documented) = record.type_name.as_deref() {
             facts += &row("Type", documented);
             if let (Some(expected), Some(ty)) = (docs::ty(record), ty)
                 && expected != ty
@@ -737,7 +734,7 @@ impl Editor {
                 );
             }
         }
-        if let Some(default) = &record.default {
+        if let Some(default) = &record.default_value {
             facts += &row("Default", default);
         }
         if let Some(valid) = &record.valid {

@@ -289,16 +289,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
-name = "errno"
-version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
-dependencies = [
- "libc",
- "windows-sys",
-]
-
-[[package]]
 name = "eventd-client"
 version = "0.1.11"
 source = "git+https://github.com/peios/eventd.git?rev=68a4849e1ab4a4b2bbef0533b19e326b9ae067c2#68a4849e1ab4a4b2bbef0533b19e326b9ae067c2"
@@ -307,12 +297,6 @@ dependencies = [
  "peios",
  "peios-sys",
 ]
-
-[[package]]
-name = "fastrand"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "flagset"
@@ -457,8 +441,8 @@ dependencies = [
  "gxwi",
  "gxwi-sd-editor",
  "jiff",
- "libregman",
  "peios",
+ "peios-regman",
  "serde_json",
 ]
 
@@ -569,9 +553,9 @@ dependencies = [
  "gxwi-sd-editor",
  "jiff",
  "libc",
- "libreg",
- "libregman",
  "peios",
+ "peios-reg",
+ "peios-regman",
  "serde_json",
 ]
 
@@ -597,9 +581,8 @@ dependencies = [
  "gxwi-file-dialog",
  "gxwi-sd-editor",
  "jiff",
- "libtrust",
  "peios",
- "trust",
+ "trust-client",
 ]
 
 [[package]]
@@ -880,44 +863,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libreg"
-version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=61b14715a23111f81dce6fbb6e4a9ba6195df665#61b14715a23111f81dce6fbb6e4a9ba6195df665"
-dependencies = [
- "libc",
- "registry-docs",
- "serde_json",
- "utility-ffi",
-]
-
-[[package]]
-name = "libregman"
-version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=61b14715a23111f81dce6fbb6e4a9ba6195df665#61b14715a23111f81dce6fbb6e4a9ba6195df665"
-dependencies = [
- "libc",
- "registry-manual",
- "utility-ffi",
-]
-
-[[package]]
-name = "libtrust"
-version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=6eb04223e0c6510f9853c71ea73ba3d660e705eb#6eb04223e0c6510f9853c71ea73ba3d660e705eb"
-dependencies = [
- "libc",
- "trust-abi",
- "trust-client-core",
- "trust-core",
-]
-
-[[package]]
-name = "linux-raw-sys"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
-
-[[package]]
 name = "log"
 version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1023,6 +968,25 @@ dependencies = [
  "bitflags 2.13.2",
  "libc",
  "peios-sys",
+]
+
+[[package]]
+name = "peios-reg"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "utility-client",
+ "utility-ffi",
+]
+
+[[package]]
+name = "peios-regman"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "libc",
+ "utility-client",
+ "utility-ffi",
 ]
 
 [[package]]
@@ -1180,26 +1144,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "registry-docs"
-version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=61b14715a23111f81dce6fbb6e4a9ba6195df665#61b14715a23111f81dce6fbb6e4a9ba6195df665"
-dependencies = [
- "peios",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "registry-manual"
-version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=61b14715a23111f81dce6fbb6e4a9ba6195df665#61b14715a23111f81dce6fbb6e4a9ba6195df665"
-dependencies = [
- "memchr",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
 name = "resolvd-abi"
 version = "0.1.6"
 source = "git+https://github.com/peios/resolvd.git?rev=422302282a293643fb7a0c90e157d28719082d62#422302282a293643fb7a0c90e157d28719082d62"
@@ -1224,19 +1168,6 @@ name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
-
-[[package]]
-name = "rustix"
-version = "1.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
-dependencies = [
- "bitflags 2.13.2",
- "errno",
- "libc",
- "linux-raw-sys",
- "windows-sys",
-]
 
 [[package]]
 name = "ryu"
@@ -1414,19 +1345,6 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
-
-[[package]]
-name = "tempfile"
-version = "3.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
-dependencies = [
- "fastrand",
- "getrandom",
- "once_cell",
- "rustix",
- "windows-sys",
-]
 
 [[package]]
 name = "thiserror"
@@ -1633,25 +1551,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "trust"
-version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=6eb04223e0c6510f9853c71ea73ba3d660e705eb#6eb04223e0c6510f9853c71ea73ba3d660e705eb"
-dependencies = [
- "libc",
- "peios",
- "trust-client",
- "trust-core",
-]
-
-[[package]]
 name = "trust-abi"
 version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=6eb04223e0c6510f9853c71ea73ba3d660e705eb#6eb04223e0c6510f9853c71ea73ba3d660e705eb"
+source = "git+https://github.com/peios/trustd.git?rev=7d830b926910ebe0197bc9611e7bfdf79028f22d#7d830b926910ebe0197bc9611e7bfdf79028f22d"
 
 [[package]]
 name = "trust-client"
 version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=6eb04223e0c6510f9853c71ea73ba3d660e705eb#6eb04223e0c6510f9853c71ea73ba3d660e705eb"
+source = "git+https://github.com/peios/trustd.git?rev=7d830b926910ebe0197bc9611e7bfdf79028f22d#7d830b926910ebe0197bc9611e7bfdf79028f22d"
 dependencies = [
  "libc",
  "trust-abi",
@@ -1659,19 +1566,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "trust-client-core"
-version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=6eb04223e0c6510f9853c71ea73ba3d660e705eb#6eb04223e0c6510f9853c71ea73ba3d660e705eb"
-dependencies = [
- "libc",
- "peios",
- "trust-core",
-]
-
-[[package]]
 name = "trust-core"
 version = "0.1.6"
-source = "git+https://github.com/peios/trustd.git?rev=6eb04223e0c6510f9853c71ea73ba3d660e705eb#6eb04223e0c6510f9853c71ea73ba3d660e705eb"
+source = "git+https://github.com/peios/trustd.git?rev=7d830b926910ebe0197bc9611e7bfdf79028f22d#7d830b926910ebe0197bc9611e7bfdf79028f22d"
 dependencies = [
  "der",
  "peios",
@@ -1721,9 +1618,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
+name = "utility-client"
+version = "0.8.18"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+dependencies = [
+ "libc",
+ "utility-ffi",
+]
+
+[[package]]
 name = "utility-ffi"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=61b14715a23111f81dce6fbb6e4a9ba6195df665#61b14715a23111f81dce6fbb6e4a9ba6195df665"
+source = "git+https://github.com/peios/peiosutils.git?rev=c15f096cd2b50a2f27f57cd5a921a099c0cebb85#c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
 dependencies = [
  "libc",
 ]

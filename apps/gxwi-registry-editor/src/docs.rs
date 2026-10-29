@@ -1,5 +1,5 @@
 //! What the registry manual says of a key and its values: regman's records,
-//! read with libregman, and their Markdown as HTML for the pane.
+//! read with libregman through peios-regman, and their Markdown as HTML for the pane.
 //!
 //! A record says what a value is for, the type it should have, its default,
 //! the values it may take and when a change applies; a key's record says
@@ -8,10 +8,8 @@
 //! documented, or set to a type the manual doesn't expect.
 
 use gxwi::escape;
-use libregman::fold::fold;
-use libregman::fragment::{Kind, Record};
-use libregman::query;
 use peios::registry::ValueType;
+use peios_regman::{Kind, Record};
 
 /// What the manual says of one key.
 #[derive(Debug, Clone, Default)]
@@ -32,24 +30,35 @@ impl Docs {
     }
 }
 
+/// `text` case-folded as the manual's names compare. libregman fails to
+/// fold only when it can't allocate; the text then compares as it is,
+/// lowercased.
+pub fn fold(text: &str) -> String {
+    peios_regman::fold(text).unwrap_or_else(|_| text.to_lowercase())
+}
+
 /// What the manual says of the key at `path` and the values it documents
 /// for it. A manual that can't be read says nothing.
 pub fn of(path: &str) -> Docs {
-    let hits = query::resolve_key_default(&fold(path)).unwrap_or_default();
+    let records = peios_regman::resolve_key_default(&fold(path))
+        .map(|manual| manual.records)
+        .unwrap_or_default();
     let mut docs = Docs::default();
-    for hit in hits {
-        match hit.record.kind() {
+    for record in records {
+        match record.kind() {
             Kind::Key => {
-                docs.key.get_or_insert(hit.record);
+                docs.key.get_or_insert(record);
             }
             Kind::Value => {
-                let name = hit.record.value_name(path).to_string();
+                let Ok(name) = record.value_name(path).map(str::to_string) else {
+                    continue;
+                };
                 if !docs
                     .values
                     .iter()
                     .any(|(documented, _)| fold(documented) == fold(&name))
                 {
-                    docs.values.push((name, hit.record));
+                    docs.values.push((name, record));
                 }
             }
         }
@@ -61,7 +70,7 @@ pub fn of(path: &str) -> Docs {
 
 /// The type a record documents, if it names one of the registry's.
 pub fn ty(record: &Record) -> Option<ValueType> {
-    let named = record.type_.as_deref()?.trim();
+    let named = record.type_name.as_deref()?.trim();
     (0..=0x20)
         .map(ValueType)
         .chain([ValueType::TOMBSTONE])
@@ -72,7 +81,7 @@ pub fn ty(record: &Record) -> Option<ValueType> {
 /// such as "(none)": what a value not set is said to be in the list.
 pub fn default(record: &Record) -> Option<&str> {
     record
-        .default
+        .default_value
         .as_deref()
         .map(str::trim)
         .filter(|default| !default.is_empty() && !default.starts_with('('))
@@ -240,9 +249,11 @@ mod tests {
 
     #[test]
     fn a_record_s_type_and_when_it_applies_are_read() {
-        let (records, _) = libregman::fragment::parse(
+        let records = peios_regman::parse(
             "--- machine\\x v\ncanonical: Machine\\x V\ntype: REG_DWORD\napplies: restart\n\nIt is V.\n",
-        );
+        )
+    .unwrap()
+    .records;
         assert_eq!(ty(&records[0]), Some(ValueType::DWORD));
         assert_eq!(
             applies(&records[0]),
@@ -258,9 +269,11 @@ mod tests {
     #[test]
     fn a_default_is_shown_unless_it_is_a_remark_and_typed_only_if_it_is_one_word() {
         let with = |default: &str| {
-            let (records, _) = libregman::fragment::parse(&format!(
+            let records = peios_regman::parse(&format!(
                 "--- machine\\x v\ncanonical: Machine\\x V\ndefault: {default}\n\nIt is V.\n"
-            ));
+            ))
+            .unwrap()
+            .records;
             records[0].clone()
         };
         let record = with("30");

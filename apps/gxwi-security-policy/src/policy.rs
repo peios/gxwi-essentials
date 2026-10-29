@@ -2,7 +2,7 @@
 //! chosen beside them.
 //!
 //! Everything is read as the person and changed as the person: what they
-//! may change is asked of the system (`trust::may_change` and friends), and
+//! may change is asked of the system (`trust_client::may_change` and friends), and
 //! what they may not is shown as it is, with the reason said once. Anything
 //! that widens or narrows what every program on the machine accepts asks
 //! first, under its row, with the safe answer the keyboard's.
@@ -13,7 +13,7 @@ use std::sync::{Arc, Weak};
 use gxwi_file_dialog::{Filter, Mode, Request as Choose};
 use gxwi::settings::{self, Glyph, Nav, Section, Tile};
 use gxwi::{Facts, Fields, Live, Surface, Value};
-use trust::{Details, cert};
+use trust_client::{Details, ErrorKind};
 
 use crate::store::{self, Known, LOOK_ONLY, Store};
 use crate::{certificates, keys, options, permissions, words};
@@ -168,7 +168,7 @@ impl Policy {
         };
         let trusted = match (&self.store.roots, &self.store.status) {
             (Err(_), _) => "Unavailable".to_string(),
-            (_, Some(status)) if status.health == libtrust::Health::Degraded => {
+            (_, Some(status)) if status.health == trust_client::Health::Degraded => {
                 "Needs attention".to_string()
             }
             (Ok(roots), _) => format!("{} trusted", roots.len()),
@@ -267,7 +267,7 @@ impl Policy {
             Ok(bytes) => bytes,
             Err(e) => return self.said = Some(Err(format!("{shown} couldn't be read: {e}."))),
         };
-        let der = match trust::certificate(&bytes, &shown) {
+        let der = match trust_client::certificate(&bytes, &shown) {
             Ok(der) => der,
             Err(_) => {
                 return self.said = Some(Err(format!(
@@ -275,10 +275,11 @@ impl Policy {
                 )));
             }
         };
-        let Ok(details) = cert::describe(&der) else {
+        let (Ok(details), Ok(fingerprint)) =
+            (trust_client::inspect(&der), trust_client::fingerprint(&der))
+        else {
             return self.said = Some(Err(format!("{shown} isn't a certificate.")));
         };
-        let fingerprint = cert::fingerprint(&der);
         let problem = problem(&self.store, &der, &fingerprint);
         fields.set("add-name", &words::suggested_name(details.name()));
         for (purpose, _, field) in words::PURPOSES {
@@ -303,7 +304,7 @@ impl Policy {
             return Err(problem.clone());
         }
         let name = fields.get("add-name").trim().to_string();
-        if !trust::usable_name(&name) {
+        if !trust_client::usable_name(&name).unwrap_or(false) {
             return Err("Give it a name, without slashes.".into());
         }
         if self
@@ -330,7 +331,7 @@ impl Policy {
             &purposes
         };
         let called = candidate.details.name().to_string();
-        trust::add(&name, &candidate.der, written).map_err(said_error)?;
+        trust_client::add(&name, &candidate.der, written).map_err(said_error)?;
         fields.set("add-name", "");
         self.page = Page::List;
         Ok(format!(
@@ -366,7 +367,10 @@ impl Policy {
             window.update(|policy, _| {
                 policy.choosing = false;
                 let Some(file) = file else { return };
-                policy.said = Some(match std::fs::write(&file, cert::to_pem(&der)) {
+                let written = trust_client::to_pem(&der)
+                    .map_err(|e| e.to_string())
+                    .and_then(|pem| std::fs::write(&file, pem).map_err(|e| e.to_string()));
+                policy.said = Some(match written {
                     Ok(()) => Ok(format!("{called} exported to {}.", file.display())),
                     Err(e) => Err(format!("{called} couldn't be exported: {e}.")),
                 });
@@ -387,7 +391,7 @@ impl Policy {
             .certificate(fingerprint)
             .map(|c| c.name().to_string());
         let reason = fields.get("reason").trim().to_string();
-        trust::distrust(fingerprint, &reason).map_err(said_error)?;
+        trust_client::distrust(fingerprint, &reason).map_err(said_error)?;
         fields.set("reason", "");
         self.page = Page::List;
         Ok(match called {
@@ -401,15 +405,15 @@ impl Policy {
         if typed.is_empty() {
             return Err("Enter the certificate's SHA-256 fingerprint.".into());
         }
-        let roots: Vec<libtrust::Root> = self
+        let roots: Vec<trust_client::Root> = self
             .store
             .roots
             .as_ref()
             .map(|roots| roots.iter().map(|c| c.root.clone()).collect())
             .unwrap_or_default();
-        let fingerprint = trust::fingerprint_in(&typed, &roots).map_err(|e| match e {
-            trust::Error::NotFound(_) => "No trusted certificate starts with that. Give the whole fingerprint for one this machine doesn't have.".to_string(),
-            other => capitalised(&other.to_string()),
+        let fingerprint = trust_client::fingerprint_in(&typed, &roots).map_err(|e| match e.kind {
+            ErrorKind::NotFound => "No trusted certificate starts with that. Give the whole fingerprint for one this machine doesn't have.".to_string(),
+            _ => capitalised(&e.to_string()),
         })?;
         if self.store.refused(&fingerprint).is_some() {
             return Err("That certificate is distrusted already.".into());
@@ -419,7 +423,7 @@ impl Policy {
             .certificate(&fingerprint)
             .map(|c| c.name().to_string());
         let reason = fields.get("by-reason").trim().to_string();
-        trust::distrust(&fingerprint, &reason).map_err(said_error)?;
+        trust_client::distrust(&fingerprint, &reason).map_err(said_error)?;
         fields.set("by-fp", "");
         fields.set("by-reason", "");
         Ok(match called {
@@ -436,7 +440,7 @@ impl Policy {
             return Err("Only an added certificate can be removed.".into());
         };
         let called = cert.name().to_string();
-        trust::remove(&name).map_err(said_error)?;
+        trust_client::remove(&name).map_err(said_error)?;
         self.page = Page::List;
         Ok(format!(
             "{called} removed. Programs stop trusting it within a few seconds."
@@ -449,7 +453,7 @@ impl Policy {
             .refused(fingerprint)
             .and_then(|r| r.known.as_ref())
             .map(|d| d.name().to_string());
-        trust::restore(fingerprint).map_err(said_error)?;
+        trust_client::restore(fingerprint).map_err(said_error)?;
         Ok(match called {
             Some(name) => format!("{name} trusted again."),
             None => "Distrust removed.".into(),
@@ -457,12 +461,14 @@ impl Policy {
     }
 
     fn reload(&mut self) -> Result<String, String> {
-        trust::reload().map_err(|e| capitalised(&e.to_string()))?;
+        store::trustd()
+            .and_then(|trustd| trustd.reload())
+            .map_err(|e| capitalised(&e.to_string()))?;
         Ok("The trust service composed the store again.".into())
     }
 
     fn compat(&mut self, on: bool) -> Result<String, String> {
-        trust::set_compat(u32::from(on)).map_err(said_error)?;
+        trust_client::set_compat(u32::from(on)).map_err(said_error)?;
         Ok(if on {
             "Certificate files turned on.".into()
         } else {
@@ -534,14 +540,14 @@ fn problem(store: &Store, der: &[u8], fingerprint: &str) -> Option<String> {
             "This certificate is distrusted. Restore it under Distrusted to trust it again.".into(),
         );
     }
-    match trust::vet(der) {
+    match trust_client::vet(der).map_err(|e| e.kind) {
         Ok(_) => None,
-        Err(cert::Error::NotACa) => Some(
+        Err(ErrorKind::NotACa) => Some(
             "This isn't a certificate authority's certificate, so it can't vouch for others."
                 .into(),
         ),
-        Err(cert::Error::Expired) => {
-            let expired = cert::describe(der)
+        Err(ErrorKind::Expired) => {
+            let expired = trust_client::inspect(der)
                 .map(|d| words::date(d.not_after))
                 .unwrap_or_default();
             Some(format!("This certificate expired on {expired}."))
@@ -551,10 +557,10 @@ fn problem(store: &Store, der: &[u8], fingerprint: &str) -> Option<String> {
 }
 
 /// A refusal in the window's words.
-fn said_error(error: trust::Error) -> String {
-    match error {
-        trust::Error::Denied(_) => LOOK_ONLY.replace("You can look, but you", "You"),
-        other => capitalised(&other.to_string()),
+fn said_error(error: trust_client::Error) -> String {
+    match error.kind {
+        ErrorKind::Denied => LOOK_ONLY.replace("You can look, but you", "You"),
+        _ => capitalised(&error.to_string()),
     }
 }
 
@@ -708,7 +714,11 @@ mod tests {
     fn a_refusal_reads_as_a_sentence() {
         assert_eq!(capitalised("no addition named x"), "No addition named x.");
         assert_eq!(
-            said_error(trust::Error::Denied("k".into())),
+            said_error(trust_client::Error {
+                code: 13,
+                kind: ErrorKind::Denied,
+                message: "k".into(),
+            }),
             "You can't change what this machine trusts: as shipped, only Administrators can."
         );
     }
