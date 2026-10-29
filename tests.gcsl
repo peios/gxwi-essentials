@@ -1,0 +1,124 @@
+# gxwi-essentials's tests: each member's unit tests, as `cargo test -p`
+# builds them, each owned member's documentation tests, as `cargo test --doc`
+# runs them, Clippy's checks of each owned member, as
+# `cargo clippy --all-targets -- -Dwarnings` makes them, the terminal page's input test, and the vendored kernel sources'
+# check against their export.
+#
+# A test's own code runs in a hermetic step of its own, so what it plans,
+# builds or fetches is in its parameters' defaults.
+import fs
+import toolchain
+import unpack from archive
+import Toolchain from toolchain
+import BuildEnv from "github.com/gcslib/buildenv"
+import "github.com/gcslib/python"
+import "github.com/gcslib/rust"
+import "github.com/peios/gxwi"
+import "github.com/peios/netd"
+import "github.com/peios/peios-rs" as peios_rs
+import "github.com/peios/peiosutils"
+import "github.com/peios/resolvd"
+import "github.com/peios/timed"
+import "github.com/peios/trustd"
+
+# Node.js, which runs the terminal page's test, pinned by its SHA-256.
+let NODE = "https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-x64.tar.xz"
+
+# The workspace's members, by their names.
+fn members(ws: rust.RustWorkspace) -> List<String> {
+    = for each in ws.metadata.packages if ws.metadata.workspace_members.contains(each.id) { = each.name }
+}
+
+# The members the suite owns: all but the vendored kernel crates, which keep
+# the kernel's own sources, lints and documentation as they are.
+fn owned(ws: rust.RustWorkspace) -> List<String> {
+    = for each in members(ws) if not kernel_crates().contains(each) { = each }
+}
+
+# What every test is given: libpeios and each client library, by their
+# sonames, which the members that link them load.
+def loaded() -> List<{at: String, place: Dir | File}> {
+    = [
+        ...peios_rs.runtime(),
+        ...gxwi.runtime(),
+        ...netd.runtime(),
+        ...resolvd.runtime(),
+        ...timed.runtime(),
+        ...trustd.runtime(),
+        ...peiosutils.runtime(),
+    ]
+}
+
+# Where those programs find the libraries: each directory a library says
+# its programs search, once.
+def libraries_env() -> List<Entry<String>> {
+    let paths = for each in [
+        ...peios_rs.runtime_env(),
+        ...gxwi.runtime_env(),
+        ...netd.runtime_env(),
+        ...resolvd.runtime_env(),
+        ...timed.runtime_env(),
+        ...trustd.runtime_env(),
+        ...peiosutils.runtime_env(),
+    ] if each.key == "LD_LIBRARY_PATH" { = each.value }
+    let mut dirs: List<String> = []
+    for path in paths {
+        dirs := [...dirs, ...path.split(":")]
+    }
+    = [{key = "LD_LIBRARY_PATH"; value = dirs.unique().join(":")}]
+}
+
+# Each member's unit tests, given libpeios and libgxwi, and busybox's
+# `/bin/sh` and tools, which some run.
+def test units(
+    tests: List<List<rust.RustTest>> = for each in members(crates()) { = rust.tests(crates(), each) },
+    loaded: List<{at: String, place: Dir | File}> = loaded(),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let given: List<{at: String, place: Dir | File}> = [...loaded, {at = "/bin"; place = env.root.dir("bin")}]
+    let each = for some in tests {
+        = for test in some { = rust.run_test(test, given = given, env = libraries_env()) }
+    }
+}
+
+# Each owned member's documentation tests.
+def test doctests(
+    ran: List<List<{}>> = for each in owned(crates()) {
+        = rust.doctests(crates(), each, given = loaded(), env = libraries_env())
+    },
+) {}
+
+# Clippy's checks of each owned member, every warning denied.
+def test clippy(checked: List<List<{}>> = for each in owned(crates()) { = rust.clippy(crates(), each, flags = ["-Dwarnings"]) }) {}
+
+# The terminal page's input handling, as Node.js's test runner checks it.
+def test terminal_page(
+    node: Dir = unpack(fetch(NODE, sha256 = "9a6bc82f9b491279147219f6a18add1e18424dce90d41d2a5fcd69d4924ba3aa")).dir("node-v22.22.1-linux-x64"),
+    page: Dir = dir("apps/gxwi-terminal/page"),
+    c: toolchain.CToolchain = toolchain.get(Toolchain::C),
+) {
+    let placed: List<{at: String, place: Dir | File | FileSet}> = [
+        {at = "/"; place = c.runtime},
+        {at = "/opt/node"; place = node},
+        {at = "/work/apps/gxwi-terminal/page"; place = page},
+    ]
+    let box = fs.compose(placed).sandbox(cwd = "/work", env = {HOME = "/work"})
+    let ran = box.exec("/opt/node/bin/node", "--test", "apps/gxwi-terminal/page/input.test.mjs")
+}
+
+# The vendored kernel sources match the export `vendor/kernel/source-sha256.json`
+# records, as `tools/check-kernel-vendor.py` checks them.
+def test kernel_vendor(
+    kernel: Dir = dir("vendor/kernel"),
+    tool: File = file("tools/check-kernel-vendor.py"),
+    py: python.PythonToolchain = toolchain.get(Toolchain::Python),
+) {
+    let placed: List<{at: String, place: Dir | File | FileSet}> = [
+        {at = "/"; place = py.runtime},
+        {at = "/opt/python"; place = py.root},
+        {at = "/work/vendor/kernel"; place = kernel},
+        {at = "/work/tools/check-kernel-vendor.py"; place = tool},
+    ]
+    let box = fs.compose(placed).sandbox(cwd = "/work", env = {PYTHONDONTWRITEBYTECODE = "1"})
+    let ran = box.exec("/opt/python/bin/python3", "-I", "/work/tools/check-kernel-vendor.py")
+}

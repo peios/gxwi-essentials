@@ -1,0 +1,134 @@
+# gxwi-essentials's applications, each crate compiled on its own (see the
+# rust library's `workspace`), for glibc.
+import "github.com/gcslib/clang"
+import "github.com/gcslib/rust"
+import "github.com/peios/gxwi"
+import "github.com/peios/netd"
+import "github.com/peios/peios-rs" as peios_rs
+import "github.com/peios/peiosutils"
+import "github.com/peios/resolvd"
+import "github.com/peios/timed"
+import "github.com/peios/trustd"
+
+# The kernel's crates the workspace vendors, which read the kernel's
+# sources around them.
+def kernel_crates() -> List<String> {
+    = ["ntfe", "pnp-core", "peios-uapi"]
+}
+
+# The gxwi-essentials workspace, planned. `peios-sys` binds libpeios with
+# bindgen and links it, and the `gxwi` crate, `netd-client`,
+# `resolvd-client`, `timed-client`, `trust-client`, `peios-reg` and
+# `peios-regman` link libgxwi, libnetd, libresolvd, libtimed, libtrust,
+# libreg and libregman, so each, and every crate that depends on it, is
+# given what its library says it needs: libpeios and its headers, built
+# from the Peios SDK's own files, and each client library, built from its
+# own repository's.
+def crates() -> rust.RustWorkspace {
+    let kernel = [{at = "vendor/kernel"; place = dir("vendor/kernel")}]
+    = rust.workspace(
+        dir("."),
+        rust.vendored(file("Cargo.lock")),
+        crates = [
+            ...peios_rs.crate_settings(),
+            ...gxwi.crate_settings(),
+            ...netd.crate_settings(),
+            ...resolvd.crate_settings(),
+            ...timed.crate_settings(),
+            ...trustd.crate_settings(),
+            ...peiosutils.crate_settings(),
+            ...(for each in kernel_crates() { = {package = each; data = kernel} }),
+        ],
+        libclang = [clang.libclang_18()],
+    )
+}
+
+# The disk manager.
+def build gxwi_disk_manager() {
+    = rust.bin(crates(), "gxwi-disk-manager")
+}
+
+# The event viewer.
+def build gxwi_event_viewer() {
+    = rust.bin(crates(), "gxwi-event-viewer")
+}
+
+# The feature manager.
+def build gxwi_feature_manager() {
+    = rust.bin(crates(), "gxwi-feature-manager")
+}
+
+# The file dialog, which other applications open files with.
+def build gxwi_file_dialog() {
+    = rust.bin(crates(), "gxwi-file-dialog")
+}
+
+# The file explorer.
+def build gxwi_file_explorer() {
+    = rust.bin(crates(), "gxwi-file-explorer")
+}
+
+# A person's own settings.
+def build gxwi_my_settings() {
+    = rust.bin(crates(), "gxwi-my-settings")
+}
+
+# The network manager.
+def build gxwi_network_manager() {
+    = rust.bin(crates(), "gxwi-network-manager")
+}
+
+# The package manager.
+def build gxwi_package_manager() {
+    = rust.bin(crates(), "gxwi-package-manager")
+}
+
+# The manager of accounts, groups and other principals.
+def build gxwi_principals_manager() {
+    = rust.bin(crates(), "gxwi-principals-manager")
+}
+
+# The registry editor.
+def build gxwi_registry_editor() {
+    = rust.bin(crates(), "gxwi-registry-editor")
+}
+
+# The security descriptor editor.
+def build gxwi_sd_editor() {
+    = rust.bin(crates(), "gxwi-sd-editor")
+}
+
+# The security policy editor.
+def build gxwi_security_policy() {
+    = rust.bin(crates(), "gxwi-security-policy")
+}
+
+# The services manager.
+def build gxwi_services_manager() {
+    = rust.bin(crates(), "gxwi-services-manager")
+}
+
+# The machine's settings.
+def build gxwi_system_settings() {
+    = rust.bin(crates(), "gxwi-system-settings")
+}
+
+# The task manager.
+def build gxwi_task_manager() {
+    = rust.bin(crates(), "gxwi-task-manager")
+}
+
+# The terminal.
+def build gxwi_terminal() {
+    = rust.bin(crates(), "gxwi-terminal")
+}
+
+# The text editor.
+def build gxwi_text_editor() {
+    = rust.bin(crates(), "gxwi-text-editor")
+}
+
+# The Peios upgrade tool.
+def build gxwi_upgrade_peios() {
+    = rust.bin(crates(), "gxwi-upgrade-peios")
+}

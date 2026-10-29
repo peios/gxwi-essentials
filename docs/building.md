@@ -1,73 +1,120 @@
 # Building and Checking GXWI Essentials
 
-Use x86-64 Linux, Python 3.11 or newer, a C compiler, binutils, libclang,
-pkg-config, gzip, curl, Git, Node.js, npm, and Rust 1.98.1 with rustfmt and
-Clippy. Groff renders the manual pages. The `bazel` launcher verifies and
-caches Bazel 8.4.2. Bazel builds Rust programs directly from the dependency
-lock; Cargo supplies additional contributor diagnostics.
+Use pekit to build the suite's 18 applications and to run their tests.
+Pekit builds each crate on its own, so a change rebuilds only the crates it
+reaches. The supported development host is x86-64 Linux. Host tests and
+native Peios checks cover different environments; neither replaces a live
+desktop qualification run.
 
-## Prepare the SDK and dependencies
+## Before you start
 
-Select exact libpeios and kernel revisions. Check out GXWI at the revision
-recorded in `[workspace.dependencies.gxwi]` in `Cargo.toml`, then create a
-new SDK directory:
+You need pekit and Git. Everything else is pinned and fetched by pekit on
+the first build: the Bootlin C toolchain, Rust 1.98.1 with Clippy, Python
+3.14, busybox, Node.js 22, libclang, and the crates `Cargo.lock` selects.
+The first build needs network access; later builds find what they need in
+pekit's store, and every step runs without network access in a sandbox
+that holds only its declared inputs.
 
-```sh
-tools/prepare-dev-sdk /path/to/libpeios /path/to/kernel/include/uapi /tmp/gxwi-essentials-sdk
-tools/prepare-gxwi-sdk /path/to/gxwi /tmp/gxwi-essentials-sdk
-export PEIOS_SDK=/tmp/gxwi-essentials-sdk
-```
-
-The helper builds libpeios with its own Cargo interface and copies its
-headers, kernel UAPI, and `libpeios.so.0` into the SDK. It does not install
-on the host. Keep the selected source revisions with qualification records.
-CI pins libpeios and kernel sources in `.github/workflows/check.yml`.
-The GXWI helper builds `libgxwi.so.1` with Bazel and adds it and its C header
-to the same SDK. The Rust `gxwi` crate uses that shared library; the suite
-does not include a private copy of the desktop protocol implementation.
-
-The locked GXWI dependency is in the private `peios/gxwi` repository.
-Configure read access before fetching. When authentication uses Git's
-credential helper, set `CARGO_NET_GIT_FETCH_WITH_CLI=true`. Keep credentials
-outside package inputs and Git URLs.
+The build files use the gcslib libraries named in `workspace.gcsl` and the
+build files, the libraries of peios-rs and the Peios SDK, and the libraries
+of the repositories whose client crates the applications use: gxwi, netd,
+resolvd, timed, trustd, and peiosutils. `pekit lock` pins their commits in
+`pekit.lock`. The `gxwi` repository is private; configure read access to it
+before the first build.
 
 The `vendor/kernel` subset retains exact upstream source hashes and its
 origin record. Its three crates are Cargo workspace members for local
 build inputs, but keep their upstream versions. Only the suite's owned
 applications and helpers share its development version.
 
-## Build and test
+## Build
 
-Build all applications and run the declared tests:
-
-```sh
-./bazel build //:artifacts
-./bazel test //...
-```
-
-Build an individual application with its app label, for example:
+Build one application by its target, the crate's name with underscores:
 
 ```sh
-./bazel build //apps/gxwi-file-explorer
+pekit build gxwi_file_explorer
 ```
+
+Each application is a target: `gxwi_disk_manager`, `gxwi_event_viewer`,
+`gxwi_feature_manager`, `gxwi_file_dialog`, `gxwi_file_explorer`,
+`gxwi_my_settings`, `gxwi_network_manager`, `gxwi_package_manager`,
+`gxwi_principals_manager`, `gxwi_registry_editor`, `gxwi_sd_editor`,
+`gxwi_security_policy`, `gxwi_services_manager`, `gxwi_system_settings`,
+`gxwi_task_manager`, `gxwi_terminal`, `gxwi_text_editor`, and
+`gxwi_upgrade_peios`. Build them all with `pekit build`.
+
+Pekit prints where each output is, under `pekit-out/<target>/`. The
+programs load `libpeios.so.0`, and the client libraries their crates link,
+by their shared object names (SONAMEs); they carry no runtime search path.
 
 Opening a program requires a running GXWI desktop with the appropriate
 Peios services. Tests do not create that session or exercise privileged
 management actions on your host.
 
-Prepare the pinned PSC tools outside the repository for contributor checks:
+## Test
 
 ```sh
-python3 tools/prepare-style-tools.py /tmp/gxwi-essentials-style
-export PEIOS_STYLE_BIN=/tmp/gxwi-essentials-style/bin
+pekit test
+```
+
+| Test | Check |
+|---|---|
+| `units` | Each member's unit tests |
+| `doctests` | Each member's documentation tests |
+| `clippy` | Clippy's checks of every target of every member, with every warning denied |
+| `terminal_page` | Node.js's test runner checks Terminal's page input handling in `apps/gxwi-terminal/page/input.test.mjs` |
+| `kernel_vendor` | The vendored kernel sources match the export `vendor/kernel/source-sha256.json` records |
+
+The unit tests are given libpeios and each client library, and busybox's
+`/bin/sh` and tools, which some run. A test whose inputs did not change is
+found in the store and not run again.
+
+For the full contributor check, install the pinned PSC tools into a
+directory outside the repository, then run the shared entry point:
+
+```sh
+python3 tools/prepare-style-tools.py "$HOME/.cache/gxwi-essentials-style"
+export PEIOS_STYLE_BIN="$HOME/.cache/gxwi-essentials-style/bin"
 tools/check
 ```
 
-The entry point checks source style and Starlark formatting, runs Bazel's
-test graph, and supplements it with Cargo Clippy and library documentation
-tests. Imported sources retain their original formatting and provenance.
-The tools' versions and integrity hashes are recorded under `tools/`.
-Use Bazel outputs as the package inputs.
+`tools/check` checks owned source formatting and lint, then runs
+`pekit test`. The tool versions and hashes are recorded in
+`tools/style-tools.lock.json`. Imported sources retain their original
+formatting and provenance. GitHub's workflow runs the style checks alone;
+builds and tests run with pekit.
+
+## How the build is planned
+
+`build.gcsl` plans the Cargo workspace with the gcslib rust library's
+`workspace`: Cargo works out each member's build, unit by unit, and pekit
+compiles each unit as a step. Planning reads the manifests, `Cargo.lock`,
+and which files exist, never the sources, so editing a source plans nothing
+again.
+
+Keep Rust dependency versions in the Cargo manifests and `Cargo.lock`, and
+update the lockfile deliberately with Cargo. `peios-sys` generates its
+bindings from the SDK's headers with bindgen and links libpeios, so it, and
+every crate that depends on it, is given what peios-rs's library says it
+needs: libpeios and its headers, built from the Peios SDK's own files.
+Each client crate the applications use links its repository's C library:
+
+| Crate | Library | Repository |
+|---|---|---|
+| `gxwi` | libgxwi | gxwi |
+| `netd-client` | libnetd | netd |
+| `resolvd-client` | libresolvd | resolvd |
+| `timed-client` | libtimed | timed |
+| `trust-client` | libtrust | trustd |
+| `peios-reg`, `peios-regman` | libreg, libregman | peiosutils |
+
+Each repository's library gives its crate the C library, built from that
+repository's own files, and gives the tests the library to load. The rust
+library fails a build whose `Cargo.lock` takes a repository's crates at
+another commit than `pekit.lock` pins its library at, so each crate and the
+library it links always agree. Update both together: change the commit in
+`Cargo.toml`, run Cargo to update `Cargo.lock`, then remove the
+repository's entry from `pekit.lock` and run `pekit lock`.
 
 ## Prepare disposable disks
 
@@ -118,80 +165,27 @@ feature-lifecycle, rollback, or release-upgrade qualification scenarios.
 Those checks need a compatible disposable guest and repository workflow;
 the applications still call their existing runtime services and commands.
 
-## Build packages
+## Not built with pekit yet
 
-Build the complete content-addressed package store:
+Packages, debug information, and builds with the native Peios toolchain,
+which hardens programs with control-flow enforcement technology (CET), are
+not yet built with pekit. The package definitions and native build settings
+from the Bazel build are kept outside this repository until they are.
 
-```sh
-./bazel build //:packages
-```
+The old Feature Manager, Package Manager, and Upgrade Peios repository
+fixtures used Pekit archives, development signing keys, and the legacy
+`peipkg` repository and trust workflow. They are retired with that build
+path; their source remains in the imported Git history. Those
+installer, feature-lifecycle, rollback, or release-upgrade qualification
+scenarios need a compatible disposable guest and repository workflow; the
+applications still call their existing runtime services and commands.
 
-The output is `bazel-bin/packages.store`. It contains canonical manifests,
-compressed SHA-256 blobs, and an index for 55 packages:
-
-- One `dev.peios.<app>` runtime package for each of the 18 applications.
-- Matching `-debuginfo` and `-debugsource` packages for each application.
-- `dev.peios.gxwi-essentials-source` for the suite source and build inputs.
-
-For example, `//packages:gxwi-terminal` selects Terminal's package output.
-The two dialogs retain their own runtime packages and client-library source
-in the suite. Runtime package data includes applicable declarations, icons,
-manuals, and registry references. Package construction does not install the
-applications or apply registry settings.
-
-Validation checks payload coverage, ELF properties, debug correspondence,
-licenses, file modes, and blob identity. Host development packages do not
-establish native Peios compatibility. All outputs are unsigned and marked
-`release_ready: false`; constructing the store is not a release or a
-publication action.
-
-## Build in native Peios userspace
-
-Acquire the exact dependency snapshot on a networked host with access to
-the private dependency:
-
-```sh
-tools/offline-build acquire /absolute/path/gxwi-essentials-inputs
-```
-
-Use an isolated Peios userspace with its CET-enabled Rust 1.98.1 compiler
-and standard library, C toolchain, Python, binutils, kernel headers, and
-libpeios 0.5.10 or newer and libgxwi 0.0.7 or newer development files.
-The permissions editor needs
-the NULL ACL corrections introduced in 0.5.10. Copy the exact suite source,
-including `MODULE.bazel.lock`. Mount the acquired snapshot read-only and
-provide a private writable work directory. Inside that environment:
-
-```sh
-tools/prepare-native-sdk /tmp/gxwi-essentials-native-sdk
-export PEIOS_SDK=/tmp/gxwi-essentials-native-sdk
-export PEIOS_RUSTC=/usr/bin/rustc
-tools/offline-build test /gxwi-essentials-inputs /gxwi-essentials-work
-```
-
-Use the same wrapper with `build` for build and package outputs without
-running the test command. It rejects a different module lock and disables
-dependency downloads. Native package checks require CET, full RELRO,
-immediate binding, and packed relocations.
-
-Native userspace checks run on the caller's kernel. Installed-desktop
-qualification additionally needs a compatible Peios kernel, GXWI session,
-registry and service access, and deliberate checks of each application's
-operations. Record those results separately. In particular, Disk Manager's
-mutation backend is unavailable, and Network Manager labels its example
-firewall displays; a successful build does not remove those limitations.
-
-## Continuous integration
-
-The workflow uses pinned SDK sources, Rust and Node.js versions, PSC tools,
-and Trail. Configure `PEIOS_DEPENDENCIES_TOKEN` as an Actions secret with
-read-only contents access to `peios/gxwi`. The default checkout token cannot
-read that separate private repository. The credential helper restricts the
-token to that repository and does not embed it in package data.
-
-A missing credential produces an explicit failure. Fork pull requests that
-cannot access the secret cannot fetch the private dependency. Native and
-installed-desktop qualification remain separate from the hosted CI job.
+Installed-desktop qualification needs a compatible Peios kernel, GXWI
+session, registry and service access, and deliberate checks of each
+application's operations. Record those results separately. In particular,
+Disk Manager's mutation backend is unavailable, and Network Manager labels
+its example firewall displays; a successful build does not remove those
+limitations.
 
 ## Check documentation
 

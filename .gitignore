@@ -1,8 +1,12 @@
 /target/
-/bazel-*
-/.ci-sdk/
 /.ci-tools/
 **/__pycache__/
 *.pyc
 **/node_modules/
 /docs/learn/dist/
+
+# pekit build output.
+/pekit-out/
+
+# Libraries pekit fetches for the pins in `pekit.lock`.
+/.gcsl/

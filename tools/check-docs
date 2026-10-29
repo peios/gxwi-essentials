@@ -8,7 +8,7 @@ trail=${TRAIL:-trail}
 output=$(mktemp -d "${TMPDIR:-/tmp}/gxwi-essentials-learn.XXXXXXXX")
 trap 'rm -rf -- "$output"' EXIT HUP INT TERM
 "$trail" build docs/learn --strict --allow-dangling-links --no-cache \
-    --out "$output/site" 2> "$output/diagnostics.txt"
+    --out "$output/site" 2>"$output/diagnostics.txt"
 python3 - "$repo/docs/external-links.json" "$output/diagnostics.txt" <<'PYTHON'
 import difflib
 import json
