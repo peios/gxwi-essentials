@@ -70,7 +70,7 @@
       "prefix": "github.com/peios/peiosutils",
       "git": "https://github.com/peios/peiosutils",
       "dir": "",
-      "rev": "c15f096cd2b50a2f27f57cd5a921a099c0cebb85"
+      "rev": "9361269a8d7885e5476f714b5ff86d1863af0e73"
     },
     {
       "prefix": "github.com/peios/trustd",
@@ -160,8 +160,8 @@
       "path": "github.com/peios/peiosutils",
       "git": "https://github.com/peios/peiosutils",
       "dir": "",
-      "commit": "c15f096cd2b50a2f27f57cd5a921a099c0cebb85",
-      "tree": "c51b3b7f26093f7399ffb7084f8ecd109165055a22028ea329025fdc4704b4ab"
+      "commit": "9361269a8d7885e5476f714b5ff86d1863af0e73",
+      "tree": "31593e6d63607bfae05e8046fd243fcc536b2f8680b949e6c2bd9ee2590ba180"
     },
     {
       "path": "github.com/peios/resolvd",
