@@ -52,8 +52,8 @@ timed-client = { git = "https://github.com/peios/timed.git", rev = "70e9f86f4cf6
 ntfe = { path = "vendor/kernel/peios/rust/ntfe" }
 peinit2 = { git = "https://github.com/peios/peinit.git", rev = "ce169d9ec30860d2e6a90c3371c2cd9795ca8e25", default-features = false }
 peios = { git = "https://github.com/peios/peios-rs.git", rev = "b2282f654758831e4a2e34c7b35c26e61a6ebe1c", package = "peios" }
-peios-reg = { git = "https://github.com/peios/peiosutils.git", rev = "c15f096cd2b50a2f27f57cd5a921a099c0cebb85" }
-peios-regman = { git = "https://github.com/peios/peiosutils.git", rev = "c15f096cd2b50a2f27f57cd5a921a099c0cebb85" }
+peios-reg = { git = "https://github.com/peios/peiosutils.git", rev = "9361269a8d7885e5476f714b5ff86d1863af0e73" }
+peios-regman = { git = "https://github.com/peios/peiosutils.git", rev = "9361269a8d7885e5476f714b5ff86d1863af0e73" }
 pnp-core = { path = "vendor/kernel/peios/rust/pnp-core" }
 serde = { version = "1" }
 serde_json = { version = "1" }
