@@ -952,7 +952,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "peinit2"
 version = "0.0.12"
-source = "git+https://github.com/peios/peinit.git?rev=4c6c029b7a31e40621be70b83794acbf9b7ad709#4c6c029b7a31e40621be70b83794acbf9b7ad709"
+source = "git+https://github.com/peios/peinit.git?rev=a33110307da1273ec0155eb081764685908efcae#a33110307da1273ec0155eb081764685908efcae"
 dependencies = [
  "jiff",
  "libc",
