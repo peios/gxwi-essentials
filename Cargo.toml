@@ -45,7 +45,7 @@ gxwi-file-dialog = { path = "apps/gxwi-file-dialog", default-features = false }
 gxwi-sd-editor = { path = "apps/gxwi-sd-editor", default-features = false }
 jiff = { version = "0.2.29" }
 libc = { version = "0.2" }
-gxwi = { git = "https://github.com/peios/gxwi.git", rev = "b3c0dfef185cd1c8cb5d6fed760b6487088d58a2" }
+gxwi = { git = "https://github.com/peios/gxwi.git", rev = "e6f57071453efb02f3ccb72ada1345d7a1967fd1" }
 netd-client = { git = "https://github.com/peios/netd.git", rev = "d9a605dd335c35f64468a298cfb367c2730d6c48" }
 resolvd-client = { git = "https://github.com/peios/resolvd.git", rev = "23a2eb62899739b4fd58ba9e8fb782f3077d4804" }
 timed-client = { git = "https://github.com/peios/timed.git", rev = "aee10c809f2cda117cbc0196ce4aa586ddf3d60b" }
