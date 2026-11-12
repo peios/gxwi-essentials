@@ -26,7 +26,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "auth-core"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=2967575498d176cf7154170d050ec44a3fc74523#2967575498d176cf7154170d050ec44a3fc74523"
+source = "git+https://github.com/peios/authd.git?rev=dc1ff5bb0b1c4b29b6d88a72cdcb86f0de7e5003#dc1ff5bb0b1c4b29b6d88a72cdcb86f0de7e5003"
 dependencies = [
  "libc",
 ]
@@ -34,7 +34,7 @@ dependencies = [
 [[package]]
 name = "auth-policy"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=2967575498d176cf7154170d050ec44a3fc74523#2967575498d176cf7154170d050ec44a3fc74523"
+source = "git+https://github.com/peios/authd.git?rev=dc1ff5bb0b1c4b29b6d88a72cdcb86f0de7e5003#dc1ff5bb0b1c4b29b6d88a72cdcb86f0de7e5003"
 dependencies = [
  "auth-core",
  "peios",
@@ -402,7 +402,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 [[package]]
 name = "gxwi"
 version = "0.0.7"
-source = "git+https://github.com/peios/gxwi.git?rev=b3c0dfef185cd1c8cb5d6fed760b6487088d58a2#b3c0dfef185cd1c8cb5d6fed760b6487088d58a2"
+source = "git+https://github.com/peios/gxwi.git?rev=e6f57071453efb02f3ccb72ada1345d7a1967fd1#e6f57071453efb02f3ccb72ada1345d7a1967fd1"
 dependencies = [
  "axum",
  "gxwi-abi",
@@ -419,7 +419,7 @@ dependencies = [
 [[package]]
 name = "gxwi-abi"
 version = "0.0.7"
-source = "git+https://github.com/peios/gxwi.git?rev=b3c0dfef185cd1c8cb5d6fed760b6487088d58a2#b3c0dfef185cd1c8cb5d6fed760b6487088d58a2"
+source = "git+https://github.com/peios/gxwi.git?rev=e6f57071453efb02f3ccb72ada1345d7a1967fd1#e6f57071453efb02f3ccb72ada1345d7a1967fd1"
 
 [[package]]
 name = "gxwi-disk-manager"
@@ -1253,7 +1253,7 @@ dependencies = [
 [[package]]
 name = "session-preferences"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=2967575498d176cf7154170d050ec44a3fc74523#2967575498d176cf7154170d050ec44a3fc74523"
+source = "git+https://github.com/peios/authd.git?rev=dc1ff5bb0b1c4b29b6d88a72cdcb86f0de7e5003#dc1ff5bb0b1c4b29b6d88a72cdcb86f0de7e5003"
 dependencies = [
  "peios",
 ]
