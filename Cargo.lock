@@ -906,12 +906,12 @@ dependencies = [
 [[package]]
 name = "netd-abi"
 version = "0.1.8"
-source = "git+https://github.com/peios/netd.git?rev=d9a605dd335c35f64468a298cfb367c2730d6c48#d9a605dd335c35f64468a298cfb367c2730d6c48"
+source = "git+https://github.com/peios/netd.git?rev=dcd39632f20baf52b22486b71a800eba468182fb#dcd39632f20baf52b22486b71a800eba468182fb"
 
 [[package]]
 name = "netd-client"
 version = "0.1.8"
-source = "git+https://github.com/peios/netd.git?rev=d9a605dd335c35f64468a298cfb367c2730d6c48#d9a605dd335c35f64468a298cfb367c2730d6c48"
+source = "git+https://github.com/peios/netd.git?rev=dcd39632f20baf52b22486b71a800eba468182fb#dcd39632f20baf52b22486b71a800eba468182fb"
 dependencies = [
  "libc",
  "netd-abi",
@@ -921,7 +921,7 @@ dependencies = [
 [[package]]
 name = "netd-core"
 version = "0.1.8"
-source = "git+https://github.com/peios/netd.git?rev=d9a605dd335c35f64468a298cfb367c2730d6c48#d9a605dd335c35f64468a298cfb367c2730d6c48"
+source = "git+https://github.com/peios/netd.git?rev=dcd39632f20baf52b22486b71a800eba468182fb#dcd39632f20baf52b22486b71a800eba468182fb"
 dependencies = [
  "peios",
 ]
@@ -973,7 +973,7 @@ dependencies = [
 [[package]]
 name = "peios-reg"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc#80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc"
+source = "git+https://github.com/peios/peiosutils.git?rev=dd9e722e9bccf826b178af8e4fe1bf124282f8ec#dd9e722e9bccf826b178af8e4fe1bf124282f8ec"
 dependencies = [
  "utility-client",
  "utility-ffi",
@@ -982,7 +982,7 @@ dependencies = [
 [[package]]
 name = "peios-regman"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc#80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc"
+source = "git+https://github.com/peios/peiosutils.git?rev=dd9e722e9bccf826b178af8e4fe1bf124282f8ec#dd9e722e9bccf826b178af8e4fe1bf124282f8ec"
 dependencies = [
  "libc",
  "utility-client",
@@ -1620,7 +1620,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 [[package]]
 name = "utility-client"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc#80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc"
+source = "git+https://github.com/peios/peiosutils.git?rev=dd9e722e9bccf826b178af8e4fe1bf124282f8ec#dd9e722e9bccf826b178af8e4fe1bf124282f8ec"
 dependencies = [
  "libc",
  "utility-ffi",
@@ -1629,7 +1629,7 @@ dependencies = [
 [[package]]
 name = "utility-ffi"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc#80ed3cdd7e3e01a49da05ab8d2f29ba330a140cc"
+source = "git+https://github.com/peios/peiosutils.git?rev=dd9e722e9bccf826b178af8e4fe1bf124282f8ec#dd9e722e9bccf826b178af8e4fe1bf124282f8ec"
 dependencies = [
  "libc",
 ]
