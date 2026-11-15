@@ -28,7 +28,7 @@
       "prefix": "github.com/peios/netd",
       "git": "https://github.com/peios/netd",
       "dir": "",
-      "rev": "d9a605dd335c35f64468a298cfb367c2730d6c48"
+      "rev": "dcd39632f20baf52b22486b71a800eba468182fb"
     },
     {
       "prefix": "github.com/peios/gxwi",
@@ -139,8 +139,8 @@
       "path": "github.com/peios/netd",
       "git": "https://github.com/peios/netd",
       "dir": "",
-      "commit": "d9a605dd335c35f64468a298cfb367c2730d6c48",
-      "tree": "41a12af2362ff8f6aade90be9900fbc254052601bcd41696be49a3596d7d2fe6"
+      "commit": "dcd39632f20baf52b22486b71a800eba468182fb",
+      "tree": "7e2544d54a4b888464bde2c3186e608e15224aac79de41bd499b30701177b813"
     },
     {
       "path": "github.com/peios/peios-rs",
