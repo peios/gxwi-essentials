@@ -81,6 +81,23 @@ def test units(
     }
 }
 
+# Applications that use authd's identity and self-service protocol.
+def test authentication_clients(
+    tests: List<List<rust.RustTest>> = for each in [
+        "gxwi-principals-manager", "gxwi-task-manager", "gxwi-sd-editor",
+        "gxwi-system-settings", "gxwi-my-settings",
+    ] { = rust.tests(crates(), each) },
+    given: List<{at: String, place: Dir | File}> = loaded(),
+    env: BuildEnv = toolchain.get(Toolchain::BuildEnv),
+) {
+    let fixtures: List<{at: String, place: Dir | File}> = [
+        ...given, {at = "/bin"; place = env.root.dir("bin")},
+    ]
+    let each = for some in tests {
+        = for test in some { = rust.run_test(test, given = fixtures, env = libraries_env()) }
+    }
+}
+
 # Each owned member's documentation tests.
 def test doctests(
     ran: List<List<{}>> = for each in owned(crates()) {
