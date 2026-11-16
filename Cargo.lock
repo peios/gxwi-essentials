@@ -26,7 +26,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "auth-core"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1#5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1"
+source = "git+https://github.com/peios/authd.git?rev=3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4#3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4"
 dependencies = [
  "libc",
 ]
@@ -34,7 +34,7 @@ dependencies = [
 [[package]]
 name = "auth-policy"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1#5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1"
+source = "git+https://github.com/peios/authd.git?rev=3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4#3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4"
 dependencies = [
  "auth-core",
  "peios",
@@ -403,7 +403,7 @@ checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 [[package]]
 name = "gxwi"
 version = "0.0.7"
-source = "git+https://github.com/peios/gxwi.git?rev=4a8094b8744fe74947bb5f3e586e5596d2f8f1aa#4a8094b8744fe74947bb5f3e586e5596d2f8f1aa"
+source = "git+https://github.com/peios/gxwi.git?rev=c88c60c977ecae80fe3120c6cb68a5ec95260fcd#c88c60c977ecae80fe3120c6cb68a5ec95260fcd"
 dependencies = [
  "axum",
  "gxwi-abi",
@@ -420,7 +420,7 @@ dependencies = [
 [[package]]
 name = "gxwi-abi"
 version = "0.0.7"
-source = "git+https://github.com/peios/gxwi.git?rev=4a8094b8744fe74947bb5f3e586e5596d2f8f1aa#4a8094b8744fe74947bb5f3e586e5596d2f8f1aa"
+source = "git+https://github.com/peios/gxwi.git?rev=c88c60c977ecae80fe3120c6cb68a5ec95260fcd#c88c60c977ecae80fe3120c6cb68a5ec95260fcd"
 
 [[package]]
 name = "gxwi-disk-manager"
@@ -974,7 +974,7 @@ dependencies = [
 [[package]]
 name = "peios-reg"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=2d6cfe53063401a1cc9ad485fc335565bbc4a600#2d6cfe53063401a1cc9ad485fc335565bbc4a600"
+source = "git+https://github.com/peios/peiosutils.git?rev=50663c46ca2fd70b652c19c27a0588a6faa9d7ed#50663c46ca2fd70b652c19c27a0588a6faa9d7ed"
 dependencies = [
  "utility-client",
  "utility-ffi",
@@ -983,7 +983,7 @@ dependencies = [
 [[package]]
 name = "peios-regman"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=2d6cfe53063401a1cc9ad485fc335565bbc4a600#2d6cfe53063401a1cc9ad485fc335565bbc4a600"
+source = "git+https://github.com/peios/peiosutils.git?rev=50663c46ca2fd70b652c19c27a0588a6faa9d7ed#50663c46ca2fd70b652c19c27a0588a6faa9d7ed"
 dependencies = [
  "libc",
  "utility-client",
@@ -1254,7 +1254,7 @@ dependencies = [
 [[package]]
 name = "session-preferences"
 version = "0.0.24"
-source = "git+https://github.com/peios/authd.git?rev=5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1#5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1"
+source = "git+https://github.com/peios/authd.git?rev=3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4#3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4"
 dependencies = [
  "peios",
 ]
@@ -1621,7 +1621,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 [[package]]
 name = "utility-client"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=2d6cfe53063401a1cc9ad485fc335565bbc4a600#2d6cfe53063401a1cc9ad485fc335565bbc4a600"
+source = "git+https://github.com/peios/peiosutils.git?rev=50663c46ca2fd70b652c19c27a0588a6faa9d7ed#50663c46ca2fd70b652c19c27a0588a6faa9d7ed"
 dependencies = [
  "libc",
  "utility-ffi",
@@ -1630,7 +1630,7 @@ dependencies = [
 [[package]]
 name = "utility-ffi"
 version = "0.8.18"
-source = "git+https://github.com/peios/peiosutils.git?rev=2d6cfe53063401a1cc9ad485fc335565bbc4a600#2d6cfe53063401a1cc9ad485fc335565bbc4a600"
+source = "git+https://github.com/peios/peiosutils.git?rev=50663c46ca2fd70b652c19c27a0588a6faa9d7ed#50663c46ca2fd70b652c19c27a0588a6faa9d7ed"
 dependencies = [
  "libc",
 ]
