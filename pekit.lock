@@ -4,37 +4,37 @@
       "prefix": "github.com/peios/peios-rs",
       "git": "https://github.com/peios/peios-rs",
       "dir": "",
-      "rev": "4c9c0106550e3b7d8b4a98dfd0d7a5490fcf0116"
+      "rev": "3950d35950c46cb3538885b7cf05bde059393def"
     },
     {
       "prefix": "github.com/peios/peios-sdk",
       "git": "https://github.com/peios/peios-sdk",
       "dir": "",
-      "rev": "e4e5fc7729aaf0c48ce3c17cd01db5bb46c747f4"
+      "rev": "0edd31223cef7b9a0b920ec40e2ad493e2232024"
     },
     {
       "prefix": "github.com/peios/timed",
       "git": "https://github.com/peios/timed",
       "dir": "",
-      "rev": "aee10c809f2cda117cbc0196ce4aa586ddf3d60b"
+      "rev": "2111f10f37508ffcf4221c285b6c3e44f6bd3e40"
     },
     {
       "prefix": "github.com/peios/resolvd",
       "git": "https://github.com/peios/resolvd",
       "dir": "",
-      "rev": "23a2eb62899739b4fd58ba9e8fb782f3077d4804"
+      "rev": "d714ec7f364950920fd9a83565d47fc8fb08dd38"
     },
     {
       "prefix": "github.com/peios/netd",
       "git": "https://github.com/peios/netd",
       "dir": "",
-      "rev": "dcd39632f20baf52b22486b71a800eba468182fb"
+      "rev": "09927d27df2d4294a38e8dd083f0ec1ea5d3813e"
     },
     {
       "prefix": "github.com/peios/gxwi",
       "git": "https://github.com/peios/gxwi",
       "dir": "",
-      "rev": "c88c60c977ecae80fe3120c6cb68a5ec95260fcd"
+      "rev": "dd54c32e6b7450726fd1e362986a623a1dd15b0f"
     },
     {
       "prefix": "github.com/gcslib/rust",
@@ -70,19 +70,19 @@
       "prefix": "github.com/peios/peiosutils",
       "git": "https://github.com/peios/peiosutils",
       "dir": "",
-      "rev": "50663c46ca2fd70b652c19c27a0588a6faa9d7ed"
+      "rev": "8cdd9c074616fe37d356a995c228c38f9379e9ff"
     },
     {
       "prefix": "github.com/peios/trustd",
       "git": "https://github.com/peios/trustd",
       "dir": "",
-      "rev": "b6a761e5a221173ba1b3c691c03977ce8cf60721"
+      "rev": "0e93013457503e30d30e4898b93aa538941ab2da"
     },
     {
       "prefix": "github.com/peios/authd",
       "git": "https://github.com/peios/authd",
       "dir": "",
-      "rev": "3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4"
+      "rev": "ea3c9f90c48052ff0c0757d88032c9c706964b9a"
     }
   ],
   "libraries": [
@@ -125,64 +125,64 @@
       "path": "github.com/peios/authd",
       "git": "https://github.com/peios/authd",
       "dir": "",
-      "commit": "3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4",
-      "tree": "21218c7d593db2e563d2ed60b17937d39ff0616951d0e40c9a69e51093d4466e"
+      "commit": "ea3c9f90c48052ff0c0757d88032c9c706964b9a",
+      "tree": "cb13b200dd10c30e7fd6ec186ca73f5f6dbc2a4c27169bfb515437816d5e1305"
     },
     {
       "path": "github.com/peios/gxwi",
       "git": "https://github.com/peios/gxwi",
       "dir": "",
-      "commit": "c88c60c977ecae80fe3120c6cb68a5ec95260fcd",
-      "tree": "43fb3003c3aa6d9b59dc92f6176ddcde4364022eaa99d7669eead4ce47a8d380"
+      "commit": "dd54c32e6b7450726fd1e362986a623a1dd15b0f",
+      "tree": "6d23683793662962d14025bbde47bc74834ef895e2e5cbf95d6eb0a7051d9a67"
     },
     {
       "path": "github.com/peios/netd",
       "git": "https://github.com/peios/netd",
       "dir": "",
-      "commit": "dcd39632f20baf52b22486b71a800eba468182fb",
-      "tree": "7e2544d54a4b888464bde2c3186e608e15224aac79de41bd499b30701177b813"
+      "commit": "09927d27df2d4294a38e8dd083f0ec1ea5d3813e",
+      "tree": "f84a6561c665857f628a1030e08ccba0f7fa1fa882efeed44a07cb4091166a61"
     },
     {
       "path": "github.com/peios/peios-rs",
       "git": "https://github.com/peios/peios-rs",
       "dir": "",
-      "commit": "4c9c0106550e3b7d8b4a98dfd0d7a5490fcf0116",
-      "tree": "3e352c4a1a6191f9a9ffae40eb692e68ce9fd766b077f79a800233f8c30c2e6a"
+      "commit": "3950d35950c46cb3538885b7cf05bde059393def",
+      "tree": "f27d821bc08b493bf74d46736067023ddfbd1aa1a5bec742b60cc5acb4a4eaa2"
     },
     {
       "path": "github.com/peios/peios-sdk",
       "git": "https://github.com/peios/peios-sdk",
       "dir": "",
-      "commit": "e4e5fc7729aaf0c48ce3c17cd01db5bb46c747f4",
-      "tree": "a99ee01e1c461f1110dd3aa2252005de09657ffc08d4058d3782c858dafe69f0"
+      "commit": "0edd31223cef7b9a0b920ec40e2ad493e2232024",
+      "tree": "9e76422dd0e656539d4ebb7df3c0e3fdee424eaa9e6657749be16ea8a5cfeabf"
     },
     {
       "path": "github.com/peios/peiosutils",
       "git": "https://github.com/peios/peiosutils",
       "dir": "",
-      "commit": "50663c46ca2fd70b652c19c27a0588a6faa9d7ed",
-      "tree": "0f08f0b87174b19aafa4eef8585003e50b70a6b743375f7613089c38c7a0e752"
+      "commit": "8cdd9c074616fe37d356a995c228c38f9379e9ff",
+      "tree": "87e31c834d898a1f6bc62359457fee6d256d98511c406a8492f964fb4f2e9cdb"
     },
     {
       "path": "github.com/peios/resolvd",
       "git": "https://github.com/peios/resolvd",
       "dir": "",
-      "commit": "23a2eb62899739b4fd58ba9e8fb782f3077d4804",
-      "tree": "b523251c9ccc4b81c96fc7ef48dc9343cc24c0a01f8468a13cdc3697ddb7afb9"
+      "commit": "d714ec7f364950920fd9a83565d47fc8fb08dd38",
+      "tree": "ab3debc652e26e8387ffa9345dc52af14dd75be536ea408e02cadab1edc94c60"
     },
     {
       "path": "github.com/peios/timed",
       "git": "https://github.com/peios/timed",
       "dir": "",
-      "commit": "aee10c809f2cda117cbc0196ce4aa586ddf3d60b",
-      "tree": "f28e94bf51ebbb75d8feeccd21ca2804b09a23900a1ac88ef801100c32a8247d"
+      "commit": "2111f10f37508ffcf4221c285b6c3e44f6bd3e40",
+      "tree": "f2109f0ee7d31416507a6e583cf34c8b36fdac215803f68c36179280ec5701ae"
     },
     {
       "path": "github.com/peios/trustd",
       "git": "https://github.com/peios/trustd",
       "dir": "",
-      "commit": "b6a761e5a221173ba1b3c691c03977ce8cf60721",
-      "tree": "d48ecf8274b29e3c46212442aa47716151e701cdbe7875769f6801b1d705d616"
+      "commit": "0e93013457503e30d30e4898b93aa538941ab2da",
+      "tree": "fb0a6e6a0817cdf89eb2904fda89d3b06108f35bcf642bb7ccfbcaaf7f7d4afa"
     }
   ]
 }

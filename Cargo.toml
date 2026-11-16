@@ -36,31 +36,31 @@ license = "MIT"
 [workspace.dependencies]
 gxwi-fs = { path = "crates/gxwi-fs" }
 gxwi-process = { path = "crates/gxwi-process" }
-auth-core = { git = "https://github.com/peios/authd.git", rev = "3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4" }
-auth-policy = { git = "https://github.com/peios/authd.git", rev = "3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4" }
+auth-core = { git = "https://github.com/peios/authd.git", rev = "ea3c9f90c48052ff0c0757d88032c9c706964b9a" }
+auth-policy = { git = "https://github.com/peios/authd.git", rev = "ea3c9f90c48052ff0c0757d88032c9c706964b9a" }
 axum = { version = "0.8.9" }
 base64 = { version = "0.22" }
-eventd-client = { git = "https://github.com/peios/eventd.git", rev = "50132adfc61418b0d089aaf4c9df8155d357aae2" }
+eventd-client = { git = "https://github.com/peios/eventd.git", rev = "0a660940aaf451f1335c5f483de59afb36d6ebf6" }
 gxwi-file-dialog = { path = "apps/gxwi-file-dialog", default-features = false }
 gxwi-sd-editor = { path = "apps/gxwi-sd-editor", default-features = false }
 jiff = { version = "0.2.29" }
 libc = { version = "0.2" }
-gxwi = { git = "https://github.com/peios/gxwi.git", rev = "c88c60c977ecae80fe3120c6cb68a5ec95260fcd" }
-netd-client = { git = "https://github.com/peios/netd.git", rev = "dcd39632f20baf52b22486b71a800eba468182fb" }
-resolvd-client = { git = "https://github.com/peios/resolvd.git", rev = "23a2eb62899739b4fd58ba9e8fb782f3077d4804" }
-timed-client = { git = "https://github.com/peios/timed.git", rev = "aee10c809f2cda117cbc0196ce4aa586ddf3d60b" }
+gxwi = { git = "https://github.com/peios/gxwi.git", rev = "dd54c32e6b7450726fd1e362986a623a1dd15b0f" }
+netd-client = { git = "https://github.com/peios/netd.git", rev = "09927d27df2d4294a38e8dd083f0ec1ea5d3813e" }
+resolvd-client = { git = "https://github.com/peios/resolvd.git", rev = "d714ec7f364950920fd9a83565d47fc8fb08dd38" }
+timed-client = { git = "https://github.com/peios/timed.git", rev = "2111f10f37508ffcf4221c285b6c3e44f6bd3e40" }
 ntfe = { path = "vendor/kernel/peios/rust/ntfe" }
-peinit2 = { git = "https://github.com/peios/peinit.git", rev = "7e8eeb82ab8491d3f29b400edfd86c5e8e279446", default-features = false }
-peios = { git = "https://github.com/peios/peios-rs.git", rev = "4c9c0106550e3b7d8b4a98dfd0d7a5490fcf0116", package = "peios" }
-peios-reg = { git = "https://github.com/peios/peiosutils.git", rev = "50663c46ca2fd70b652c19c27a0588a6faa9d7ed" }
-peios-regman = { git = "https://github.com/peios/peiosutils.git", rev = "50663c46ca2fd70b652c19c27a0588a6faa9d7ed" }
+peinit2 = { git = "https://github.com/peios/peinit.git", rev = "0eb973544a96bbd1de6984198113ed5ab2bd98e7", default-features = false }
+peios = { git = "https://github.com/peios/peios-rs.git", rev = "3950d35950c46cb3538885b7cf05bde059393def", package = "peios" }
+peios-reg = { git = "https://github.com/peios/peiosutils.git", rev = "8cdd9c074616fe37d356a995c228c38f9379e9ff" }
+peios-regman = { git = "https://github.com/peios/peiosutils.git", rev = "8cdd9c074616fe37d356a995c228c38f9379e9ff" }
 pnp-core = { path = "vendor/kernel/peios/rust/pnp-core" }
 serde = { version = "1" }
 serde_json = { version = "1" }
-session-preferences = { git = "https://github.com/peios/authd.git", rev = "3f42589dcb738c4fe9d2cdd6b26df92f61c6a2c4" }
+session-preferences = { git = "https://github.com/peios/authd.git", rev = "ea3c9f90c48052ff0c0757d88032c9c706964b9a" }
 sha1 = { version = "0.10" }
 tokio = { version = "1.53.1" }
-trust-client = { git = "https://github.com/peios/trustd.git", rev = "b6a761e5a221173ba1b3c691c03977ce8cf60721" }
+trust-client = { git = "https://github.com/peios/trustd.git", rev = "0e93013457503e30d30e4898b93aa538941ab2da" }
 vt100 = { version = "0.16" }
 
 [patch."https://github.com/peios/pkm.git"]
