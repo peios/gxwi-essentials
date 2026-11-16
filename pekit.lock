@@ -34,7 +34,7 @@
       "prefix": "github.com/peios/gxwi",
       "git": "https://github.com/peios/gxwi",
       "dir": "",
-      "rev": "4721589c2a4ef7b818282eb4408781f65f1a01c6"
+      "rev": "4a8094b8744fe74947bb5f3e586e5596d2f8f1aa"
     },
     {
       "prefix": "github.com/gcslib/rust",
@@ -70,7 +70,7 @@
       "prefix": "github.com/peios/peiosutils",
       "git": "https://github.com/peios/peiosutils",
       "dir": "",
-      "rev": "7b8558c8cb20856b7601330ac3e921602c322767"
+      "rev": "2d6cfe53063401a1cc9ad485fc335565bbc4a600"
     },
     {
       "prefix": "github.com/peios/trustd",
@@ -82,7 +82,7 @@
       "prefix": "github.com/peios/authd",
       "git": "https://github.com/peios/authd",
       "dir": "",
-      "rev": "af88d8959d1a3354e421a03523807f0b423670eb"
+      "rev": "5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1"
     }
   ],
   "libraries": [
@@ -125,15 +125,15 @@
       "path": "github.com/peios/authd",
       "git": "https://github.com/peios/authd",
       "dir": "",
-      "commit": "af88d8959d1a3354e421a03523807f0b423670eb",
-      "tree": "2f96d0f653ea10fc682220c4886b81809aa65b325e48ec6e51de0898d776d834"
+      "commit": "5e3b2ea133d6ffd3c6b9d7b7c2ae52cd06589be1",
+      "tree": "7a7ffd22320da4c6dd27d346b5b32d9738efb6697ef9349ba721d9d17a02a80c"
     },
     {
       "path": "github.com/peios/gxwi",
       "git": "https://github.com/peios/gxwi",
       "dir": "",
-      "commit": "4721589c2a4ef7b818282eb4408781f65f1a01c6",
-      "tree": "a214da01d13383bbdb4e97ba93cb0c53a16ff784b927a86767b2eefc48aaf13f"
+      "commit": "4a8094b8744fe74947bb5f3e586e5596d2f8f1aa",
+      "tree": "10c423108b0faa7804c96410f6ef7dab2e5f53e4009fdeb1bcddc05c93dadc78"
     },
     {
       "path": "github.com/peios/netd",
@@ -160,8 +160,8 @@
       "path": "github.com/peios/peiosutils",
       "git": "https://github.com/peios/peiosutils",
       "dir": "",
-      "commit": "7b8558c8cb20856b7601330ac3e921602c322767",
-      "tree": "2879d0ccc59eb0da56628c6dc4aa92b3ee5b3e2764813709ff10c6b502286d4e"
+      "commit": "2d6cfe53063401a1cc9ad485fc335565bbc4a600",
+      "tree": "5b78c14c6e17cfd3f5cc9c28c21baebd1ad37435985040502411c84b2f3fc7b2"
     },
     {
       "path": "github.com/peios/resolvd",
