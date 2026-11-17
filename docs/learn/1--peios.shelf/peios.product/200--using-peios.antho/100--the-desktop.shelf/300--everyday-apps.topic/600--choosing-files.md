@@ -1,19 +1,26 @@
 ---
 title: The File Dialog
 type: concept
-description: Understand what an application does when it asks for a file.
+description: Understand what an application does when it asks for a file or a folder.
 ---
 
-The shared file dialog lets an application ask you for a file to open or a
-name to save. The dialog chooses a path; the calling application opens or
-writes that path. A successful selection does not grant the caller new
-filesystem rights.
+The shared file dialog lets an application ask you for a file to open, a
+name to save, or a folder. The dialog chooses a path; the calling
+application opens, writes, or uses that path. A successful selection does
+not grant the caller new filesystem rights.
 
 The dialog shows folders first and filters files by the kind the caller
 requested. **Up**, **Home**, and the path field change the location.
 **Hidden files** includes names beginning with a dot. In save mode, the
 selected kind can supply a missing extension, and an occupied name asks
 for confirmation.
+
+An application that asks for a folder gets a dialog that shows folders
+only. **Choose Folder** chooses the folder you picked or, with nothing
+picked, the folder you are in; the dialog shows which path it will choose
+before you press it. Only an application that asks for a folder can be
+given one: opening and saving never return a folder, and opening one goes
+into it instead.
 
 The dialog can also create a folder, rename an entry, or delete it.
 Deletion is real: a directory goes with its contents. The dialog runs as
