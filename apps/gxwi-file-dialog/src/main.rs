@@ -1,12 +1,14 @@
-//! gxwi-file-dialog — a dialog for choosing a file to open or a place to
-//! save to, on a GXWI desktop, opened by a program that wants one (the
-//! library, and PSPU §9, set out how the two speak).
+//! gxwi-file-dialog — a dialog for choosing a file to open, a place to
+//! save to, or a folder, on a GXWI desktop, opened by a program that wants
+//! one (the library, and PSPU §9, set out how the two speak).
 //!
 //! It shows one folder at a time: its folders, then its files, of the kind
 //! the program asked for. The person goes into a folder by opening it, up
 //! with Up, home with Home, or anywhere by typing a path. To open, they pick
 //! a file; to save, they type a name, and saving over a file that is there
-//! asks first. They can make a folder, and rename and delete what they
+//! asks first. To choose a folder, which only a program asking for one can
+//! have, files are not shown: the folder picked is chosen, or else the one
+//! they are in, and the dialog says which before they choose. They can make a folder, and rename and delete what they
 //! pick, as themselves: what they may not do is offered disabled, with why.
 //! The dialog answers once, with the path or that it was cancelled, and
 //! ends. It never opens the file: the program does.
@@ -15,10 +17,10 @@ use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use gxwi::{App, Closer, Facts, Fields, Live, Value, escape};
 use gxwi_file_dialog::{Answer, Mode, Request, line};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use gxwi::{App, Closer, Facts, Fields, Live, Value, escape};
 
 mod folder;
 
@@ -105,6 +107,9 @@ impl Chooser {
     /// Whether a file of this name is shown: in a dialog for opening, only
     /// files of the kind chosen.
     fn shows(&self, entry: &Entry) -> bool {
+        if self.request.mode == Mode::Folder {
+            return entry.folder;
+        }
         entry.folder
             || self.request.mode == Mode::Save
             || self
@@ -164,9 +169,28 @@ impl Chooser {
         }
     }
 
+    /// The folder choosing a folder would answer with: the one picked, or
+    /// the one shown.
+    fn target(&self) -> PathBuf {
+        match self.picked.as_deref().and_then(|name| self.entry(name)) {
+            Some(entry) if entry.folder => self.folder.join(&entry.native_name),
+            _ => self.folder.clone(),
+        }
+    }
+
     /// Chooses, as the footer's button does.
     fn choose(&mut self, fields: &mut Fields) {
         match self.request.mode {
+            Mode::Folder => {
+                let path = self.target();
+                // Only a folder that is there, though the person may not be
+                // able to list it: the program acts on it as them.
+                if path.is_dir() {
+                    self.answer(Answer::Chosen { path });
+                } else {
+                    self.said = Some(("There is no folder here to choose.".into(), true));
+                }
+            }
             Mode::Open => match self.picked.clone() {
                 Some(name) => self.open(&name, fields),
                 None => self.said = Some(("Pick a file to open.".into(), true)),
@@ -291,7 +315,7 @@ impl Chooser {
              <button type=\"button\" fx-click=\"new-folder\"{new}>New folder…</button>\
              <button type=\"button\" fx-click=\"rename\"{rename}>Rename…</button>\
              <button type=\"button\" fx-click=\"delete\"{delete}>Delete…</button>\
-             <button type=\"button\" class=\"hidden-toggle\" fx-click=\"hidden\" aria-pressed=\"{hidden}\">Hidden files</button></div>",
+             <button type=\"button\" class=\"hidden-toggle\" fx-click=\"hidden\" aria-pressed=\"{hidden}\">{hidden_label}</button></div>",
             new = match &self.entries {
                 Err(_) => off(
                     false,
@@ -302,6 +326,11 @@ impl Chooser {
             rename = pick_first(may_delete && self.may.add_file, "You may not rename this."),
             delete = pick_first(may_delete, "You may not delete this."),
             hidden = self.hidden,
+            hidden_label = if self.request.mode == Mode::Folder {
+                "Hidden folders"
+            } else {
+                "Hidden files"
+            },
         )
     }
 
@@ -380,14 +409,18 @@ impl Live for Chooser {
                     .map(|entry| self.row(entry))
                     .collect();
                 if rows.is_empty() {
-                    "<p class=\"empty\">Nothing here.</p>".to_string()
+                    if self.request.mode == Mode::Folder {
+                        "<p class=\"empty\">No folders in here.</p>".to_string()
+                    } else {
+                        "<p class=\"empty\">Nothing here.</p>".to_string()
+                    }
                 } else {
                     format!("<ul class=\"entries\" role=\"listbox\">{rows}</ul>")
                 }
             }
             Err(why) => format!("<p class=\"empty bad\">{}</p>", escape(why)),
         };
-        let filters = if self.request.filters.is_empty() {
+        let filters = if self.request.filters.is_empty() || self.request.mode == Mode::Folder {
             String::new()
         } else {
             let mut options: String = self
@@ -417,6 +450,13 @@ impl Live for Chooser {
             Mode::Save => (
                 "<label class=\"name\">Name<input name=\"name\" autocomplete=\"off\" spellcheck=\"false\" fx-autofocus></label>".to_string(),
                 "Save",
+            ),
+            Mode::Folder => (
+                format!(
+                    "<p class=\"target\">Chooses <code>{}</code></p>",
+                    escape(&self.target().to_string_lossy())
+                ),
+                "Choose Folder",
             ),
         };
         let escape_key = "<div hidden><button type=\"button\" fx-key=\"Escape\" fx-click=\"cancel\"></button></div>";
@@ -704,6 +744,57 @@ mod tests {
                 .as_ref()
                 .is_some_and(|(said, bad)| *bad && said.contains("can't be"))
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn to_choose_a_folder_it_shows_folders_alone_and_chooses_the_picked_or_the_shown() {
+        let dir = scratch("folder");
+        let mut chooser = chooser(Mode::Folder, &dir);
+        let html = shown(&chooser);
+        assert!(html.contains("fx-value-name=\"Sub\""));
+        assert!(!html.contains("a.json") && !html.contains("notes.txt"));
+        // The filters are a file's, and not offered.
+        assert!(!html.contains("name=\"filter\""));
+        assert!(html.contains("Choose Folder"));
+        // Nothing picked: the folder shown.
+        assert_eq!(chooser.target(), dir);
+        assert!(html.contains(&format!("Chooses <code>{}</code>", dir.display())));
+        let mut fields = Fields::default();
+        chooser.event("pick", &serde_json::json!({"name": "Sub"}), &mut fields);
+        assert_eq!(chooser.target(), dir.join("Sub"));
+        // Going into it, and nothing in it: the folder shown again.
+        chooser.open("Sub", &mut fields);
+        assert_eq!(chooser.target(), dir.join("Sub"));
+        assert!(shown(&chooser).contains("No folders in here."));
+        // A folder that is not there cannot be chosen.
+        chooser.go(&dir.join("nowhere"));
+        chooser.choose(&mut fields);
+        assert!(!chooser.answered);
+        assert!(
+            chooser
+                .said
+                .as_ref()
+                .is_some_and(|(said, bad)| *bad && said.contains("no folder"))
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn opening_and_saving_never_answer_with_a_folder() {
+        let dir = scratch("never");
+        let mut opening = chooser(Mode::Open, &dir);
+        let mut fields = Fields::default();
+        opening.event("pick", &serde_json::json!({"name": "Sub"}), &mut fields);
+        opening.choose(&mut fields);
+        // Choosing a picked folder goes into it rather than answering.
+        assert!(!opening.answered);
+        assert_eq!(opening.folder, dir.join("Sub"));
+        let mut saving = chooser(Mode::Save, &dir);
+        fields.set("name", "Sub");
+        saving.save(&mut fields);
+        assert!(!saving.answered);
+        assert_eq!(saving.folder, dir.join("Sub"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
