@@ -1,6 +1,6 @@
-//! gxwi-file-dialog: a dialog for choosing a file to open, or a place and a
-//! name to save to, on a GXWI desktop, and what a program needs in order to
-//! open it.
+//! gxwi-file-dialog: a dialog for choosing a file to open, a place and a
+//! name to save to, or a folder, on a GXWI desktop, and what a program needs
+//! in order to open it.
 //!
 //! The dialog is a program of its own, which a program that wants a file
 //! chosen starts as a child of its own. The two speak over the child's
@@ -40,16 +40,22 @@ pub struct Request {
     /// The folder it opens on. Left out, or not there, the person's home.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<PathBuf>,
-    /// The name it suggests, for saving: "Services.json".
+    /// The name it suggests, for saving: "Services.json". Not used in
+    /// [`Mode::Folder`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// The kinds of file it offers, the first chosen at first. Left empty,
-    /// every file.
+    /// every file. Not used in [`Mode::Folder`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filters: Vec<Filter>,
 }
 
-/// Whether a file is to be opened or saved.
+/// What is to be chosen: a file to open, a place to save, or a folder.
+///
+/// Only [`Mode::Folder`] answers with a folder; a program that cannot use
+/// one never asks for it. Folder choosing came with PSPU §9 revision 2: a
+/// dialog of revision 1 refuses the request and ends without answering,
+/// which the program sees as nothing chosen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
@@ -58,6 +64,9 @@ pub enum Mode {
     /// A place and a name, to be written. Choosing a file that is there
     /// already asks the person first.
     Save,
+    /// An existing folder: the one the person picks, or the one they are
+    /// in. Files are not shown.
+    Folder,
 }
 
 /// A kind of file, by its name and the extensions it has.
@@ -186,6 +195,17 @@ mod tests {
             "{\"type\":\"chosen\",\"path\":\"/home/dana/a.json\"}\n"
         );
         assert_eq!(line(&Answer::Cancelled), "{\"type\":\"cancelled\"}\n");
+        assert_eq!(
+            line(&Request {
+                mode: Mode::Folder,
+                title: "Share a folder".into(),
+                purpose: None,
+                folder: None,
+                name: None,
+                filters: Vec::new(),
+            }),
+            "{\"mode\":\"folder\",\"title\":\"Share a folder\"}\n"
+        );
         // What a requester leaves out, it means the default of.
         let bare: Request = serde_json::from_str(r#"{"mode":"open","title":"Open"}"#).unwrap();
         assert_eq!(
