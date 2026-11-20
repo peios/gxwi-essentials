@@ -64,8 +64,7 @@ use std::time::SystemTime;
 use gxwi_sd_editor::{Can, Children, Generic, Object, Parent, Part, Request, Right};
 use gxwi::apps::defaults::Defaults;
 use gxwi::apps::{Application, Catalogue};
-use peios::access::AccessCheck;
-use peios::file::{File, SecInfo};
+use peios::file::{File, FileAccess, OpenOptions, SecInfo};
 use peios::security::{AccessMask, SecurityDescriptor};
 use gxwi::icons::{self, Themes};
 use gxwi::{App, Facts, Fields, Live, Surface, Value, escape};
@@ -797,7 +796,7 @@ impl Explorer {
                 })
                 .map(|sd| sd.as_bytes().to_vec()),
         });
-        let mut can = can_change(&sd);
+        let mut can = can_change(&path);
         can.audit &= read.contains(&Part::Sacl);
         can.label &= read.contains(&Part::Label);
         // A folder's can be pushed into what is inside it.
@@ -1010,30 +1009,29 @@ fn file_generic() -> Generic {
     }
 }
 
-/// What the person can change of a file's descriptor `sd`, as the kernel's
-/// AccessCheck says for their token: the access list with WRITE_DAC, the
+/// What the person can change of the descriptor of what is at `path`, as
+/// the kernel says for their token: the access list with WRITE_DAC, the
 /// owner with WRITE_OWNER, with what owning it and their privileges give
-/// them. It cannot be found out by opening the file for them, as a native
-/// open must name a data right too (KACS §3.9.2), and the person may have
-/// one without the other. Where the check cannot be made, both are offered,
-/// and the kernel decides on Apply. The label goes with the owner, taking
+/// them. Each is found out by opening it for that right alone (KACS
+/// §3.9.2). Such a handle reads and writes nothing and takes no part in
+/// share checks, so what another program has open never changes the
+/// answer. Where an open cannot say, as for a FIFO, socket or device,
+/// which refuse a handle with no data right, both are offered, and the
+/// kernel decides on Apply. The label goes with the owner, taking
 /// WRITE_OWNER; the SACL with the right to read it, which reading it took.
-fn can_change(sd: &SecurityDescriptor) -> Can {
-    let granted =
-        match AccessCheck::new(sd, AccessMask::MAXIMUM_ALLOWED, File::generic_mapping()).check() {
-            Ok(decision) => decision.granted,
-            Err(_) => {
-                return Can {
-                    dacl: true,
-                    owner: true,
-                    audit: true,
-                    label: true,
-                    ..Can::default()
-                };
-            }
+fn can_change(path: &Path) -> Can {
+    let (Some(dacl), Some(owner)) = (
+        may_open(path, FileAccess::WRITE_DAC),
+        may_open(path, FileAccess::WRITE_OWNER),
+    ) else {
+        return Can {
+            dacl: true,
+            owner: true,
+            audit: true,
+            label: true,
+            ..Can::default()
         };
-    let dacl = granted.contains(AccessMask::WRITE_DAC);
-    let owner = granted.contains(AccessMask::WRITE_OWNER);
+    };
     let why = (!dacl).then(|| "You may not change who may use this.".to_string());
     Can {
         dacl,
@@ -1042,6 +1040,16 @@ fn can_change(sd: &SecurityDescriptor) -> Can {
         label: owner,
         why,
         ..Can::default()
+    }
+}
+
+/// Whether the person may open what is at `path` for `right` alone, or
+/// `None` where the open fails for another reason than being refused.
+fn may_open(path: &Path, right: FileAccess) -> Option<bool> {
+    match OpenOptions::new().desired_access(right).open(None, path) {
+        Ok(_) => Some(true),
+        Err(e) if e.raw_os_error() == Some(libc::EACCES) => Some(false),
+        Err(_) => None,
     }
 }
 
