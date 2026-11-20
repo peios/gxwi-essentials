@@ -48,7 +48,11 @@ you need before confirming.
 **Permissions** opens the shared descriptor editor. File Explorer retains
 a handle to the selected object so applying a descriptor targets that
 object even if its name changes. The dialog does not supply extra rights.
-See [The Permissions Editor](~peios/the-permissions-editor) and
+It offers the access list and the owner for editing as the kernel allows,
+found by opening the object for the right to change each one alone. Those
+opens read nothing and never conflict with other programs' opens. Where
+the kernel cannot say, as for a device or pipe, both are offered and the
+kernel decides when you apply. See [The Permissions Editor](~peios/the-permissions-editor) and
 `gxwi-file-explorer(1)`.
 
 ## Names that are not UTF-8
