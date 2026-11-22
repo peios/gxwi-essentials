@@ -40,7 +40,7 @@ auth-core = { git = "https://github.com/peios/authd.git", rev = "327ce68648e1594
 auth-policy = { git = "https://github.com/peios/authd.git", rev = "327ce68648e1594331c88a457afb261f9000b4c3" }
 axum = { version = "0.8.9" }
 base64 = { version = "0.22" }
-eventd-client = { git = "https://github.com/peios/eventd.git", rev = "6a6429aa4318f4047049f4a2032116beff4a37dc" }
+eventd-client = { git = "https://github.com/peios/eventd.git", rev = "f74954f969626352915b3885848b6e21d3492c3f" }
 gxwi-file-dialog = { path = "apps/gxwi-file-dialog", default-features = false }
 gxwi-sd-editor = { path = "apps/gxwi-sd-editor", default-features = false }
 jiff = { version = "0.2.29" }
